@@ -899,6 +899,45 @@ jobs:
             exit 1
           fi
 
+      # `remint_identity` and the append that has to see it (#104, ADR-0086),
+      # with the restore negative control. Its own `--test` target, so no run
+      # above executes it; its own list/run/assert, STRICT, for the
+      # runtime-seam trio's reasons.
+      - name: Every gated re-mint test is present in the binary
+        if: ${{ !cancelled() }}
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --test remint -- --ignored --list | tee gated-remint.txt
+
+      - name: The re-mint tests against a live Postgres
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-postgres --all-features \
+            --test remint -- --ignored --show-output --test-threads=1 \
+            | tee remint-run.txt
+
+      - name: The re-mint run executed and passed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' remint-run.txt; then
+            echo "::error::no test result line; the re-mint tests did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-remint.txt)
+          result=$(grep -E '^test result:' remint-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
       # The suite must be green, and the failure list is empty on purpose.
       #
       # An earlier draft of this step asserted that two rules
@@ -1308,6 +1347,45 @@ jobs:
 
           expected=$(grep -c ': test$' gated-lib.txt)
           result=$(grep -E '^test result:' lib-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
+      # `remint_identity` and the append's refusal without an identity row,
+      # against the endpoint (#104, ADR-0086), with the restore negative control.
+      # Its own `--test` target, so nothing above runs it; its own list/run/
+      # assert, STRICT, as the library trio is.
+      - name: Every gated re-mint test is present in the binary
+        if: ${{ !cancelled() && env.NEON_CONNECTION != '' }}
+        run: |
+          cargo test -p happenstance-neon --all-features \
+            --test remint -- --ignored --list | tee gated-remint.txt
+
+      - name: The re-mint tests against a live Neon endpoint
+        if: ${{ !cancelled() && env.NEON_CONNECTION != '' }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-neon --all-features \
+            --test remint -- --ignored --show-output --test-threads=1 \
+            | tee remint-run.txt
+
+      - name: The re-mint run executed and passed every gated test
+        if: always() && env.NEON_CONNECTION != ''
+        run: |
+          if ! grep -qE '^test result:' remint-run.txt; then
+            echo "::error::no test result line; the re-mint tests did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-remint.txt)
+          result=$(grep -E '^test result:' remint-run.txt | tail -1)
           passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
           failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
           ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')

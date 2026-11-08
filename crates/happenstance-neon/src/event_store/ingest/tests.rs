@@ -22,7 +22,9 @@ use happenstance_sync::{
     Watermark,
 };
 
-use super::{UNHELD_GUC, UNHELD_SQLSTATE, refusal_statement};
+use super::{
+    UNHELD_GUC, UNHELD_SQLSTATE, UNIDENTIFIED_GUC, UNIDENTIFIED_SQLSTATE, refusal_statement,
+};
 use crate::config::NeonConfig;
 use crate::error::{NeonError, NeonSqlError};
 use crate::event_store::{NeonEventStore, decode_body};
@@ -414,6 +416,83 @@ fn the_refusal_is_raised_with_this_adapters_sqlstate_and_a_transaction_local_set
     );
     assert!(refusal.contains(&format!("ERRCODE = '{UNHELD_SQLSTATE}'")));
     assert!(refusal.contains(&format!("DETAIL = current_setting('{UNHELD_GUC}')")));
+}
+
+/// ADR-0086: an ingest into a store whose meta row is gone writes no
+/// compensation and is refused whole. `c` is gated on the identity row, the
+/// write leaves the row's absence in a second transaction-local setting, and
+/// the refusal raises this adapter's second SQLSTATE on it, before it looks
+/// for a claim.
+///
+/// Rejects a compensation committed with a NULL origin that no read can turn
+/// back into an event, a foreign batch landing in a store with no identity,
+/// and a refusal reading a setting the write never sets.
+#[test]
+fn an_unidentified_store_writes_no_compensation_and_is_refused() {
+    let store = NeonEventStore::new(NullTransport::new(), NeonConfig::default());
+    let sent = [shipped(id(peer(0x47), 1), 1, event("Shipped", "a"))];
+    let compensation = [event("Compensated", "a")];
+    let request = store
+        .ingest_request::<NullTransportError>(&[IngestGroup::new(&sent, &compensation)])
+        .expect("an origin position that fits a bigint");
+
+    let write = &request.statements[0].query;
+    let c = write.find(", c AS (").expect("the write builds `c`");
+    let comp = write.find(", comp AS (").expect("the write builds `comp`");
+    assert!(
+        write[c..comp].ends_with(" AND EXISTS (SELECT 1 FROM own))"),
+        "the compensation is gated on the identity row: {write}"
+    );
+    assert!(
+        write.contains(&format!(
+            "set_config('{UNIDENTIFIED_GUC}', \
+             CASE WHEN EXISTS (SELECT 1 FROM own) THEN '' ELSE 'absent' END, true) \
+             AS unidentified"
+        )),
+        "the write leaves the row's absence in a transaction-local setting: {write}"
+    );
+
+    let refusal = refusal_statement().query;
+    let check = format!("IF current_setting('{UNIDENTIFIED_GUC}', true) <> '' THEN");
+    let unidentified = refusal
+        .find(&check)
+        .expect("the refusal reads the setting the write sets");
+    let raised = refusal
+        .find(&format!("ERRCODE = '{UNIDENTIFIED_SQLSTATE}'"))
+        .expect("the refusal raises the second SQLSTATE");
+    let unheld = refusal
+        .find(&format!("ERRCODE = '{UNHELD_SQLSTATE}'"))
+        .expect("the refusal still raises SY-38's");
+    assert!(
+        unidentified < raised && raised < unheld,
+        "an unidentified store is refused first, having no claim to name: {refusal}"
+    );
+}
+
+/// An unidentified store's refusal is `MissingIdentity`, classed `Stop`, the
+/// error an append and the port's `store_id` give for the same store.
+///
+/// Rejects reporting it as a bare SQL error, and as `Busy`.
+#[tokio::test]
+async fn an_unidentified_refusal_answer_is_missing_identity() {
+    const UNIDENTIFIED: &[u8] =
+        br#"{"message":"m","code":"HS086","detail":null,"hint":null,"severity":"ERROR"}"#;
+    let sent = [shipped(id(peer(0x48), 1), 1, event("Shipped", "a"))];
+    let compensation = [event("Compensated", "a")];
+
+    let transport = Scripted::answering(400, UNIDENTIFIED);
+    let refused = ingest(
+        &transport.store(),
+        &[IngestGroup::new(&sent, &compensation)],
+    )
+    .await
+    .expect_err("the endpoint refused the call");
+    assert!(
+        matches!(refused, IngestError::Store(NeonError::MissingIdentity)),
+        "{refused:?}"
+    );
+    assert_eq!(refused.class(), FailureClass::Stop);
+    assert_eq!(transport.round_trips.get(), 1);
 }
 
 /// Two groups of two events, the third of which the refusal will name.

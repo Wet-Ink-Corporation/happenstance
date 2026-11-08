@@ -35,6 +35,58 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- `happenstance-sync`: the `runner` module, the first half of the runner
+  (#244). `runner::Edge` drives one edge — a local store that is both
+  `EventStore` and `IngestStore`, against one `SyncPeer` — one caller-driven
+  `step` at a time: pull and ingest, then push the local log above the
+  confirmed watermark, as much as the peer's `limits()` admit. Nothing is
+  spawned, and the bounds are the bare flavours, so a `!Send` Durable Object
+  store and peer drive an edge unchanged; for `Send`-flavour ports with a
+  `Send + Sync` resume token the step's future is `Send`, so it spawns.
+  `Edge::status` returns a `SyncStatus` without a round trip: the confirmed
+  local position, how many local events sit above it (`runner::Pending`,
+  exact or a lower bound, because a step reads at most one batch plus one),
+  what the last pull said is waiting, the far side's last acknowledged
+  watermark, and the phase and class of the last failure. A `Stop`-class
+  failure stops the edge, and later steps return `StepError::Stopped` without
+  I/O. A refused push leaves the local log as it was (SY-34).
+  `Edge::resuming` takes back a watermark and a resume token a caller kept,
+  since where they are stored is SY-31's; one edge belongs to one peer for
+  its whole life. **Known gap:** a push sends its batch as one atomic group,
+  so it can tear a multi-event local append across two pushes (SY-30, #420).
+  Not yet built: backoff, the bounded outbound buffer, owned tasks, what
+  `Split` and `Park` call for, and the far side's incarnation check.
+- `happenstance-sync`: a network peer's transport-free halves (#117), with no
+  feature and on wasm32. `StoreSyncPeer` is a `SyncPeer` over a store the
+  caller holds — pull reads it above a `StoreResume` token (the store's own
+  position), within the declared `PeerLimits`, and says `Waiting::Nothing` only
+  when the read reached the end of the log; push ingests each group atomically
+  through `IngestStore`. `serve_sync` answers a postcard envelope, given the
+  `wire::Route` it arrived on, through a `StoreSyncPeer`. `Exchange` (and its
+  `Send` flavour `SendExchange`) is the one-method transport, and
+  `RemoteSyncPeer` the client peer over it, whose resume token is the wire's
+  `ResumeToken`. Every new error states its class (SY-36): a version mismatch or
+  undecodable bytes is `wire::CodecError`, `Stop`; a token no store peer minted
+  is `ForeignToken`, `Stop`; a transport failure keeps the `Exchange` error's
+  own class. `postcard` becomes a normal dependency of the crate. A pull hands
+  its page back as one group, because `EventStore::read` does not say which
+  write an event came in (#420): every origin group inside a page arrives
+  whole, and one that straddles a page cut is split. `StoreSyncPeer` ingests
+  with no compensation, so it cannot be SY-7's adjudicator; that hook is
+  planned with SY-7 (#136). Both peers pass
+  `sync_peer_conformance!`, and `StoreSyncPeer` the model family too.
+- `happenstance-postgres` and `happenstance-neon`: a re-mint for after a
+  restore or a copy (#104, ADR-0086, VT-6). `PostgresEventStore::remint_identity`
+  and `NeonEventStore::remint_identity` replace the store's persisted
+  `StoreId` with a freshly minted one and return it, refusing with
+  `MissingIdentity`, and creating nothing, on a schema migration 1 never ran
+  on. `happenstance_neon::migration::remint_statement` is the same statement
+  as text, for the tooling that makes Neon branches. Run it after a
+  `pg_restore`, a point-in-time recovery, or on every Neon branch that is
+  created, reset or restored, with every writer stopped: the crate roots and
+  READMEs carry the procedure. Events already written keep their identity.
+  No schema change and no new migration: the re-mint updates the row
+  migration 1 already writes.
 - `happenstance-testkit`: a projection conformance rule,
   `committed_rows_and_checkpoint_survive_a_reopen` (PS-1, CF-17, #422). It
   commits a read-model row and a checkpoint through the port, drops every
@@ -55,6 +107,24 @@ not the same as what a user needed to be told.
   fixture that inherits `REOPEN`'s default reason, so a projection fixture
   written against `0.5.1` states `REOPEN` — declined with its own reason, or
   supported with an override of `reopen` that answers `Reopened::Discarded`.
+
+### Changed
+
+- `happenstance-postgres`: a handle no longer caches the store's identity
+  (#104). Every append, and every ingest, reads `store_meta` inside its own
+  transaction, so a re-mint is seen by the next append on every handle and
+  clone, with no restart; it costs one primary-key read per append. An append
+  or an ingest on a schema whose identity row is gone now refuses with
+  `MissingIdentity`, where a handle that had read the row before went on
+  stamping it.
+- `happenstance-neon`: an append on a schema whose identity row is gone
+  inserts nothing and refuses with `NeonError::MissingIdentity` (#104), where
+  it used to commit rows with a NULL origin that every later read refused as
+  `UnstampedEvent`. An ingest on such a schema now writes nothing and
+  refuses with `IngestError::Store(NeonError::MissingIdentity)`, where its
+  compensation used to commit with a NULL origin.
+  `NeonError::MissingIdentity` is no longer behind `sync` (additive: the enum
+  is `#[non_exhaustive]`).
 
 ## [0.5.1] — 2026-11-08
 

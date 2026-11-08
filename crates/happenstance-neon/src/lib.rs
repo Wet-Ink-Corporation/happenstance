@@ -118,6 +118,40 @@
 //! is the whole of this adapter's append design, and the `event_store` module
 //! carries the measurement behind it.
 //!
+//! # After a branch or a restore, re-mint before the first append
+//!
+//! This store's identity, the `StoreId` half of every `EventId` it mints, is
+//! one row that migration 1 writes once. A Neon branch that is created, reset
+//! or restored, like a `pg_restore` or a point-in-time recovery, carries its
+//! parent's identity together with an older position sequence, and would then
+//! re-issue `EventId`s the parent has already issued, which replication drops
+//! silently (VT-6). Stop every writer to the copy, then re-mint it with
+//! `NeonEventStore::remint_identity`, or run
+//! [`migration::remint_statement`]'s text against it from the tooling that
+//! makes the branch. For the default [`NeonConfig`] that text is:
+//!
+//! ```sql
+//! UPDATE "public"."store_meta" SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id' RETURNING encode(v, 'base64') AS store_id
+//! ```
+//!
+//! Then resume appends. No restart is needed: every append reads the row inside
+//! its own statement, and inserts nothing, refusing with
+//! [`NeonError::MissingIdentity`], when the row is absent. An ingest refuses the
+//! same way and writes neither the foreign events nor their compensation.
+//!
+//! ADR-0086 §7.2 proposed a join against the meta row inside the shared stamp,
+//! so that an absent row yields zero rows. That stamp also writes an ingest's
+//! compensation, where a join would drop the compensation silently and leave
+//! the foreign event it answers committed alone. So the stamp stays a scalar
+//! subquery, and each writer that uses it is guarded by an `EXISTS` on the same
+//! row in the same statement instead: an append inserts nothing without it, and
+//! an ingest gates its compensation on it and is refused whole by its second
+//! statement. A branch is made by
+//! the platform's control plane rather than by this crate, so put the statement
+//! in whatever tooling makes branches. Minting afresh on every open was
+//! considered and declined (ADR-0086): a Workers deployment builds a store per
+//! request, and would mint an identity per request.
+//!
 //! # Which flavour, and which claim
 //!
 //! `NeonEventStore` implements the **bare**

@@ -201,11 +201,15 @@ pub enum NeonError<E> {
     },
 
     /// The store's meta table holds no identity row, so there is no identity
-    /// to ingest under. Migration 1 inserts it; its absence is a schema that
-    /// was never migrated. Produced only by ingest, behind `sync`, and
-    /// additive for the reason the variant above gives.
-    #[cfg(feature = "sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    /// to stamp an event, ingest or re-mint under. Migration 1 inserts it; its
+    /// absence is a schema that was never migrated.
+    ///
+    /// An append and an ingest refuse with it, and write nothing, rather than
+    /// committing rows with a NULL origin that no read could turn back into
+    /// events ([`UnstampedEvent`](Self::UnstampedEvent)), and
+    /// `NeonEventStore::remint_identity` refuses with it rather than creating
+    /// the row. Not behind `sync`, because an append produces it in every
+    /// build.
     #[error("the store's meta table holds no store_id row; was migration 1 applied?")]
     MissingIdentity,
 }

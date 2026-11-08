@@ -489,11 +489,31 @@ impl<T: SqlTransport> NeonEventStore<T> {
         // `max` across the guards, computed server-side rather than by n round
         // trips: any guard violated violates the condition, and the position
         // reported is the highest any of them found.
+        //
+        // `identified` rides along on the same snapshot as the insert after it,
+        // so an insert that wrote nothing with no conflict found can be told
+        // apart: no identity row, or a guard and a probe that disagree.
         let sql = format!(
-            "SELECT max(c)::text AS conflict FROM ({}) g",
+            "SELECT max(c)::text AS conflict, ({})::text AS identified FROM ({}) g",
+            self.identified(),
             arms.join(" UNION ALL ")
         );
         SqlStatement::with_params(sql, params)
+    }
+
+    /// True exactly when the meta row this store stamps from exists.
+    ///
+    /// Every append inserts only where it holds (#104, ADR-0086 §7.2), so a
+    /// store whose row is gone writes nothing rather than rows whose NULL
+    /// origin no read can turn back into an event. The stamp itself stays
+    /// [`local_origin`](Self::local_origin)'s scalar subquery: within one
+    /// statement it reads the snapshot this predicate read, so where this is
+    /// true the stamp is not NULL.
+    fn identified(&self) -> String {
+        format!(
+            "EXISTS (SELECT 1 FROM {} WHERE k = 'store_id')",
+            self.config.qualified_meta()
+        )
     }
 
     /// The `EXISTS` probe the two-statement append sends first.
@@ -527,7 +547,7 @@ impl<T: SqlTransport> NeonEventStore<T> {
         let mut params = vec![serde_json::Value::String(encode_batch(events))];
 
         let mut next = 2;
-        let filter = guard.map_or_else(String::new, |condition| {
+        let guarded = guard.map_or_else(String::new, |condition| {
             let arms: Vec<String> = condition
                 .guards()
                 .iter()
@@ -543,10 +563,11 @@ impl<T: SqlTransport> NeonEventStore<T> {
                 })
                 .collect();
             format!(
-                " WHERE NOT EXISTS (SELECT 1 FROM {event_table} WHERE {})",
+                " AND NOT EXISTS (SELECT 1 FROM {event_table} WHERE {})",
                 arms.join(" OR ")
             )
         });
+        let filter = format!(" WHERE {}{guarded}", self.identified());
 
         let sql = self.insert_rows(
             &unpacked("$1", ""),
@@ -684,11 +705,17 @@ impl<T: SqlTransport> NeonEventStore<T> {
     ///   which reads `won`, a `DISTINCT` over all of `ins`. So every foreign row
     ///   has met the origin index before the first compensation position is
     ///   drawn, and a claim on a position a compensation would take lands rather
-    ///   than hiding behind it.
+    ///   than hiding behind it. `c` is empty, too, when `own` is: the stamp
+    ///   reads the meta row, and a compensation with no row to read would
+    ///   commit with a NULL origin that no read can turn back into an event
+    ///   (ADR-0086).
     ///
     /// The final `SELECT` reports the three counts `Ingested` carries, and leaves
-    /// the first landed claim's 1-based index in `$1` (or nothing) in a
-    /// **transaction-local** setting the request's second statement reads. Every
+    /// two **transaction-local** settings the request's second statement reads:
+    /// the first landed claim's 1-based index in `$1` (or nothing), and whether
+    /// `own` was empty. The second statement refuses the whole call on either,
+    /// so the gate on `c` is a second line rather than the only one: a store
+    /// with no identity row lands neither half of an ingest. Every
     /// row, foreign or local, takes the one `xact_id` its transaction stamps, so
     /// ES-10's frontier treats the batch as one write.
     ///
@@ -730,15 +757,20 @@ impl<T: SqlTransport> NeonEventStore<T> {
              WHERE f.origin_store = (SELECT v FROM own)), \
              c AS (SELECT row_number() OVER (ORDER BY u.ord) AS ord, \
              u.event_type, u.data, u.metadata, u.tags FROM ({u}) u \
-             WHERE u.grp IN (SELECT grp FROM won) AND (SELECT count(*) FROM claimed) = 0), \
+             WHERE u.grp IN (SELECT grp FROM won) AND (SELECT count(*) FROM claimed) = 0 \
+             AND EXISTS (SELECT 1 FROM own)), \
              comp AS ({comp}) \
              SELECT (SELECT count(*) FROM ins)::text AS appended, \
              (jsonb_array_length($1::jsonb) - (SELECT count(*) FROM ins))::text AS skipped, \
              (SELECT count(*) FROM comp)::text AS compensated, \
              set_config('{guc}', coalesce((SELECT min(ord) FROM claimed)::text, ''), true) \
-             AS unheld",
+             AS unheld, \
+             set_config('{unidentified}', \
+             CASE WHEN EXISTS (SELECT 1 FROM own) THEN '' ELSE 'absent' END, true) \
+             AS unidentified",
             meta = self.config.qualified_meta(),
             guc = ingest::UNHELD_GUC,
+            unidentified = ingest::UNIDENTIFIED_GUC,
             f = unpacked(
                 "$1",
                 ", (e->>'k')::bigint AS grp, decode(e->>'s', 'base64') AS origin_store, \
@@ -1188,11 +1220,26 @@ fn decode_append_response<E>(
     let body = decode_body::<E>(response, max_response_bytes)?;
     let sets = body.result_sets();
 
-    let (conflict, inserted) = match sets {
-        [inserted] => (None, inserted),
-        [probe, inserted] => (probe.text(0, "conflict"), inserted),
+    // `unidentified` is whether an insert that wrote nothing found no identity
+    // row. The single form's only filter is that row, so for it an empty insert
+    // means exactly that; the batch's probe says so on the insert's snapshot.
+    let (conflict, unidentified, inserted) = match sets {
+        [inserted] => (None, true, inserted),
+        [probe, inserted] => (
+            probe.text(0, "conflict"),
+            probe.text(0, "identified") == Some("false"),
+            inserted,
+        ),
         _ => return Err(NeonError::MissingColumn { column: "results" }),
     };
+
+    // The batch's probe reports both on one snapshot, and a missing identity
+    // outranks a conflict: the insert is guarded on the row, so nothing was
+    // written, and a caller told `Conflict` would re-decide and retry forever.
+    // Postgres gives the same answer by reading the identity first.
+    if unidentified && conflict.is_some() {
+        return Err(NeonError::MissingIdentity);
+    }
 
     if let Some(conflict) = conflict {
         return Ok(AppendOutcome::Conflict(position_from_text(conflict)?));
@@ -1214,12 +1261,17 @@ fn decode_append_response<E>(
             },
         )?;
 
-    // No conflict and no rows is neither outcome, and it is the answer a guard
-    // that silently matched nothing would produce. Named rather than folded into
-    // one of the two, because a caller told `ConditionViolated` here would retry
-    // forever.
-    last.map(AppendOutcome::Appended)
-        .ok_or(NeonError::MissingColumn { column: "position" })
+    // No conflict and no rows is neither outcome. With no identity row it is the
+    // refusal `identified` exists for (#104): nothing was written, where the
+    // stamp alone would have written rows with a NULL origin. With one, it is
+    // the answer a guard that silently matched nothing would produce. Each is
+    // named rather than folded into an outcome, because a caller told
+    // `ConditionViolated` here would retry forever.
+    match last {
+        Some(last) => Ok(AppendOutcome::Appended(last)),
+        None if unidentified => Err(NeonError::MissingIdentity),
+        None => Err(NeonError::MissingColumn { column: "position" }),
+    }
 }
 
 /// Turns the endpoint's answer into the whole result set, at once.
@@ -2240,6 +2292,20 @@ mod tests {
         }
     }
 
+    /// A conditional append against a schema with no identity row whose
+    /// condition also fails. The missing identity outranks the conflict, as it
+    /// does on Postgres, which reads the identity before it checks the
+    /// condition: a caller told `Conflict` would re-decide and retry an append
+    /// that can never succeed. Seen on the live endpoint (#104).
+    #[test]
+    fn a_missing_identity_outranks_a_conflict() {
+        const UNIDENTIFIED_AND_CONFLICTED: &[u8] = br#"{"results":[{"fields":[],"rows":[{"conflict":"1","identified":"false"}],"command":"SELECT","rowCount":1,"rowAsArray":false},{"fields":[],"rows":[],"command":"INSERT","rowCount":0,"rowAsArray":false}]}"#;
+        match decode(UNIDENTIFIED_AND_CONFLICTED, 200) {
+            Err(NeonError::MissingIdentity) => {}
+            other => panic!("expected MissingIdentity, got {other:?}"),
+        }
+    }
+
     /// The retry loop's whole trigger, decoded from the endpoint's own rendering.
     #[test]
     fn a_serialisation_failure_arrives_as_a_sql_error_with_its_sqlstate() {
@@ -2381,6 +2447,10 @@ mod tests {
         let _ = accepts_the_generic_helper::<NullTransport>;
     }
 
+    // `remint_identity`, and the append's refusal without an identity row
+    // (#104). A child file, so this module's lines stay where they are cited.
+    mod remint;
+
     /// The ceilings clear the floors every store must clear.
     #[test]
     fn the_stated_ceilings_clear_the_specification_floors() {
@@ -2408,3 +2478,7 @@ mod tests {
 // lines above keep the numbers the specification and the decisions cite.
 #[cfg(feature = "sync")]
 mod ingest;
+
+// `remint_identity` and the shared identity decoder (#104). A child for the
+// same two reasons, and in every build: a re-mint is not replication.
+mod remint;

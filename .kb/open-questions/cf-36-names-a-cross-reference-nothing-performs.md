@@ -74,7 +74,7 @@ SY-10, SY-24, SY-25, SY-34.
 
 - **Nine are one fact.** The `SY` family names rules that would live in
   `happenstance-sync-testkit` — the crate CF-36's own `Rejects` paragraph names
-  as their home, at `crates/happenstance-sync/src/lib.rs:23-24`, and which does
+  as their home, at `crates/happenstance-sync/src/lib.rs:25-26`, and which does
   not exist. That is one question asked nine times.
 - **Two cite the wrong case.** VT-21 and WF-9 name *live* rules in `suite.rs`
   (`store_accepts_the_guaranteed_minimum_payload`,
