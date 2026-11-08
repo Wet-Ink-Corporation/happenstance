@@ -8,8 +8,10 @@
 //! type checker is the instrument there, not the runtime.
 //!
 //! Published since #108 part E, so that a store adapter can implement
-//! [`IngestStore`] behind its own `sync` feature. **Unfinished**: there is no
-//! runner (#244) and no network peer. A `[FROZEN]` `SY` clause binds this
+//! [`IngestStore`] behind its own `sync` feature. **Unfinished**: the runner
+//! drives one edge a step at a time ([`runner`], #244 part 1), and its backoff,
+//! bounded buffer, owned tasks and peer-incarnation check are not built yet
+//! (#244 part 2); there is no network peer. A `[FROZEN]` `SY` clause binds this
 //! crate's semver as an `ES` clause binds `happenstance-core`'s. SY-7, SY-10,
 //! SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-38 are `[PROVISIONAL]`, binding
 //! until the falsifier each names, and SY-14, SY-18 and SY-32 `[DEFERRED]`.
@@ -184,3 +186,9 @@ pub mod memory_ingest;
 #[cfg(feature = "memory")]
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use memory_ingest::MemoryIngestStore;
+
+// The runner above the port (#244). Last, for the reason `classify` is after
+// the rest: the lines above keep the numbers the specification cites. Its items
+// stay module-qualified, as `wire`'s do: `runner::Edge` and `runner::StepError`
+// say at the call site which layer they belong to.
+pub mod runner;

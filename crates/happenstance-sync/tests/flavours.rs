@@ -1,6 +1,7 @@
 //! SY-17: the sync port composes over a store and a peer that are not `Send`.
 //!
-//! The runner is not built yet, but its bound is already decided: it is written
+//! The runner's single edge is built (#244, part 1), and its bound was decided
+//! before it: it is written
 //! against [`EventStore`], [`IngestStore`] and [`SyncPeer`] — the bare flavours,
 //! the weaker requirement both flavours meet — never against `SendEventStore`,
 //! `SendIngestStore` or `SendSyncPeer`. The reason is a deployment rather than a
@@ -10,9 +11,9 @@
 //!
 //! A generic body type-checks against its declared bounds whether or not
 //! anything instantiates it, so a bound read off the source proves nothing. The
-//! proof here is the **instantiation**: [`exchange`] is written the way the
-//! runner's step will be written, and it is called with a store and a peer that
-//! each hold an `Rc`. Tighten any bound in its `where` clause to the `Send`
+//! proof here is the **instantiation**: [`exchange`], written before the runner
+//! the way its step was to be written, and the runner's own `Edge::step`, are
+//! each called with a store and a peer that hold an `Rc`. Tighten any bound in its `where` clause to the `Send`
 //! flavour and this file stops compiling, with `error[E0277]`: the local types
 //! implement only the bare flavour, because with an `Rc` inside they cannot
 //! implement the other.
@@ -401,6 +402,40 @@ async fn the_runner_step_runs_over_a_not_send_store_and_peer() {
         Ingested::default(),
         "nothing is left to pull"
     );
+}
+
+/// The runner's own step, not a copy of it: [`Edge::step`] instantiated with a
+/// store and a peer that each hold an `Rc`. Tighten its bounds to a `Send`
+/// flavour and this stops compiling, with `error[E0277]`.
+///
+/// [`Edge::step`]: happenstance_sync::runner::Edge::step
+#[tokio::test]
+async fn an_edge_steps_over_a_not_send_store_and_peer() {
+    let origin = StoreId::from_bytes([7; 16]);
+    let peer = LocalPeer {
+        inner: Rc::new(MemorySyncPeer::new(origin)),
+    };
+    peer.inner
+        .seed(EventGroup::new(None, vec![replicated(origin, 1)]))
+        .expect("an unpoisoned peer accepts a seed");
+    let store = LocalStore::new(StoreId::from_bytes([9; 16]));
+    let local = EventStore::append(
+        &store,
+        &[Event::new("CourseCapacityChanged", "{}").expect("a valid event type")],
+        None,
+    )
+    .await
+    .expect("an in-memory append does not fail");
+    let mut edge = happenstance_sync::runner::Edge::new();
+
+    let stepped = edge
+        .step(&peer, &store)
+        .await
+        .expect("an in-memory step does not fail");
+
+    assert_eq!(stepped.ingested.appended, 1, "the far side's event landed");
+    assert_eq!(stepped.pushed, 1, "the local event went out");
+    assert_eq!(edge.status().confirmed, Some(local));
 }
 
 // ---------------------------------------------------------------------------

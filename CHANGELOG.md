@@ -33,6 +33,25 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- `happenstance-sync`: the `runner` module, the first half of the runner
+  (#244). `runner::Edge` drives one edge — a local store that is both
+  `EventStore` and `IngestStore`, against one `SyncPeer` — one caller-driven
+  `step` at a time: pull and ingest, then push the local log above the
+  confirmed watermark, as much as the peer's `limits()` admit. Nothing is
+  spawned, and the bounds are the bare flavours, so a `!Send` Durable Object
+  store and peer drive an edge unchanged. `Edge::status` returns a
+  `SyncStatus` without a round trip: the confirmed local position, how many
+  local events sit above it, what the last pull said is waiting, the far
+  side's last acknowledged watermark, and the phase and class of the last
+  failure. A `Stop`-class failure stops the edge, and later steps return
+  `StepError::Stopped` without I/O. A refused push leaves the local log as it
+  was (SY-34). `Edge::resuming` takes back a watermark and a resume token a
+  caller kept, since where they are stored is SY-31's. Not yet built: backoff,
+  the bounded outbound buffer, owned tasks, what `Split` and `Park` call for,
+  and the far side's incarnation check.
+
 ## [0.5.1] — 2026-11-08
 
 Documentation and tooling only: no public API changes, and nothing a `0.5.0`
