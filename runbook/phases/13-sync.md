@@ -216,7 +216,7 @@ provides the atomicity and the identity that makes it idempotent.
       WF-1 and WF-11 are renewed past 1.0, not frozen here; this phase records
       WF-1's renewal in ADR-0026 and confirms which encoding the sync transport
       forwards WF-11's payload through.
-- [ ] #125 · **CF-25's bar for the peer-port freeze**
+- [x] #125 · **CF-25's bar for the peer-port freeze**
       (`.kb/open-questions/cf-25-cf-26-portfolio-check-does-not-exist.md`).
       CF-25 is `[FROZEN]` and gates every port freeze on `cargo xtask spec-trace`
       reading §6.5's instrument-portfolio table, and `xtask/src/spec_trace.rs`
@@ -298,3 +298,11 @@ of E2E-07 (ES-24).
   port's `# Errors` names the lost-commit exception. Owed by the owner before the
   first tag: the release.yml diff, the CLAUDE.md counts, and trusted publishers
   for both sync crates.
+- **2026-11-08** — #125: CF-25's portfolio check is built, on the owner's route (build it, do
+  not repair the `Rule:` line). `cargo xtask spec-trace` walks every port §1.6 declares frozen
+  against §6.5's portfolio and its new *freeze ledger*. Each of a frozen port's rows must be
+  discharged by an adapter at the far end (a fixture-only verdict does not count, CF-26), by an
+  accepted ADR that names the axis, or by an open clause of that port. That last route fails as
+  soon as the clause freezes. `SyncPeer`'s freeze therefore fails the gate until it carries rows.
+  The open question's sub-questions 1 and 2 are answered and it is closed. Verified:
+  `cargo xtask spec-trace`, `lints`, `lint-kb` and `lint-constitution`, and `cargo test -p xtask`.

@@ -689,10 +689,14 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   **Resolved 2026-09-30** by `kb-decision-0076`: the ten conformance emitters are un-hidden and
   renamed without the `__` prefix (`emit_tokio` and its siblings), CF-41 pins them against a
   committed list, and `__rule_names` and the benchmark pair stay hidden and unpromised.
-- **Open** — [`cf-25-cf-26-portfolio-check-does-not-exist.md`](../open-questions/cf-25-cf-26-portfolio-check-does-not-exist.md)
+- **Superseded** — [`cf-25-cf-26-portfolio-check-does-not-exist.md`](../open-questions/cf-25-cf-26-portfolio-check-does-not-exist.md)
   (`kb-open-question-cf-25-cf-26-portfolio-check-001`) — no check in `xtask/src/spec_trace.rs`
   performs the portfolio/axis comparison CF-25 and CF-26 both name (verified: zero occurrences of
   "portfolio", "far end" or "axis"). Added 2026-09-07.
+  **Resolved 2026-11-08** by building the check (#125): `spec-trace` walks every port §1.6 declares
+  frozen against the portfolio and §6.5's new freeze ledger. Sub-question 1 is answered by a ledger
+  table rather than a column, and sub-question 2 by landing CF-26 with CF-25 and printing what the
+  walk does not read.
 - **Superseded** — [`vt-30-provisional-marker-is-stale-and-unscheduled.md`](../open-questions/vt-30-provisional-marker-is-stale-and-unscheduled.md)
   (`kb-open-question-vt-30-marker-stale-unscheduled-001`) — split off from ADR-0054, which discharges
   only `after_opt`'s naming/pinning half; VT-30's `[PROVISIONAL]` marker is stale as written now that

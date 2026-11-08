@@ -605,7 +605,8 @@ declension-by-inheritance does not discharge: no SKIP line for a declined capabi
 emitters while the shipped surface marks them `doc(hidden)`, a contradiction `cargo-semver-checks`
 cannot see because hidden items are exactly what it excludes),
 `kb-open-question-cf-25-cf-26-portfolio-check-001` (added 2026-09-07 — no check in
-`xtask/src/spec_trace.rs` performs the portfolio/axis comparison CF-25 and CF-26 both name),
+`xtask/src/spec_trace.rs` performs the portfolio/axis comparison CF-25 and CF-26 both name;
+resolved 2026-11-08 by building it, against §6.5's new freeze ledger, #125),
 `kb-open-question-vt-30-marker-stale-unscheduled-001` (added 2026-09-07 — VT-30's `[PROVISIONAL]`
 marker is stale as written now that `happenstance-testkit/src/bench.rs` exists; the real gap
 narrows to no multi-guard workload in the harness),

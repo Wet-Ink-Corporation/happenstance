@@ -64,6 +64,8 @@ use std::{fs, io};
 
 use anyhow::{Context, Result, bail};
 
+mod portfolio;
+
 const SPEC: &str = "spec/SPECIFICATION.md";
 const CASES: &str = "spec/E2E-CASES.md";
 const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
@@ -771,6 +773,13 @@ pub(crate) fn run(out: &mut impl io::Write, mode: Mode) -> Result<()> {
     let index = workspace_index(&root);
     let citation_coverage = check_citations(&root, &spec, &index, &mut problems);
 
+    // 12. CF-25 and CF-26 — every port §1.6 declares frozen is walked against
+    //     §6.5's portfolio and freeze ledger (#125). Both clauses named this
+    //     check in their `Rule:` lines long before it existed.
+    let (portfolio_walk, breaches) =
+        portfolio::check(&spec, &clauses, portfolio::records_under(&root))?;
+    problems.extend(breaches.iter().map(ToString::to_string));
+
     let census = Census::of(&clauses);
 
     // 8. §1.3's hand count says what this run just computed, and adds up on its
@@ -780,6 +789,10 @@ pub(crate) fn run(out: &mut impl io::Write, mode: Mode) -> Result<()> {
     // 9. §7.1 and §7.2 say what this run just computed.
     let generated = generated_region(&census, &clauses, &resolvable);
     let stale = sync_region(out, &root, &spec, &generated, mode)?;
+
+    // Printed before the verdict, green or red, because it names what the walk
+    // does not read — the open question #125 closed asked for exactly that.
+    portfolio::summarise(out, &portfolio_walk)?;
 
     report(
         out,

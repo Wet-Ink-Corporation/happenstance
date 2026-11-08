@@ -9873,6 +9873,43 @@ table buys the invariant on a real Postgres, and what each costs at write rate.
 ES-10 stays `[PROVISIONAL]` against exactly that measurement, and CF-26's
 `Rejects:` names reading this tick as coverage.
 
+#### The freeze ledger
+
+`cargo xtask spec-trace` checks CF-25 and CF-26 against this table and the one
+above (#125). What it checks is the narrowest reading of CF-25's own words that a
+machine can perform, and it is written down here because a check that does not
+say what it reads is taken to cover more than it does.
+
+- **A port is frozen when §1.6 declares it**: its `Maturity` cell opens with
+  **Frozen** in bold. A count of `[FROZEN]` clauses is not the trigger, because
+  §1.3 says a port whose gating clause is unsatisfied is not frozen no matter how
+  many of its clauses are. That is why `SyncPeer`, whose cell reads *shape
+  specified*, owes no row yet. Declaring it frozen with no row here fails the gate.
+- **The axes a port sits on are its rows here.** Every axis in the portfolio must
+  have at least one row, so a new axis cannot land with no port named. A port with
+  no row for an axis is recorded as not sitting on it. The checker cannot verify
+  that claim.
+- **Each row of a frozen port is discharged in one of three ways.** `far end`
+  means the axis's `Far end exists?` verdict, the bold words that open the cell,
+  names an adapter; by CF-26 a fixture-only verdict does not count. `ADR-NNNN`
+  means a record that exists, reads `status: accepted` and names the axis in its
+  atom or its long-form record, which is CF-25's second route. `carried by`
+  names a clause of that port that is `[PROVISIONAL]` or `[DEFERRED]`, which is
+  ADR-0013 §7's partition. That row fails as soon as the clause is frozen.
+- **What it does not read**: the near end, whether a port really does not sit on
+  an axis it has no row for, and what an accepting record says beyond naming the
+  axis. Its summary line repeats this on every green run.
+
+| Axis | Port | Discharged by | Why |
+|---|---|---|---|
+| Position allocation | `EventStore` | ADR-0013 | Accepted by name at phase 4's freeze. The verdict still opens *fixture yes, adapter no*, although the cell records `happenstance-postgres` passing at the far end since phase 10b |
+| Transport | `EventStore` | far end | `happenstance-neon` over one-shot HTTP since phase 10b; ES-11 and ES-12 are frozen on ADR-0087 |
+| Async flavour | `EventStore` | ADR-0013 | Accepted by name at phase 4's freeze. The verdict still reads fixture-only |
+| Batch shape | `ProjectionStore` | far end | The replay-at-commit adapters pass. The live-transaction end is `LivePostgresProjectionStore` (ADR-0062); the verdict's *near end no* predates it, and the check does not read the near end |
+| Completeness | `EventStore` | carried by ES-40 | Carried, not accepted: ADR-0013 left this axis to ES-40's marker. Freezing ES-40 fails this row |
+| Handle multiplicity | `EventStore` | far end | `SqliteFixture` opens a second `rusqlite::Connection` onto one file. A pool is still unbuilt |
+| Durability | `EventStore` | far end | `SqliteFixture` reopens a real file. The fault half is ES-35's, which is `[PROVISIONAL]` for it |
+
 ---
 
 ### 6.6 Compatibility policy for the testkit
