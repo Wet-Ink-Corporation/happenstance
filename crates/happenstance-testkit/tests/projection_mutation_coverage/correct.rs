@@ -465,9 +465,7 @@ pub(crate) trait Defect: 'static + Sized {
     /// [`MutantFixture`]'s `reopen` resets itself). So the correct answer keeps
     /// everything, and a defect that held part of its committed state in process
     /// memory rather than on the medium says so by discarding it here.
-    fn survive_reopen(state: &mut State) {
-        let _ = state;
-    }
+    fn survive_reopen(_state: &mut State) {}
 }
 
 // =====================================================================

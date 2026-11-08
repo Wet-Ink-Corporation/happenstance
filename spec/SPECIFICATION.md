@@ -9206,7 +9206,7 @@ repository.
 `event_store_conformance!` and `projection_store_conformance!` now emit
 `every_declined_capability_is_stated_by_this_fixture` into the adapter's own
 test binary, observable in a default `cargo test`. It rejects **declension by
-inheritance**: six capabilities default to a declension whose words are the
+inheritance**: seven capabilities default to a declension whose words are the
 testkit's, so a fixture that says nothing prints this crate's prose as though it
 were its own account of its own store — which is the misrepresentation this
 clause is about, one level in from where it was looking. The candidate the

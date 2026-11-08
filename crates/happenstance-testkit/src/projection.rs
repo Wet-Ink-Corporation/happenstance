@@ -2432,7 +2432,7 @@ fn no_orphan_projection_rules() {
 /// [`RuleOutcome::report`](crate::RuleOutcome::report) writes to stdout, which
 /// libtest suppresses for a *passing* test unless `--show-output` is passed, and
 /// which does not exist at all on `wasm32-unknown-unknown`
-/// (`crates/happenstance-testkit/src/contract.rs:1500-1511`). A test that scraped
+/// (`crates/happenstance-testkit/src/contract.rs:1512-1523`). A test that scraped
 /// the printed line would therefore assert nothing on the one target the
 /// two-flavour design exists for. The machine-checked half is this equality; the
 /// human-facing half is the line `skip_line` renders from the same two fields.

@@ -995,6 +995,25 @@ const REGISTRY: &[Declared] = &[
         )],
     },
     Declared {
+        name: "UnreopenedProjectionFixture",
+        kind: Kind::Mutant,
+        fails: &["committed_rows_and_checkpoint_survive_a_reopen"],
+        provenance: "a fixture that declares `REOPEN` supported and leaves `reopen` to the \
+                     trait's provided body, which answers `Reopened::Nothing`. It is the author \
+                     who claims the capability first and means to write the teardown later. \
+                     The read-back assertions cannot be what fails it: the store is correct \
+                     and its medium is shared by every handle, so a reopen that discarded \
+                     nothing still finds the checkpoint and the row, as an undrained pool \
+                     would. The answer from the provided body is what fails it",
+        mode: FailureMode::Assertion,
+        // Pinned at the reopen answer, for `UnarmedFrontierFixture`'s reason in
+        // the event-store family: it is the one assertion this defect reaches.
+        expect: &[(
+            "committed_rows_and_checkpoint_survive_a_reopen",
+            "reopened nothing: the provided body",
+        )],
+    },
+    Declared {
         name: "NoBatchReadStore",
         kind: Kind::ConformantVariant,
         // CF-5's first projection row, and `fails` is empty because the store is
@@ -1109,6 +1128,7 @@ macro_rules! for_each_projection_mutant {
 
             crate::correct::MutantFixture<crate::mutants::InMemoryDatabaseStore>,
             crate::correct::MutantFixture<crate::mutants::VolatileReadModelStore>,
+            crate::mutants::UnreopenedProjectionFixture,
 
             crate::correct::MutantFixture<crate::variants::NoBatchReadStore>,
             crate::correct::MutantFixture<crate::variants::AbsentAfterResetStore>,

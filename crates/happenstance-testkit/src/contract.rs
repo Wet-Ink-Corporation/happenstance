@@ -788,11 +788,11 @@ pub trait Fixture {
 ///
 /// # Capability constants, and where an empty reason fires
 ///
-/// Three constants, all required and all answered deliberately:
+/// Four constants, all answered deliberately:
 /// [`SECOND_HANDLE`](Self::SECOND_HANDLE) is a MUST, and
-/// [`RESET_REFUSAL`](Self::RESET_REFUSAL) and
-/// [`COMMIT_FAULT`](Self::COMMIT_FAULT) are the port's two genuinely
-/// declinable capabilities. A declined one must name a reason —
+/// [`RESET_REFUSAL`](Self::RESET_REFUSAL),
+/// [`COMMIT_FAULT`](Self::COMMIT_FAULT) and [`REOPEN`](Self::REOPEN) are the
+/// port's genuinely declinable capabilities. A declined one must name a reason —
 /// [`Capability::declined`] rejects the empty string in a `const fn` `assert!`
 /// — but on an **associated** const that rejection arrives later than one would
 /// like. An associated const is evaluated lazily, only when monomorphised code
@@ -819,6 +819,10 @@ pub trait Fixture {
 ///     const RESET_REFUSAL: Capability = Capability::declined("");
 ///     const COMMIT_FAULT: Capability = Capability::declined(
 ///         "this store cannot make a commit fail once it has been accepted",
+///     );
+///     const REOPEN: Capability = Capability::declined(
+///         "this store keeps everything in process memory, so a reopen has \
+///          no medium to read back from",
 ///     );
 ///
 ///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
@@ -861,6 +865,10 @@ pub trait Fixture {
 ///     const COMMIT_FAULT: Capability = Capability::declined(
 ///         "this store cannot make a commit fail once it has been accepted",
 ///     );
+///     const REOPEN: Capability = Capability::declined(
+///         "this store keeps everything in process memory, so a reopen has \
+///          no medium to read back from",
+///     );
 ///
 ///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
 ///         core::future::ready(MemoryProjectionHandle::new(std::sync::Arc::clone(&self.0)))
@@ -895,6 +903,10 @@ pub trait Fixture {
 ///     const COMMIT_FAULT: Capability = Capability::declined(
 ///         "this store applies both halves of a commit under one lock and has \
 ///          no write it can be made to fail between them",
+///     );
+///     const REOPEN: Capability = Capability::declined(
+///         "this store keeps its read model and checkpoints in process memory \
+///          only, so there is no medium a reopen could read them back from",
 ///     );
 ///
 ///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {

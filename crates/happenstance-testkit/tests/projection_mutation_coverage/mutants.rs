@@ -6,11 +6,12 @@
 //! nothing, because no author would have written it. Each entry names the adapter
 //! shape it comes from in its `REGISTRY` row.
 //!
-//! One entry, at the end, is a wrong **fixture** rather than a wrong store:
+//! Two entries, at the end, are wrong **fixtures** rather than wrong stores:
 //! `NoopProtectFixture` wraps the correct core and declares a capability its
-//! hook does not supply (CF-43). It is a subject like the others, so it is
-//! registered like them, but it is written as a `ProjectionFixture` impl rather
-//! than an `impl Defect`.
+//! hook does not supply (CF-43), and `UnreopenedProjectionFixture` declares
+//! `REOPEN` and forgets the `reopen` override. They are subjects like the
+//! others, so they are registered like them, but they are written as
+//! `ProjectionFixture` impls rather than as `impl Defect`.
 //!
 //! # How to add one
 //!
@@ -795,6 +796,57 @@ impl ProjectionFixture for NoopProtectFixture {
 
 impl ProjectionSubject for NoopProtectFixture {
     const NAME: &'static str = "NoopProtectFixture";
+
+    fn open() -> Self {
+        Self(<MutantFixture<UnmutatedCore> as ProjectionSubject>::open())
+    }
+}
+
+/// A fixture that declares `REOPEN` supported and **does not override**
+/// `reopen`.
+///
+/// The forgotten override, written the way an author would write it: the
+/// claim, and nothing else. The provided body answers `Reopened::Nothing`, and
+/// the rule's first check after the reopen fails on that answer. It is the
+/// projection family's counterpart of `UnarmedFrontierFixture`.
+///
+/// That check is what this mutant pins, and the read-back assertions could not
+/// stand in for it. The store under it is the correct core, whose medium is a
+/// cell every handle shares, so a reopen that did nothing still finds the
+/// checkpoint and the row: without the check, the rule would certify a claim
+/// nothing evaluated. A real store behaves the same way, because a pool that
+/// was never drained serves the read-back from the process it was meant to
+/// discard.
+#[derive(Debug)]
+pub(crate) struct UnreopenedProjectionFixture(MutantFixture<UnmutatedCore>);
+
+impl ProjectionFixture for UnreopenedProjectionFixture {
+    type Store = MutantStore<UnmutatedCore>;
+
+    // `MutantFixture`'s answers, for its reasons: every rule here must run, so
+    // that the only rule this subject fails is the one its defect is in.
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const RESET_REFUSAL: Capability = Capability::SUPPORTED;
+    const COMMIT_FAULT: Capability = Capability::SUPPORTED;
+    // THE DEFECT: the claim, with `reopen` left to the trait's provided body,
+    // which reopens nothing.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
+    fn arm_commit_fault(&self) -> impl Future<Output = ()> {
+        self.0.arm_commit_fault()
+    }
+
+    fn protect_from_reset(&self, id: &ProjectionId) -> impl Future<Output = ()> {
+        self.0.protect_from_reset(id)
+    }
+
+    fn connect(&self) -> impl Future<Output = Self::Store> {
+        self.0.connect()
+    }
+}
+
+impl ProjectionSubject for UnreopenedProjectionFixture {
+    const NAME: &'static str = "UnreopenedProjectionFixture";
 
     fn open() -> Self {
         Self(<MutantFixture<UnmutatedCore> as ProjectionSubject>::open())

@@ -198,15 +198,17 @@ impl ProjectionFixture for SqliteProjectionFixture {
 
     /// Closes every connection this fixture opened, and leaves the file.
     ///
-    /// Two steps, and both are needed for the reopen to mean anything:
+    /// Two steps, and only the first is the reopen:
     ///
     /// 1. **Every parked handle is dropped**, which closes its
     ///    `rusqlite::Connection`. The rule drops its own handle before calling
-    ///    this, so afterwards nothing in the process holds the database open.
-    /// 2. **The write-ahead log is checkpointed and truncated.** A commit under
-    ///    WAL lands in the `-wal` sidecar, so folding it into the main file
-    ///    first is what makes the next `connect` read only what was durably
-    ///    committed rather than a log another connection wrote.
+    ///    this, so afterwards nothing in the process holds the database open,
+    ///    and the next `connect` starts from what is on disk.
+    /// 2. **The write-ahead log is checkpointed and truncated.** This is
+    ///    housekeeping, not part of the evidence: frames in the `-wal` sidecar
+    ///    are already committed state, and a fresh connection would read them
+    ///    either way. Folding them into the main file only tidies the sidecar,
+    ///    so the reopen starts from one file.
     ///
     /// The file itself is never deleted or recreated: a reopen that did would
     /// make `committed_rows_and_checkpoint_survive_a_reopen` fail for the wrong
