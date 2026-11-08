@@ -14,7 +14,7 @@
 //! by the conflict clause inside the statement's `ins` CTE, and the rows a
 //! data-modifying CTE writes are invisible to the rest of its statement. So
 //! the ingest writes every row with [`PROVISIONAL_GROUP`], a negative tag
-//! naming its group's index in the call, and [`stamp_statement`]'s `UPDATE`,
+//! naming its group's index in the call, and `stamp_statement`'s `UPDATE`,
 //! the third statement of the same request and so the same transaction,
 //! replaces each tag with the lowest position its group landed and puts the
 //! group's guard on that row. A position is never negative, so a tag cannot be

@@ -1488,5 +1488,7 @@ mod write_group;
 
 /// Binds per row in [`insert_statement`]: eight columns before migration 3,
 /// and `write_group`. Declared down here, after the tests, so the lines above
-/// keep the numbers the decision records cite them by.
+/// keep the numbers the decision records cite them by. Read only by `ingest`'s
+/// compile-time bind check and the tests, so it exists only where they do.
+#[cfg(any(test, feature = "sync"))]
 const ROW_PARAMETERS: usize = 9;
