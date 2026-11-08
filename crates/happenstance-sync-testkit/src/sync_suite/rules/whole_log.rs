@@ -110,7 +110,7 @@ pub(super) fn holds_the_whole_log(
         ensure(got == expected, clause, || {
             format!(
                 "{} came back as {got:?} and was pushed as {expected:?}; a round trip \
-                 preserves type, tags, data and metadata byte for byte",
+                 preserves type, tags, data, metadata and recorded time byte for byte",
                 expected.id
             )
         })?;

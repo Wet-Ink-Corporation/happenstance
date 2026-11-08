@@ -8021,7 +8021,8 @@ stores, or that its adjudicator must see across slices. A firing is answered by
 scoped replication as an additive opt-in with its own ADR, never by changing what
 a whole-log peer does.]`
 Rule: `round_trip_preserves_the_whole_log` (`happenstance-sync-testkit`, #140) —
-SY-28's rule, which rejects a peer that withholds the events matching a filter:
+SY-28's rule, which rejects a peer that withholds the events a type or tag filter matches,
+among the types and tags its own log carries, and compares recorded time too (VT-9):
 `tests/wrong_scopes.rs` withholds a slice by tag, by type, and by type and tag,
 and each fails this rule and no other.
 Cases: E2E-33, E2E-36, E2E-44, E2E-46.

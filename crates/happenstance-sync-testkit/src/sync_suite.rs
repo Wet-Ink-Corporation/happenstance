@@ -880,7 +880,7 @@ pub mod rules {
     /// SY-28, and SY-27 beneath it: a round trip preserves the whole log. Once
     /// the two sides have pushed and pulled to quiescence, each holds the same
     /// set of `EventId`s, each event with byte-identical type, tags, data and
-    /// metadata.
+    /// metadata, and the recorded time it was pushed with (VT-9).
     ///
     /// The rule plays one side (SY-8). It pushes a log spread over both axes
     /// a filter on `Query`'s surface cuts along, types and tags — two origins,
@@ -894,8 +894,9 @@ pub mod rules {
     /// # Rejects
     ///
     /// A peer that replicates a slice: one that withholds from its
-    /// counterpart the events a filter matches, the scoped hub or filtered
-    /// spoke ADR-0027 kept off the 1.0 port. It stores and acknowledges every
+    /// counterpart the events a type or tag filter matches, among the types
+    /// and tags the rule's own log carries — the scoped hub or filtered spoke
+    /// ADR-0027 kept off the 1.0 port. It stores and acknowledges every
     /// push truthfully, so no other rule sees it. `tests/wrong_scopes.rs`
     /// carries it with three filters, by tag, by type, and by type and tag.
     ///
@@ -904,7 +905,9 @@ pub mod rules {
     /// An identity the rule never pushed: on a far side that holds more, the
     /// rule's side would hold it too once it had pulled, and the two sets would
     /// still agree. Nor a peer that hands an event back twice, byte-identical:
-    /// redelivery is SY-11's, and the model family judges it.
+    /// redelivery is SY-11's, and the model family judges it. Nor a filter that
+    /// matches none of the rule's events, such as one on a tag its log never
+    /// carries: the rule sees only what it pushed.
     ///
     /// # Errors
     ///

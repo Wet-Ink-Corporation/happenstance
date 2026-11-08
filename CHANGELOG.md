@@ -110,8 +110,9 @@ not the same as what a user needed to be told.
 - `happenstance-sync-testkit`: a sync conformance rule,
   **`round_trip_preserves_the_whole_log`** (SY-28, SY-27, #140). The defect it
   detects is a peer that replicates a slice: it stores and acknowledges every
-  push, and withholds from its counterpart the events a filter matches, by
-  tag, by type, or both — the scoped hub, or the filtered spoke, that ADR-0027
+  push, and withholds from its counterpart the events a type or tag filter
+  matches, by tag, by type, or both (a filter on something the rule's log never
+  carries passes) — the scoped hub, or the filtered spoke, that ADR-0027
   kept off the 1.0 port. Every other sync rule passed such a peer. The rule
   pushes a log spanning origins, types, regions, an untagged event and
   metadata, pulls it back to an empty batch, and holds every `EventId` to its

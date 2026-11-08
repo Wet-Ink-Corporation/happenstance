@@ -28,7 +28,8 @@ both markers. SY-29 keeps its marker; the renewal record is proposed in the repo
   two-event group — then pull from the start to an empty batch, then require
   the set of `EventId`s handed back to equal the set pushed, each event equal
   byte for byte (id, recorded time, type, tags, data, metadata). An event handed
-  back twice with different bytes, or an identity never pushed, is a violation.
+  back twice with different bytes is a violation; an identity never pushed is
+  deliberately not rejected (see the rule's "Does not reject").
 - Errors: `Violation` under `SY-28` (the rule's own clause; SY-27 is its premise).
 - Mutant: `tests/wrong_scopes.rs`, a `ScopedPeer` over `MemorySyncPeer` that
   withholds the events matching a `Query` from every pull — the scoped hub /

@@ -153,6 +153,14 @@ fn only_the_whole_log_rule_fails(withheld: &Query) {
             "`{name}` against a peer withholding {withheld:?}"
         );
     }
+    let reason = block_on(rules::round_trip_preserves_the_whole_log(async || {
+        ScopedFixture::new(Some(withheld.clone()))
+    }))
+    .map_err(|violation| violation.message().to_owned());
+    assert!(
+        matches!(&reason, Err(message) if message.contains("was pushed and never handed back")),
+        "the whole-log rule must fail for withholding, not another reason: {reason:?}"
+    );
 }
 
 /// The slices the rule's log carries, spelled here as the rule spells them.
