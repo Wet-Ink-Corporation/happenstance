@@ -47,6 +47,7 @@ use super::{
 };
 use crate::error::NeonError;
 use crate::transport::{SqlRequest, SqlStatement, SqlTransport};
+use crate::wire::ResultSet;
 
 /// An ingested row's provisional `write_group`: its group's index in the call,
 /// `grp`, as `-(grp + 1)`, so the first group is `-1` and no tag is zero or a
@@ -145,6 +146,12 @@ impl<T> NeonEventStore<T> {
     /// its own, `sort_group` and `sort_position`, because a `UNION`'s `ORDER BY`
     /// names output columns and `position` is a text alias here.
     fn groups_request(&self, after: i64, max: i64) -> SqlRequest {
+        SqlRequest::single(self.groups_statement(after, max)).read_only()
+    }
+
+    /// [`groups_request`](Self::groups_request)'s one statement, which
+    /// `NeonSyncPeer`'s pull sends beside the identity read (#131).
+    pub(super) fn groups_statement(&self, after: i64, max: i64) -> SqlStatement {
         let event = self.config.qualified_event();
         let probe = max.saturating_add(1);
         let columns = format!(
@@ -167,7 +174,7 @@ impl<T> NeonEventStore<T> {
              WHERE e.write_group IS NULL AND {FRONTIER} \
              ORDER BY sort_group, sort_position"
         );
-        SqlRequest::single(SqlStatement::new(sql)).read_only()
+        SqlStatement::new(sql)
     }
 }
 
@@ -183,41 +190,60 @@ impl<T: SqlTransport> NeonEventStore<T> {
         after: Option<SequencePosition>,
         max_events: NonZeroUsize,
     ) -> Result<GroupPage, NeonError<T::Error>> {
-        // A budget past `i64::MAX` saturates, which no log can tell apart: it
-        // holds fewer positions than that.
-        let max = i64::try_from(max_events.get()).unwrap_or(i64::MAX);
-        // One more than the budget, so a scan that fills it is told apart
-        // from one that reached the end of the log.
-        let probe = max.saturating_add(1);
-        let request = self.groups_request(after.map_or(0, as_i64), max);
+        let request = self.groups_request(after.map_or(0, as_i64), group_budget(max_events));
         let response = self
             .transport
             .round_trip(request)
             .await
             .map_err(NeonError::Transport)?;
         let body = decode_body::<T::Error>(&response, self.config.max_response_bytes)?;
-        let rows = &first_result_set::<T::Error>(&body)?.rows;
-
-        let scanned = match rows.first() {
-            Some(row) => text::<T::Error>(row, "scanned")?
-                .parse::<i64>()
-                .map_err(|_| NeonError::MissingColumn { column: "scanned" })?,
-            None => 0,
-        };
-        let mut page = GroupPageBuilder::new(max_events);
-        for row in rows {
-            let (first, guard, event) = decode_group_row::<T::Error>(row)?;
-            if page.offer(first, guard, event).is_break() {
-                return Ok(page.finish(Waiting::Unknown)?);
-            }
-        }
-        let past = if scanned < probe {
-            Waiting::Nothing
-        } else {
-            Waiting::Unknown
-        };
-        Ok(page.finish(past)?)
+        decode_group_page(first_result_set::<T::Error>(&body)?, max_events)
     }
+}
+
+/// `max_events` as the group read's `max` bound.
+///
+/// A budget past `i64::MAX` saturates, which no log can tell apart: it holds
+/// fewer positions than that.
+pub(super) fn group_budget(max_events: NonZeroUsize) -> i64 {
+    i64::try_from(max_events.get()).unwrap_or(i64::MAX)
+}
+
+/// The page one answer of [`groups_statement`](NeonEventStore::groups_statement)
+/// holds, read with a budget of `max_events`: whole groups, and whether the
+/// scan reached the end of the log.
+///
+/// # Errors
+///
+/// What [`decode_group_row`] refuses, a `scanned` column that is not a
+/// number, and [`NeonError::GroupOrder`] for rows the page builder refuses.
+pub(super) fn decode_group_page<E>(
+    set: &ResultSet,
+    max_events: NonZeroUsize,
+) -> Result<GroupPage, NeonError<E>> {
+    // One more than the budget, so a scan that fills it is told apart from
+    // one that reached the end of the log.
+    let probe = group_budget(max_events).saturating_add(1);
+    let rows = &set.rows;
+    let scanned = match rows.first() {
+        Some(row) => text::<E>(row, "scanned")?
+            .parse::<i64>()
+            .map_err(|_| NeonError::MissingColumn { column: "scanned" })?,
+        None => 0,
+    };
+    let mut page = GroupPageBuilder::new(max_events);
+    for row in rows {
+        let (first, guard, event) = decode_group_row::<E>(row)?;
+        if page.offer(first, guard, event).is_break() {
+            return Ok(page.finish(Waiting::Unknown)?);
+        }
+    }
+    let past = if scanned < probe {
+        Waiting::Nothing
+    } else {
+        Waiting::Unknown
+    };
+    Ok(page.finish(past)?)
 }
 
 /// One column of one row, as text, or the shape complaint.

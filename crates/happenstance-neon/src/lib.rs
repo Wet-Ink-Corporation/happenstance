@@ -230,3 +230,9 @@ pub use projection_store::{NeonProjectionStore, NeonWriteBatch};
 #[cfg(feature = "sync")]
 #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 pub use happenstance_sync;
+
+// The sync peer (#131): one SQL request per pull and one per push. Declared
+// last, below every line the specification and the decisions cite here.
+#[cfg(feature = "sync")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+pub use event_store::{NeonPeerError, NeonSyncPeer};

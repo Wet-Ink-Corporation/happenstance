@@ -90,6 +90,14 @@ handle's first use. It turns on `event-store`, and `happenstance-core`'s
 unfinished (issue #244) and there is no network transport yet, so this is the
 port, not replication.
 
+The sync peer over this store is `happenstance-sync`'s `StoreSyncPeer`, with
+the store as both halves: `StoreSyncPeer::new(store.clone(), store)`. There is
+no Postgres peer type, unlike `happenstance-neon`'s `NeonSyncPeer`, because
+over a pool the peer's two queries a pull and three a push are cheap, and
+`read_groups` already decides `waiting` inside its own statement (SY-37). CI's
+`live-postgres` job runs `sync_peer_conformance!` on it, with a replay and a
+byte-identical round trip (#131).
+
 ## The problem this crate is here to solve
 
 `nextval()` allocates **outside** the transaction. So on any naive Postgres

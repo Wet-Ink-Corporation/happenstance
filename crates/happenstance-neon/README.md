@@ -145,6 +145,41 @@ in the writes that made it (#420), and stores the guard an ingested group
 arrived under. The runner is unfinished (issue #244) and there is no network
 transport yet, so this is the port, not replication.
 
+### The sync peer: `NeonSyncPeer`
+
+`sync` also brings `NeonSyncPeer`, a `SyncPeer` whose far side is a Neon
+store reached over this endpoint (#131). It is the peer that cannot hold a
+transaction across a round trip, so it spends exactly **one SQL request per
+`pull` and one per `push`**:
+
+- a pull sends the write-group read and the identity read as two statements
+  of one read-only `REPEATABLE READ` batch. The group read fetches one row past
+  what the page can carry, so `waiting` is decided inside the same request
+  (SY-37), and the responder identity (ADR-0104) is read in the same snapshot
+  as the page;
+- a push sends the ingest's statements, then the watermark and the identity,
+  in one `REPEATABLE READ` batch, so the ack confirms what that transaction
+  wrote. A push with nothing in it is one read-only request.
+
+```rust,ignore
+// Compiled as `NeonSyncPeer`'s doctest; nothing compiles this README.
+use happenstance_neon::{NeonConfig, NeonEventStore, NeonSyncPeer, NullTransport};
+
+let peer = NeonSyncPeer::new(NeonEventStore::new(NullTransport::new(), NeonConfig::default()));
+```
+
+`StoreSyncPeer` from `happenstance-sync` also works over `NeonEventStore`,
+and is what `NeonSyncPeer` is measured against: it asks the store one question
+per port method, which costs two HTTP round trips a pull and three a push.
+`NeonSyncPeer` sends the same SQL fused into one request. Its token is the
+same `StoreResume`, its pages are whole write groups, and a push writes no
+compensation, as `StoreSyncPeer`'s do. `new` declares `PeerLimits::minimum`,
+which sits inside this store's ceilings; a larger declaration must stay
+inside them, and a page must fit `max_response_bytes`. The bare flavour only,
+so it builds for `wasm32`. CI's `live-neon` job runs `sync_peer_conformance!`
+on it against the live endpoint, with a replay and a byte-identical round
+trip.
+
 ## Upgrading to the write-group schema: migrate, then deploy
 
 This release adds `migration::MIGRATION_3` (`migrations/0003_write_group.sql`):

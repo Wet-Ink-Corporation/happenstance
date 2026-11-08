@@ -35,6 +35,30 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- `happenstance-neon`: `NeonSyncPeer` and `NeonPeerError`, behind `sync`
+  (#131). A `SyncPeer` whose far side is a Neon store reached over its HTTP
+  endpoint, in **one SQL request per pull and one per push**: a pull is the
+  write-group read and the identity read in one read-only `REPEATABLE READ`
+  batch, so `waiting` (SY-37) and the responder (ADR-0104) come from the
+  page's own snapshot; a push is the ingest's statements, the watermark and
+  the identity in one `REPEATABLE READ` batch, so the ack confirms what that
+  transaction wrote. The alternative that lost is `StoreSyncPeer` over
+  `NeonEventStore`, which works and meets SY-37 but costs two HTTP round trips
+  a pull and three a push. The token is `StoreResume`, pages are whole write
+  groups, a push writes no compensation, and `new` declares
+  `PeerLimits::minimum`. Its own error type because `StorePeerError`'s limit
+  variants cannot be built outside `happenstance-sync`; the classes match
+  (SY-36). `sync_peer_conformance!`, a replay, and a byte-identical round trip
+  against an in-memory near store are mounted in the library target, which
+  `live-neon` already runs. No new SQL: the store's group read, ingest,
+  watermark and identity statements, shared with its ports.
+- `happenstance-postgres`: the Postgres sync peer is
+  `StoreSyncPeer<PostgresEventStore, PostgresEventStore>`, with no type of its
+  own (#131): over a pool the extra queries are cheap and `read_groups`
+  already decides `waiting` in its statement. `sync_peer_conformance!`, a
+  replay and a byte-identical round trip are mounted in the library target,
+  which `live-postgres` already runs.
+
 - `happenstance-sync-testkit`: the convergence family (#141), and with it a
   dependency on `happenstance`, the typed layer, with its `postcard` codec.
   `convergence_rules::convergent_projection_is_interleaving_independent`

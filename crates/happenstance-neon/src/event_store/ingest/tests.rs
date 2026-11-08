@@ -39,6 +39,8 @@ mod endpoint;
 mod family;
 mod groups;
 mod live;
+mod peer_family;
+mod peer_requests;
 
 /// A store another peer runs.
 fn peer(byte: u8) -> StoreId {

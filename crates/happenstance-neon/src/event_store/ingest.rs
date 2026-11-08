@@ -85,6 +85,7 @@ use super::remint::stored_store_id;
 use super::{NeonEventStore, decode_body, first_result_set, position_from_text};
 use crate::error::{NeonError, NeonSqlError};
 use crate::transport::{HttpResponse, SqlRequest, SqlStatement, SqlTransport};
+use crate::wire::{ResponseBody, ResultSet};
 
 /// The transaction-local setting the ingest statement leaves the first landed
 /// claim's 1-based index in, or the empty string.
@@ -157,10 +158,38 @@ impl<T: SqlTransport> NeonEventStore<T> {
         &self,
         groups: &[IngestGroup<'_>],
     ) -> Result<Ingested, IngestError<NeonError<T::Error>>> {
+        let Some(request) = self.ingest_write(groups)? else {
+            return Ok(Ingested::default());
+        };
+        // ES-11, as `append` waits: an ingest is a write.
+        self.transport().reads_settled().await;
+        let response = self
+            .transport()
+            .round_trip(request)
+            .await
+            .map_err(|error| IngestError::Store(NeonError::Transport(error)))?;
+        decode_ingest_answer(&response, self.config().max_response_bytes, groups)
+    }
+
+    /// The ingest's one request, after every refusal before the wire, or
+    /// `None` when the call has nothing foreign to write.
+    ///
+    /// `NeonSyncPeer`'s push sends this request with the watermark and the
+    /// identity read appended, so its ack is read inside the write's own
+    /// transaction (#131).
+    ///
+    /// # Errors
+    ///
+    /// [`IngestError::ExceedsStoreLimit`] for a call over a ceiling, and
+    /// `Store` for a guard or an origin position the request cannot carry.
+    pub(super) fn ingest_write(
+        &self,
+        groups: &[IngestGroup<'_>],
+    ) -> Result<Option<SqlRequest>, IngestError<NeonError<T::Error>>> {
         // An empty pull writes nothing, and compensation needs a landed event
         // (SY-11), so there is nothing to send.
         if groups.iter().all(|group| group.events.is_empty()) {
-            return Ok(Ingested::default());
+            return Ok(None);
         }
 
         // Against the worst case, the whole call: every foreign event and
@@ -182,29 +211,36 @@ impl<T: SqlTransport> NeonEventStore<T> {
             return Err(IngestError::exceeds_store_limit(limit, len));
         }
 
-        let request = self
-            .ingest_request::<T::Error>(groups)
-            .map_err(IngestError::Store)?;
-        // ES-11, as `append` waits: an ingest is a write.
-        self.transport().reads_settled().await;
-        let response = self
-            .transport()
-            .round_trip(request)
-            .await
-            .map_err(|error| IngestError::Store(NeonError::Transport(error)))?;
-        decode_ingest_answer(&response, self.config().max_response_bytes, groups)
+        self.ingest_request::<T::Error>(groups)
+            .map(Some)
+            .map_err(IngestError::Store)
     }
 
     /// The highest origin position held from each origin store, this store's
     /// own included. One `GROUP BY` over the origin index, nothing cached.
     async fn origin_watermark(&self) -> Result<Watermark, NeonError<T::Error>> {
-        let sql = WATERMARK_SQL.replace("{event}", &self.config().qualified_event());
         let response = self
             .transport()
-            .round_trip(SqlRequest::single(SqlStatement::new(sql)).read_only())
+            .round_trip(SqlRequest::single(self.watermark_statement()).read_only())
             .await
             .map_err(NeonError::Transport)?;
-        decode_watermark(&response, self.config().max_response_bytes)
+        let body = decode_body::<T::Error>(&response, self.config().max_response_bytes)?;
+        watermark_from(first_result_set::<T::Error>(&body)?)
+    }
+}
+
+impl<T> NeonEventStore<T> {
+    /// [`WATERMARK_SQL`] over this store's event table.
+    pub(super) fn watermark_statement(&self) -> SqlStatement {
+        SqlStatement::new(WATERMARK_SQL.replace("{event}", &self.config().qualified_event()))
+    }
+
+    /// The meta row's identity, base64, as column `v`.
+    pub(super) fn identity_statement(&self) -> SqlStatement {
+        SqlStatement::new(format!(
+            "SELECT encode(v, 'base64') AS v FROM {} WHERE k = 'store_id'",
+            self.config().qualified_meta()
+        ))
     }
 }
 
@@ -226,16 +262,13 @@ impl<T: SqlTransport> IngestStore for NeonEventStore<T> {
     /// `MissingIdentity` when the meta row is absent; `MalformedIdentity` when
     /// it is not sixteen bytes; `MalformedPayload` when it is not base64.
     async fn store_id(&self) -> Result<StoreId, Self::Error> {
-        let sql = format!(
-            "SELECT encode(v, 'base64') AS v FROM {} WHERE k = 'store_id'",
-            self.config().qualified_meta()
-        );
         let response = self
             .transport()
-            .round_trip(SqlRequest::single(SqlStatement::new(sql)).read_only())
+            .round_trip(SqlRequest::single(self.identity_statement()).read_only())
             .await
             .map_err(NeonError::Transport)?;
-        decode_identity(&response, self.config().max_response_bytes)
+        let body = decode_body::<T::Error>(&response, self.config().max_response_bytes)?;
+        identity_from(first_result_set::<T::Error>(&body)?)
     }
 
     async fn ingest(
@@ -320,12 +353,35 @@ fn decode_ingest_answer<E>(
     max_response_bytes: usize,
     groups: &[IngestGroup<'_>],
 ) -> Result<Ingested, IngestError<NeonError<E>>> {
-    let body = match decode_body::<E>(response, max_response_bytes) {
-        Ok(body) => body,
-        Err(NeonError::Sql(sql)) => return Err(refused(sql, groups)),
-        Err(other) => return Err(IngestError::Store(other)),
-    };
-    let counts = first_result_set::<E>(&body).map_err(IngestError::Store)?;
+    let body = ingest_body(response, max_response_bytes, groups)?;
+    ingested_from(first_result_set::<E>(&body).map_err(IngestError::Store)?)
+}
+
+/// An ingest answer's body, or the refusal it carries mapped onto the
+/// port's error, as [`refused`] maps it.
+///
+/// # Errors
+///
+/// [`refused`]'s mapping of a SQL error, and `Store` for every other way
+/// [`decode_body`] fails.
+pub(super) fn ingest_body<E>(
+    response: &HttpResponse,
+    max_response_bytes: usize,
+    groups: &[IngestGroup<'_>],
+) -> Result<ResponseBody, IngestError<NeonError<E>>> {
+    match decode_body::<E>(response, max_response_bytes) {
+        Ok(body) => Ok(body),
+        Err(NeonError::Sql(sql)) => Err(refused(sql, groups)),
+        Err(other) => Err(IngestError::Store(other)),
+    }
+}
+
+/// The counts row an ingest statement answers with.
+///
+/// # Errors
+///
+/// `Store(MissingColumn)` for a count that is absent or not a number.
+pub(super) fn ingested_from<E>(counts: &ResultSet) -> Result<Ingested, IngestError<NeonError<E>>> {
     let count = |column: &'static str| {
         counts
             .text(0, column)
@@ -373,26 +429,28 @@ fn claimed(detail: Option<&str>, groups: &[IngestGroup<'_>]) -> Option<EventId> 
         .map(|replicated| replicated.id)
 }
 
-/// The identity the port's [`store_id`](IngestStore::store_id) read answered.
-fn decode_identity<E>(
-    response: &HttpResponse,
-    max_response_bytes: usize,
-) -> Result<StoreId, NeonError<E>> {
-    let body = decode_body::<E>(response, max_response_bytes)?;
-    let stored = first_result_set::<E>(&body)?
-        .text(0, "v")
-        .ok_or(NeonError::MissingIdentity)?;
+/// The identity an [`identity_statement`](NeonEventStore::identity_statement)
+/// answered.
+///
+/// # Errors
+///
+/// `MissingIdentity` when the meta row is absent, and what
+/// `stored_store_id` refuses.
+pub(super) fn identity_from<E>(set: &ResultSet) -> Result<StoreId, NeonError<E>> {
+    let stored = set.text(0, "v").ok_or(NeonError::MissingIdentity)?;
     stored_store_id(stored)
 }
 
-/// The watermark [`NeonEventStore::origin_watermark`]'s read answered.
-fn decode_watermark<E>(
-    response: &HttpResponse,
-    max_response_bytes: usize,
-) -> Result<Watermark, NeonError<E>> {
-    let body = decode_body::<E>(response, max_response_bytes)?;
+/// The watermark a [`watermark_statement`](NeonEventStore::watermark_statement)
+/// answered.
+///
+/// # Errors
+///
+/// `MissingColumn` for a row without its two columns, and what
+/// `stored_store_id` and `position_from_text` refuse.
+pub(super) fn watermark_from<E>(set: &ResultSet) -> Result<Watermark, NeonError<E>> {
     let mut watermark = Watermark::new();
-    for row in &first_result_set::<E>(&body)?.rows {
+    for row in &set.rows {
         let text = |column: &'static str| {
             row.get(column)
                 .and_then(serde_json::Value::as_str)

@@ -2502,3 +2502,13 @@ mod write_group;
 /// Declared down here, after the tests, so the lines above keep the numbers
 /// the decision records cite them by.
 const APPEND_GROUP: &str = "min(a.position) OVER ()";
+
+// `NeonSyncPeer` (#131): the group read, the ingest, the watermark and the
+// identity read fused into one request per pull and one per push. A child for
+// the reasons `ingest` and `write_group` are, behind `sync` with them, and
+// declared last for the line numbers above.
+#[cfg(feature = "sync")]
+mod sync_peer;
+#[cfg(feature = "sync")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+pub use sync_peer::{NeonPeerError, NeonSyncPeer};
