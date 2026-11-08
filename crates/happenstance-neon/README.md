@@ -143,6 +143,26 @@ call, never cached on the handle. It turns on `event-store`, and
 no runner (issue #244) and no network peer yet, so this is the port, not
 replication.
 
+## Re-mint every branch before its first append
+
+A Neon branch is a copy of its parent, so it carries the parent's store identity together with an
+older position sequence. A branch that is created, reset or restored, and equally a `pg_restore` or
+a point-in-time recovery, would re-issue event identities its parent already issued, and a
+replication peer would silently drop the new events as already seen. Stop every writer to the
+branch, re-mint it, then resume appends. From code holding a store, that is
+`NeonEventStore::remint_identity`. From the tooling that makes branches, run
+`happenstance_neon::migration::remint_statement(&config).query`, which for the default
+`NeonConfig` is:
+
+```sql
+UPDATE "public"."store_meta" SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id' RETURNING encode(v, 'base64') AS store_id
+```
+
+No restart is needed: every append reads the identity row inside its own statement, and refuses
+with `NeonError::MissingIdentity`, writing nothing, if the row is absent; an ingest refuses the
+same way. The platform creates
+branches, not this crate, so put the statement in the tooling that does.
+
 ## Limits this store enforces
 
 | | |

@@ -75,6 +75,36 @@ not the same as what a user needed to be told.
   with no compensation, so it cannot be SY-7's adjudicator; that hook is
   planned with SY-7 (#136). Both peers pass
   `sync_peer_conformance!`, and `StoreSyncPeer` the model family too.
+- `happenstance-postgres` and `happenstance-neon`: a re-mint for after a
+  restore or a copy (#104, ADR-0086, VT-6). `PostgresEventStore::remint_identity`
+  and `NeonEventStore::remint_identity` replace the store's persisted
+  `StoreId` with a freshly minted one and return it, refusing with
+  `MissingIdentity`, and creating nothing, on a schema migration 1 never ran
+  on. `happenstance_neon::migration::remint_statement` is the same statement
+  as text, for the tooling that makes Neon branches. Run it after a
+  `pg_restore`, a point-in-time recovery, or on every Neon branch that is
+  created, reset or restored, with every writer stopped: the crate roots and
+  READMEs carry the procedure. Events already written keep their identity.
+  No schema change and no new migration: the re-mint updates the row
+  migration 1 already writes.
+
+### Changed
+
+- `happenstance-postgres`: a handle no longer caches the store's identity
+  (#104). Every append, and every ingest, reads `store_meta` inside its own
+  transaction, so a re-mint is seen by the next append on every handle and
+  clone, with no restart; it costs one primary-key read per append. An append
+  or an ingest on a schema whose identity row is gone now refuses with
+  `MissingIdentity`, where a handle that had read the row before went on
+  stamping it.
+- `happenstance-neon`: an append on a schema whose identity row is gone
+  inserts nothing and refuses with `NeonError::MissingIdentity` (#104), where
+  it used to commit rows with a NULL origin that every later read refused as
+  `UnstampedEvent`. An ingest on such a schema now writes nothing and
+  refuses with `IngestError::Store(NeonError::MissingIdentity)`, where its
+  compensation used to commit with a NULL origin.
+  `NeonError::MissingIdentity` is no longer behind `sync` (additive: the enum
+  is `#[non_exhaustive]`).
 
 ## [0.5.1] — 2026-11-08
 

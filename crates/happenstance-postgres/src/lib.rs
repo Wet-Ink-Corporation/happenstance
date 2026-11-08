@@ -145,6 +145,32 @@
 //! ES-10 states a global one. `references/adr/0024-position-visibility-mechanism.md`
 //! in this crate's repository carries the argument and the measurements.
 //!
+//! # After a restore, re-mint before the first append
+//!
+//! This store's identity, the `StoreId` half of every `EventId` it mints, is
+//! one row that migration 1 writes once. A `pg_restore`, a point-in-time
+//! recovery, a promoted replica that lost acknowledged writes, or any other copy
+//! brings that row back together with an older position sequence, and the copy
+//! would then re-issue `EventId`s it has already issued, which replication drops
+//! silently (VT-6). In this order:
+//!
+//! 1. Stop every process that appends to the copy.
+//! 2. Re-mint the copy's identity, with `PostgresEventStore::remint_identity`
+//!    or, from tooling that holds no store, the statement it runs:
+//!    ```sql
+//!    UPDATE store_meta SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id';
+//!    ```
+//! 3. Resume appends.
+//!
+//! Nothing has to be restarted. No handle keeps a copy of the identity: every
+//! append reads the row inside its own transaction, so a handle opened before
+//! step 2 stamps the new identity from its next append on. Step 1 is still
+//! first, because a writer that runs between the restore and the re-mint stamps
+//! the old identity onto a position the rewound sequence hands out again.
+//! Events already in the database keep the identity they were stamped with,
+//! which is correct. Minting afresh on every open was considered and declined
+//! (ADR-0086): a pool outlives a `pg_restore`, so it would not close the gap.
+//!
 //! # Still open
 //!
 //! * **TLS.** Deliberately not selected, and the reason is measured rather than

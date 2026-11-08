@@ -64,7 +64,7 @@ provides the atomicity and the identity that makes it idempotent.
       are among the nine crates 1.0 promises (ADR-0066), so this is the first
       thing the phase does rather than the last. **Done 2026-10-14:** the owner
       published both `0.0.0` placeholders from `cargo xtask reserve` at `a69ded4`.
-- [ ] #104 · **The Postgres and Neon `StoreId` has no restore detection**
+- [x] #104 · **The Postgres and Neon `StoreId` has no restore detection**
       (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md`,
       VT-6). Both mint once, in a migration —
       `crates/happenstance-postgres/migrations/0001_event_log.sql:111-118` and
@@ -81,7 +81,13 @@ provides the atomicity and the identity that makes it idempotent.
       procedure are additive too. Mint-per-open is a behaviour change, and phase
       17's window closes before this phase opens, so phase 17 decides it; if
       phase 17 declined it, the remedy here is one of the additive arms, and
-      mint-per-open would be a post-1.0 major.
+      mint-per-open would be a post-1.0 major. **Done 2026-11-08:** phase 17
+      declined mint-per-open (ADR-0086), and this item built the documented
+      re-mint arm: `remint_identity` on both stores,
+      `happenstance_neon::migration::remint_statement` for branch tooling,
+      Postgres stamping from the row inside each append's transaction with the
+      cache gone, Neon refusing an append with no identity row, and the
+      procedure in both crate roots and READMEs.
 
 - [x] #105 · ADR-0026. Record the ingest boundary SY-1 – SY-7 already fix, and settle
       what makes re-delivery harmless and what the port may assume about a transport it cannot see. The two real peers are a
@@ -298,3 +304,18 @@ of E2E-07 (ES-24).
   port's `# Errors` names the lost-commit exception. Owed by the owner before the
   first tag: the release.yml diff, the CLAUDE.md counts, and trusted publishers
   for both sync crates.
+- **2026-11-08** — #104: the Postgres and Neon re-mint (ADR-0086's additive
+  arms). `PostgresEventStore::remint_identity` and `NeonEventStore::remint_identity`,
+  and `migration::remint_statement` on Neon for branch tooling. Postgres drops
+  its per-handle `OnceLock` identity cache and reads `store_meta` inside every
+  append's and every ingest's transaction, so a re-mint needs no restart; Neon
+  inserts nothing and refuses with `MissingIdentity` when the row is gone, an
+  ingest included (its compensation is gated on the row and its refusal
+  statement raises `HS086`). A deviation from ADR-0086 §7.2, which proposed a
+  join in `local_origin`: Neon guards each writer with an `EXISTS` on the meta
+  row instead, because `local_origin` also stamps ingest compensation, where a
+  join would silently drop the compensation and commit its losing event. No
+  migration. `tests/remint.rs` in each crate holds it with a no-re-mint
+  negative control; CI's live jobs run both. Verified against a live Postgres
+  17.10; the Neon target is compiled locally and runs in `live-neon`.
+  `restored_peer_does_not_reissue_identities` stays #133's.

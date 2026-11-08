@@ -125,36 +125,19 @@ async fn own(store: &PostgresEventStore) -> StoreId {
         .expect("a reachable, migrated store has an identity")
 }
 
-/// A store on a fresh schema of the live server. Its identity is read, and
-/// cached, on first use.
+/// A store on a fresh schema of the live server.
 async fn live_store() -> PostgresEventStore {
     PostgresEventStore::new(server::fresh_pool().await)
 }
 
-/// A store whose pool points nowhere and whose identity has not been read, so
-/// any call that reaches the wire fails as `Driver`.
-fn unidentified_store() -> PostgresEventStore {
+/// A store whose pool points nowhere, so any call that reaches the wire fails
+/// as `Driver` and not as the refusal under test.
+fn unreachable_store() -> PostgresEventStore {
     let pool = PgPoolOptions::new()
         .acquire_timeout(Duration::from_secs(1))
         .connect_lazy("postgres://happenstance@127.0.0.1:1/unreachable")
         .expect("a well-formed URL builds a lazy pool");
     PostgresEventStore::new(pool)
-}
-
-/// [`unidentified_store`] with a fixed identity already in its cache, so a
-/// call that wrongly reaches the wire fails as `Driver` and not as the
-/// refusal under test.
-///
-/// The cache is the store's private `store_id` field, which this module, a
-/// descendant of `event_store`, can reach: so the seam needs no test-only
-/// constructor.
-fn unreachable_store() -> PostgresEventStore {
-    let store = unidentified_store();
-    store
-        .store_id
-        .set(peer(0x01))
-        .expect("a store built a line above has read no identity");
-    store
 }
 
 /// Constraint 4, one port over: generic code binds the bare flavours, and the
@@ -165,19 +148,25 @@ fn ingest_store_satisfies_the_bare_bounds() {
     assert_bounds::<PostgresEventStore>();
 }
 
-/// The port's `store_id` answers from the store's cache, and so never reaches
-/// the wire once the identity is held.
+/// The port's `store_id` reads the row on every call, and so reaches the wire
+/// even on a handle that has answered it before (ADR-0086 §7.1).
 ///
-/// Rejects a port `store_id` that bypasses the cache: this store's pool points
-/// nowhere, so a read would fail as `Driver`.
+/// Rejects a port `store_id` that answers from a copy held on the handle,
+/// which a re-mint would make stale: this store's pool points nowhere, so only
+/// a read fails, and it fails as `Driver`, twice.
 #[tokio::test]
-async fn store_id_through_the_port_answers_the_seeded_identity_without_the_wire() {
+async fn store_id_through_the_port_reads_the_row_on_every_call() {
     let store = unreachable_store();
 
-    let answered = IngestStore::store_id(&store)
-        .await
-        .expect("a held identity is answered without a read");
-    assert_eq!(answered, peer(0x01));
+    for _ in 0..2 {
+        let refused = IngestStore::store_id(&store)
+            .await
+            .expect_err("an identity on a server that is not there cannot be read");
+        assert!(
+            matches!(refused, PostgresEventStoreError::Driver(_)),
+            "{refused:?}"
+        );
+    }
 }
 
 /// An ingest whose store cannot read its identity fails as the store's error,
@@ -189,7 +178,7 @@ async fn store_id_through_the_port_answers_the_seeded_identity_without_the_wire(
 /// that, and an origin position past a `bigint` as that.
 #[tokio::test]
 async fn ingest_reports_an_unreadable_identity_as_a_store_error() {
-    let store = unidentified_store();
+    let store = unreachable_store();
     let from = peer(0x61);
     let one = [shipped(id(from, 1), 1, event("Shipped", "a"))];
 
