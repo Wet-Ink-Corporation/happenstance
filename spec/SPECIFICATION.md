@@ -2888,7 +2888,7 @@ payloads in scope, by crate:
 - **`happenstance-postgres`** — `Driver(sqlx::Error)` on both
   `PostgresEventStoreError` and `PostgresProjectionStoreError`
   (`crates/happenstance-postgres/src/error.rs:39`, `:141`), with `pub use sqlx`
-  (`crates/happenstance-postgres/src/lib.rs:218`).
+  (`crates/happenstance-postgres/src/lib.rs:244`).
 - **`happenstance-cloudflare`** — `SqlError::Thrown(JsThrow)`
   (`crates/happenstance-cloudflare/src/sql_storage.rs:139`), where `JsThrow`
   holds an `Rc<worker::Error>` and is built by a public
@@ -2897,7 +2897,7 @@ payloads in scope, by crate:
   `pub use worker` (`crates/happenstance-cloudflare/src/lib.rs:619`).
 - **`happenstance-neon`** — `NeonError::MalformedResponse(serde_json::Error)`
   (`crates/happenstance-neon/src/error.rs:104`), with `pub use serde_json`
-  (`crates/happenstance-neon/src/lib.rs:175`).
+  (`crates/happenstance-neon/src/lib.rs:199`).
 
 An event-store error reaches a caller through `AppendError::Store(E)`, and
 since ES-43 through `AppendError::Busy(E)` as well. `Busy` carries the same
@@ -2956,7 +2956,7 @@ impls now do, and one of them is the proof rather than the breadth: `LocalMemory
 EventStore for` in a genuinely downstream crate, beside the blanket impl without
 `error[E0119]`, passing every rule natively and on `wasm32`. `CloudflareEventStore`
 (`crates/happenstance-cloudflare/src/event_store.rs:1267`) and `happenstance-neon`'s two
-(`crates/happenstance-neon/src/event_store.rs:852`, `:1549`) widen the evidence without
+(`crates/happenstance-neon/src/event_store.rs:873`, `:1549`) widen the evidence without
 adding to it. ADR-0001's marker was lifted on that basis at phase 1 (`references/adr/0001-async-port-flavours.md:5-6`).
 
 - **Rule:** not a new rule but a new *invocation* of the existing suite — the
@@ -4494,9 +4494,9 @@ today, four of them skeletons — `happenstance-sqlite` was the fifth until phas
 8 gave it real bodies and a green suite: `memory.rs:293`,
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
 `crates/happenstance-sqlite/src/event_store.rs:1962`,
-`crates/happenstance-postgres/src/event_store.rs:467`,
+`crates/happenstance-postgres/src/event_store.rs:508`,
 `crates/happenstance-cloudflare/src/event_store.rs:1267` and
-`crates/happenstance-neon/src/event_store.rs:852`, `:1549`. The blanket impl
+`crates/happenstance-neon/src/event_store.rs:873`, `:1549`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
 only implementers do — two when this clause was written, seven now, and seven
 is the figure a required method has to be re-costed against. The count is of
@@ -4968,7 +4968,7 @@ had two halves.
   anything else — `happenstance-cloudflare` at phase 9 and `happenstance-neon` at
   phase 10, whichever lands first.* **`happenstance-neon` meets that wording's
   letter.** Its probe is one read-only round trip of its own
-  (`crates/happenstance-neon/src/event_store.rs:997`), over the
+  (`crates/happenstance-neon/src/event_store.rs:1018`), over the
   `(origin_store, origin_position)` pair VT-8 already indexes, and
   `contains_event_id_reports_membership` passes against a live endpoint. The
   freeze does not reword that away. It accepts the round trip, because no required

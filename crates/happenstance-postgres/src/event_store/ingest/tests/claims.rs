@@ -230,8 +230,9 @@ async fn a_claim_the_calls_own_compensation_would_hide_is_refused() {
 async fn a_claim_on_a_row_committed_during_the_call_is_refused() {
     let store = live_store().await;
     let pool = store.pool();
-    // Read, and cached, before the gate, so the spawned ingest's clone of the
-    // handle answers it without a round trip.
+    // Read before the gate, to forge the claim. The spawned ingest reads it
+    // again inside its own transaction, in the statement that takes its begin
+    // snapshot, which is still that transaction's first.
     let own = own(&store).await;
     // Installed first: `CREATE TRIGGER` waits on T's row lock otherwise.
     sqlx::raw_sql(
@@ -388,7 +389,9 @@ async fn a_claim_lands_as_foreign_after_a_manual_remint() {
         .execute(&pool)
         .await
         .expect("the identity row is replaced");
-    // A new handle, not a clone: a clone shares `store`'s cached identity.
+    // A new handle, as before #104, when a handle cached the identity it read
+    // first. Since #104 `store` itself would see the re-mint too, which
+    // `tests/remint.rs` holds; this test is about the claim, not the handle.
     let reminted = PostgresEventStore::new(pool);
     assert_ne!(own(&reminted).await, old);
 

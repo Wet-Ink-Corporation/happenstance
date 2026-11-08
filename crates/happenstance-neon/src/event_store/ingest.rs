@@ -77,7 +77,8 @@ use happenstance_sync::{
     Classify, FailureClass, IngestError, IngestGroup, IngestStore, Ingested, Watermark,
 };
 
-use super::{NeonEventStore, decode_base64, decode_body, first_result_set, position_from_text};
+use super::remint::stored_store_id;
+use super::{NeonEventStore, decode_body, first_result_set, position_from_text};
 use crate::error::{NeonError, NeonSqlError};
 use crate::transport::{HttpResponse, SqlRequest, SqlStatement, SqlTransport};
 
@@ -369,21 +370,6 @@ fn decode_watermark<E>(
         );
     }
     Ok(watermark)
-}
-
-/// A stored `bytea` identity, which every `SELECT` here asks for as base64.
-///
-/// # Errors
-///
-/// `MalformedPayload` when it is not base64; `MalformedIdentity` when it is
-/// not sixteen bytes.
-fn stored_store_id<E>(stored: &str) -> Result<StoreId, NeonError<E>> {
-    let bytes = decode_base64(stored)?;
-    let identity: [u8; 16] = bytes
-        .as_slice()
-        .try_into()
-        .map_err(|_| NeonError::MalformedIdentity { len: bytes.len() })?;
-    Ok(StoreId::from_bytes(identity))
 }
 
 // The whole file is behind `sync`, through its declaration in

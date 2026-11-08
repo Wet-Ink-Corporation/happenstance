@@ -93,6 +93,37 @@ pub fn request(template: &str, config: &NeonConfig) -> SqlRequest {
     )
 }
 
+/// The re-mint, against `config`'s meta table: the one statement that replaces
+/// this store's identity with a freshly minted one, and reads the new value
+/// back as base64.
+///
+/// # Who runs it, and when
+///
+/// After a Neon branch is created, reset or restored, and after a
+/// `pg_restore` or a point-in-time recovery: stop every writer to the copy,
+/// run this against it, then resume appends. The crate root's *After a branch
+/// or a restore, re-mint before the first append* is the procedure in full.
+/// `NeonEventStore::remint_identity` sends exactly this statement. It is published on its own because a branch
+/// is made by the platform's control plane, not by this crate, so the tooling
+/// that makes branches is where the re-mint has to run, and that tooling needs
+/// the text rather than a store. [`SqlStatement::query`] is plain SQL with no
+/// placeholder and no parameter, so `psql`, a migration runner or a branch hook
+/// can run it as it stands; the `RETURNING` clause only prints the new value.
+///
+/// It is migration 1's insert turned into an update. An `UPDATE` rather than
+/// an upsert, because a schema with no identity row is one migration 1 never
+/// ran on, and minting into it would hide that: the statement then matches no
+/// row and returns none. A later run of migration 1 cannot undo it, because
+/// that insert is `ON CONFLICT (k) DO NOTHING`.
+#[must_use]
+pub fn remint_statement(config: &NeonConfig) -> SqlStatement {
+    SqlStatement::new(format!(
+        "UPDATE {meta} SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id' \
+         RETURNING encode(v, 'base64') AS store_id",
+        meta = config.qualified_meta(),
+    ))
+}
+
 /// Strips whole-line comments and splits on `;`.
 fn split(sql: &str) -> Vec<String> {
     let stripped: String = sql

@@ -107,8 +107,10 @@ async fn append_poll_count_is_measured_not_chosen() {
     let fixture = PostgresFixture::new();
     let store = fixture.connect().await;
 
-    // Warm the store's cached identity first, so the number measures `append`
-    // rather than the one-off `store_meta` read that precedes the first one.
+    // Warm the pool first, so the number measures `append` rather than the
+    // one-off connection the first one opens. Until #104 this also warmed a
+    // cached identity; every append now reads `store_meta` in its own
+    // transaction, so that read is part of what is measured.
     SendEventStore::append(&store, &one_event(), None)
         .await
         .expect("the warm-up append should succeed");

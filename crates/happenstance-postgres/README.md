@@ -171,6 +171,25 @@ held for a whole chunk, and a statement the server refuses aborts the
 transaction, unless `apply` rolled back to a savepoint it set (#103). The
 buffered store stays the default.
 
+## After a restore, re-mint before the first append
+
+A `pg_restore`, a point-in-time recovery, a promoted replica that lost acknowledged writes, or any
+other copy of this store's database brings back its identity row together with an older position
+sequence. The copy would then re-issue event identities it has already issued, and a replication
+peer would silently drop the new events as already seen. In this order:
+
+1. Stop every process that appends to the copy.
+2. Re-mint the copy's identity: call `PostgresEventStore::remint_identity`, or run, against the
+   copy, the statement it runs:
+   ```sql
+   UPDATE store_meta SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id';
+   ```
+3. Resume appends.
+
+No restart is needed: every append reads the identity row inside its own transaction, so a
+handle opened before step 2 stamps the new identity from its next append on. Events already in
+the database keep the identity they were written with.
+
 ## Limits this store enforces
 
 | | |

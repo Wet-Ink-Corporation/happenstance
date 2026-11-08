@@ -32,18 +32,20 @@
 //!
 //! The port is implemented on `PostgresEventStore` itself, with no wrapper,
 //! because the port's [`store_id`](SendIngestStore::store_id) is `async` and
-//! fallible: it is the store's own read of `store_meta`, made on a handle's
-//! first use and cached on it, the one `append` stamps from. An ingest asks
-//! for it after every refusal that needs none, so a call over a ceiling, or
-//! with an origin position past a `bigint`, still never reaches the wire; on a
-//! handle that has not read it yet, it is one round trip more, and a failed
-//! read is [`IngestError::Store`].
+//! fallible: it reads `store_meta` on every call. Nothing is cached, on the
+//! handle or anywhere else (ADR-0086 §7.1), so a re-mint is answered by the
+//! next call on any handle.
 //!
-//! The tests that need no server reach the cache directly: it is a private
-//! field, and they are descendants of `event_store`. `unreachable_store`
-//! seeds a fixed `StoreId` into a store whose pool points nowhere, so a
-//! refusal that must come before the wire is shown not to reach it, and
-//! nothing is added to `event_store.rs` for them.
+//! An ingest reads the identity inside its own transaction, as `append` does,
+//! in the same first statement that takes the begin snapshot. So every
+//! refusal that needs no identity comes before the wire, a call over a ceiling
+//! or with an origin position past a `bigint` never reaches it, the
+//! compensation is stamped with the row as it stands when the call runs, and
+//! a missing row refuses the call with nothing written. A failed read is
+//! [`IngestError::Store`].
+//!
+//! The tests that need no server use a store whose pool points nowhere, so a
+//! refusal that must come before the wire is shown not to reach it.
 //!
 //! # Positions
 //!
@@ -77,13 +79,13 @@
 //!
 //! **Here**, as a child of `event_store`, because privacy is per module and a
 //! module's private items are visible to its descendants: this reaches the
-//! writer, the pool, the cached identity and `on_runtime` without any of them
+//! writer, the pool, the identity read and `on_runtime` without any of them
 //! being widened. Coherence allows the impl: a foreign trait on a local type.
 //!
 //! **Behind `sync`**, off by default, so a consumer who never replicates
 //! compiles none of it. It was `cfg(test)` while `happenstance-sync` was
 //! unpublished; #108 part E turned the gate into the feature. The tests stay
-//! unit tests under this module, because they seed the private cache, and
+//! unit tests under this module, because they reach the private writer, and
 //! `tests/ingest_port.rs` holds the published impl to the port from outside.
 
 use std::collections::HashSet;
@@ -95,8 +97,8 @@ use happenstance_sync::{
 use sqlx::{PgPool, Postgres, Transaction};
 
 use super::{
-    NewRow, Origin, PostgresEventStore, StoredOrigin, allocate_positions, exceeded,
-    insert_statement, now, position_from_row,
+    IDENTITY_SQL, NewRow, Origin, PostgresEventStore, StoredOrigin, allocate_positions, exceeded,
+    identity_from_row, insert_statement, now, position_from_row,
 };
 use crate::error::PostgresEventStoreError;
 
@@ -110,9 +112,15 @@ const CONFLICT_CLAUSE: &str = " ON CONFLICT (origin_store, origin_position) \
      WHERE origin_store IS NOT NULL AND origin_position IS NOT NULL DO NOTHING \
      RETURNING origin_store, origin_position";
 
-/// The transaction's begin snapshot, taken as its first statement when the
-/// call carries a claim on this store's identity.
-const BEGIN_SNAPSHOT_SQL: &str = "SELECT pg_current_snapshot()::text";
+/// The transaction's first statement: this store's identity, and the begin
+/// snapshot a claim on that identity is judged against.
+///
+/// One statement, so the snapshot is still the transaction's first and the
+/// identity read costs no round trip of its own. The snapshot is taken on
+/// every call, though only a call that carries a claim reads it: in the same
+/// statement it is free.
+const IDENTITY_AND_SNAPSHOT_SQL: &str =
+    "SELECT v, pg_current_snapshot()::text FROM store_meta WHERE k = 'store_id'";
 
 /// Of the claimed own positions the insert skipped, those whose row the begin
 /// snapshot could not see: written by this call, or committed by another
@@ -145,10 +153,9 @@ const _: () =
     assert!(PostgresEventStore::MAX_EVENTS_PER_BATCH * ROW_PARAMETERS <= MAX_BIND_PARAMETERS);
 
 impl PostgresEventStore {
-    /// The ceilings, the origin check, this store's identity, then one
-    /// transaction on the store's runtime. Every refusal comes before the
-    /// wire, and the identity is a round trip only on a handle that has not
-    /// read it yet.
+    /// The ceilings and the origin check, then one transaction on the store's
+    /// runtime, which reads this store's identity first. Every refusal that
+    /// needs no identity comes before the wire.
     async fn ingest_groups(
         &self,
         groups: &[IngestGroup<'_>],
@@ -187,14 +194,10 @@ impl PostgresEventStore {
             .map(OwnedGroup::try_from_group)
             .collect::<Result<Vec<_>, _>>()
             .map_err(IngestError::Store)?;
-        // The inherent read, cached per handle, which `append` stamps from.
-        // `Self::store_id` names it rather than the port's method of the same
-        // name, because an inherent associated function wins the lookup.
-        let own = Self::store_id(self).await.map_err(IngestError::Store)?;
         let recorded_at = now();
         let pool = self.pool.clone();
         let outcome = self
-            .on_runtime(ingest_in_transaction(pool, own, owned, recorded_at))
+            .on_runtime(ingest_in_transaction(pool, owned, recorded_at))
             .await
             .map_err(IngestError::Store)?;
         match outcome {
@@ -232,12 +235,20 @@ impl SendIngestStore for PostgresEventStore {
     // `IngestError` carries capacity and the unheld identity in arms of its own.
     type Error = PostgresEventStoreError;
 
-    /// The identity `store_meta` holds, read on this handle's first use and
-    /// cached, by the same read `append` stamps from. A re-mint is seen by a
-    /// new handle; a clone shares the cache.
+    /// The identity `store_meta` holds, read on every call. Nothing is
+    /// cached (ADR-0086), so a re-mint is answered by the next call on any
+    /// handle, clones included.
     async fn store_id(&self) -> Result<StoreId, Self::Error> {
-        // The inherent method, not this one: inherent wins path resolution.
-        Self::store_id(self).await
+        let pool = self.pool.clone();
+        let stored: Option<Vec<u8>> = self
+            .on_runtime(async move {
+                sqlx::query_scalar(IDENTITY_SQL)
+                    .fetch_optional(&pool)
+                    .await
+                    .map_err(PostgresEventStoreError::from)
+            })
+            .await?;
+        identity_from_row(stored)
     }
 
     async fn ingest(
@@ -371,27 +382,27 @@ enum Outcome {
 /// One ingest: every group, in order, in one transaction.
 async fn ingest_in_transaction(
     pool: PgPool,
-    own: StoreId,
     groups: Vec<OwnedGroup>,
     recorded_at: RecordedAt,
 ) -> Result<Outcome, PostgresEventStoreError> {
     let mut transaction = pool.begin().await?;
 
-    // Only a call that carries a claim takes a snapshot, and the claim check
-    // runs only with one, so no claim is ever judged without it.
+    // First, so the snapshot is the call's begin snapshot, and so a store with
+    // no identity refuses before anything is written. The transaction is
+    // dropped uncommitted on that `?`.
+    let (stored, snapshot): (Vec<u8>, String) = sqlx::query_as(IDENTITY_AND_SNAPSHOT_SQL)
+        .fetch_optional(&mut *transaction)
+        .await?
+        .ok_or(PostgresEventStoreError::MissingIdentity)?;
+    let own = stored_store_id(&stored)?;
+
+    // Only a call that carries a claim runs the claim check, and it is never
+    // run without the begin snapshot.
     let claims = groups
         .iter()
         .flat_map(|group| &group.events)
         .any(|foreign| foreign.id.store() == own);
-    let began: Option<String> = if claims {
-        Some(
-            sqlx::query_scalar(BEGIN_SNAPSHOT_SQL)
-                .fetch_one(&mut *transaction)
-                .await?,
-        )
-    } else {
-        None
-    };
+    let began = claims.then_some(snapshot);
 
     let mut ingested = Ingested::default();
     for group in &groups {
