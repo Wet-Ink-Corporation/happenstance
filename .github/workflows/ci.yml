@@ -938,6 +938,47 @@ jobs:
             exit 1
           fi
 
+      # A native SQLite store through the Postgres sync peer (#131): payload
+      # bytes identical both ways, and a replay that changes nothing. The
+      # instrument crate `harness/sync-round-trip` holds it, because the round
+      # trip needs two adapters in one build and no adapter depends on
+      # another. Filtered to its `postgres::` cases; the `neon::` ones run in
+      # `live-neon`. Its own list/run/assert, STRICT, as the trios above.
+      - name: Every gated SQLite round trip through Postgres is present in the binary
+        if: ${{ !cancelled() }}
+        run: |
+          cargo test -p happenstance-sync-round-trip-harness --test round_trip \
+            -- --ignored --list postgres:: | tee gated-round-trip.txt
+
+      - name: The SQLite round trip through the Postgres peer
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-sync-round-trip-harness --test round_trip \
+            -- --ignored --show-output --test-threads=1 postgres:: \
+            | tee round-trip-run.txt
+
+      - name: The SQLite round trip executed and passed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' round-trip-run.txt; then
+            echo "::error::no test result line; the SQLite round trip did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-round-trip.txt)
+          result=$(grep -E '^test result:' round-trip-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
       # The suite must be green, and the failure list is empty on purpose.
       #
       # An earlier draft of this step asserted that two rules
@@ -1386,6 +1427,47 @@ jobs:
 
           expected=$(grep -c ': test$' gated-remint.txt)
           result=$(grep -E '^test result:' remint-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
+      # A native SQLite store through `NeonSyncPeer` (#131): payload bytes
+      # identical both ways, and a replay that changes nothing. The instrument
+      # crate `harness/sync-round-trip` holds it, because the round trip needs
+      # two adapters in one build and no adapter depends on another. Filtered
+      # to its `neon::` cases; the `postgres::` ones run in `live-postgres`.
+      # Its own list/run/assert, STRICT, as the trios above.
+      - name: Every gated SQLite round trip through Neon is present in the binary
+        if: ${{ !cancelled() && env.NEON_CONNECTION != '' }}
+        run: |
+          cargo test -p happenstance-sync-round-trip-harness --test round_trip \
+            -- --ignored --list neon:: | tee gated-round-trip.txt
+
+      - name: The SQLite round trip through the Neon peer
+        if: ${{ !cancelled() && env.NEON_CONNECTION != '' }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-sync-round-trip-harness --test round_trip \
+            -- --ignored --show-output --test-threads=1 neon:: \
+            | tee round-trip-run.txt
+
+      - name: The SQLite round trip executed and passed every gated test
+        if: always() && env.NEON_CONNECTION != ''
+        run: |
+          if ! grep -qE '^test result:' round-trip-run.txt; then
+            echo "::error::no test result line; the SQLite round trip did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-round-trip.txt)
+          result=$(grep -E '^test result:' round-trip-run.txt | tail -1)
           passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
           failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
           ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')

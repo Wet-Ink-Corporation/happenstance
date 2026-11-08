@@ -110,7 +110,7 @@ Live (`#[ignore]`, `live-neon`'s `--lib -- --ignored`), in `ingest/tests/peer_fa
 
 | Decision | Options | Recommendation | Decided by | Outcome |
 |---|---|---|---|---|
-| Where the **SQLite**↔Neon round trip lives | (a) path-only dev-dep `happenstance-sqlite` in `happenstance-neon`; (b) a non-published harness crate; (c) an existing example | (a) | owner | open: BLOCKED |
+| Where the **SQLite**↔Neon round trip lives | (a) path-only dev-dep `happenstance-sqlite` in `happenstance-neon`; (b) a non-published harness crate; (c) an existing example | (a) | coordinator, under the owner's standing AFK authority | (b), shaped like #130's `harness/workerd`: (a) would rewrite the binding adapter-dependency rule |
 
 ## Risks
 
@@ -152,4 +152,11 @@ Live (`#[ignore]`, `live-neon`'s `--lib -- --ignored`), in `ingest/tests/peer_fa
 - [x] scripted: pull one request; budget-ended page; pull from a token; push one request;
       empty push; limits before the wire; refused push.
 - [x] live: conformance mount; replay; byte-identical round trip (memory near end).
-- [ ] SQLite near end: blocked on the placement decision.
+- [x] SQLite near end: `harness/sync-round-trip` (`happenstance-sync-round-trip-harness`,
+      `publish = false`), one test binary `tests/round_trip/` with `neon::` and `postgres::`
+      cases (round trip both ways, replay). Postgres cases: 2 passed locally against the
+      container. Neon cases without `NEON_CONNECTION` fail naming the variable, as the
+      workerd harness's do. CI: a strict list/run/assert trio in `live-neon` (`neon::`) and in
+      `live-postgres` (`postgres::`). `Cargo.lock`: one new node, the harness itself; every
+      dependency of it was already a node. Two `standards/rust` citations of `ci.yml` lines
+      repointed (the inserted steps moved them).

@@ -178,7 +178,8 @@ which sits inside this store's ceilings; a larger declaration must stay
 inside them, and a page must fit `max_response_bytes`. The bare flavour only,
 so it builds for `wasm32`. CI's `live-neon` job runs `sync_peer_conformance!`
 on it against the live endpoint, with a replay and a byte-identical round
-trip.
+trip, and the workspace's `harness/sync-round-trip` runs a native SQLite
+store through it.
 
 ## Upgrading to the write-group schema: migrate, then deploy
 

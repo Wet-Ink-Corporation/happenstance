@@ -1014,6 +1014,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "happenstance-sync-round-trip-harness"
+version = "0.5.1"
+dependencies = [
+ "happenstance-core",
+ "happenstance-neon",
+ "happenstance-postgres",
+ "happenstance-sqlite",
+ "happenstance-sync",
+ "http-body-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "rustls",
+ "sqlx",
+ "testcontainers",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "happenstance-sync-testkit"
 version = "0.5.1"
 dependencies = [

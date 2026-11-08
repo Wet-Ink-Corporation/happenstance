@@ -58,6 +58,14 @@ not the same as what a user needed to be told.
   already decides `waiting` in its statement. `sync_peer_conformance!`, a
   replay and a byte-identical round trip are mounted in the library target,
   which `live-postgres` already runs.
+- `harness/sync-round-trip` (`happenstance-sync-round-trip-harness`), an
+  unpublished instrument crate (#131): a native SQLite store through
+  `NeonSyncPeer` and through `StoreSyncPeer` over Postgres, payload bytes
+  identical both ways, and a replayed batch that changes nothing. A crate of
+  its own because the round trip needs two adapters in one build and no
+  adapter depends on another; `harness/workerd` is the precedent (#130).
+  `live-neon` runs its `neon::` cases and `live-postgres` its `postgres::`
+  cases, each as a strict list/run/assert trio.
 
 - `happenstance-sync-testkit`: the convergence family (#141), and with it a
   dependency on `happenstance`, the typed layer, with its `postcard` codec.

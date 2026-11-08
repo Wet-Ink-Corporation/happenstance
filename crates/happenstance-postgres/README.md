@@ -96,7 +96,8 @@ no Postgres peer type, unlike `happenstance-neon`'s `NeonSyncPeer`, because
 over a pool the peer's two queries a pull and three a push are cheap, and
 `read_groups` already decides `waiting` inside its own statement (SY-37). CI's
 `live-postgres` job runs `sync_peer_conformance!` on it, with a replay and a
-byte-identical round trip (#131).
+byte-identical round trip, and the workspace's `harness/sync-round-trip` runs a
+native SQLite store through it (#131).
 
 ## The problem this crate is here to solve
 
