@@ -118,9 +118,10 @@ use crate::write_group::WriteGroupStore;
 /// (RS-20-2). For concrete `Send` stores its futures are `Send` too, but the
 /// type does not implement [`SendSyncPeer`](crate::SendSyncPeer), and
 /// coherence forbids adding it beside the bare impl: `trait_variant`'s
-/// blanket impl already gives every `SendSyncPeer` the bare trait. A runner that spawns and binds
-/// `SendSyncPeer` needs a separate Send-flavour type, which can be added later
-/// without a break (#421).
+/// blanket impl already gives every `SendSyncPeer` the bare trait. Code that
+/// spawns and binds `SendSyncPeer` takes
+/// [`SendPeer::new(peer)`](crate::SendPeer) instead, over `Send + Sync` halves
+/// (#421).
 ///
 /// # Examples
 ///

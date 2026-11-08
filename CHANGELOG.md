@@ -267,6 +267,18 @@ not the same as what a user needed to be told.
   reversing opposite claims. No runner in `happenstance-sync` authors a
   compensation yet, so the rule cannot be handed one; the configuration SY-7
   forbids is that test's, not a mount's.
+- `happenstance-sync`: `SendPeer`, the `Send` flavour of the network peer's
+  two halves (#421). `StoreSyncPeer` and `RemoteSyncPeer` implement only the
+  bare `SyncPeer`, so a `!Send` store or transport stays a valid half, and
+  coherence refuses them a `SendSyncPeer` impl beside it (RS-20-4).
+  `SendPeer::new(peer)` wraps either one and implements `SendSyncPeer` (and so
+  `SyncPeer`) by delegation: `SendPeer<StoreSyncPeer<S, I>>` for
+  `S: SendWriteGroupStore + Sync` and `I: SendIngestStore + Sync`, and
+  `SendPeer<RemoteSyncPeer<X>>` for `X: SendExchange + Sync`. Code generic over
+  `SendSyncPeer` — `runner::Edge::step` or `Edge::run` inside `tokio::spawn` —
+  now takes them. It is not a wrapper for any peer: a bare peer's futures
+  promise nothing about `Send`, so the impl is written per peer. Additive; the
+  two peers' own types and impls are unchanged.
 
 ### Changed
 
