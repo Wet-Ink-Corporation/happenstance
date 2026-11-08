@@ -29,8 +29,8 @@ body:
     attributes:
       label: Features enabled
       description: >-
-        The off-by-default ones matter most. `happenstance`'s
-        `unstable-projection` (the typed runner) is exempt from semver and says so.
+        The off-by-default ones matter most, such as an adapter's
+        `projection-store` or `sync`, or `happenstance`'s `postcard` or `cbor`.
       placeholder: default + projection-store
     validations:
       required: true
