@@ -84,18 +84,29 @@ impl SyncPeer for ProbePeer {
     }
 }
 
-/// A local read that failed, transiently.
+/// How a [`ProbeStore`]'s event-store half fails.
 #[derive(Debug, thiserror::Error)]
-#[error("the probe store's read failed")]
-pub(crate) struct ReadFailed;
+pub(crate) enum ProbeStoreError {
+    /// A read a test asked to fail, transiently.
+    #[error("the probe store's read failed")]
+    ReadFailed,
+    /// An append through the fake. The runner never appends (its only local
+    /// write is the ingest), and tests seed through `inner`, so this arm is a
+    /// bug in a test, never an outcome one asserts on.
+    #[error("an append reached the probe store; seed it through `inner`")]
+    AppendThroughFake,
+}
 
-impl Classify for ReadFailed {
+impl Classify for ProbeStoreError {
     fn class(&self) -> FailureClass {
-        FailureClass::Transient
+        match self {
+            Self::ReadFailed => FailureClass::Transient,
+            Self::AppendThroughFake => FailureClass::Stop,
+        }
     }
 }
 
-/// [`MemoryIngestStore`], whose read fails on request.
+/// [`MemoryIngestStore`], counting every call and failing reads on request.
 ///
 /// Its read error differs from its ingest error, which is the case
 /// `StepError`'s separate `R` and `I` exist for. It does not append: seed it
@@ -103,6 +114,7 @@ impl Classify for ReadFailed {
 #[derive(Debug)]
 pub(crate) struct ProbeStore {
     pub(crate) inner: MemoryIngestStore,
+    pub(crate) calls: Cell<usize>,
     pub(crate) fail_read: Cell<bool>,
 }
 
@@ -110,12 +122,17 @@ impl ProbeStore {
     pub(crate) fn new(inner: MemoryIngestStore) -> Self {
         Self {
             inner,
+            calls: Cell::new(0),
             fail_read: Cell::new(false),
         }
     }
+
+    fn count(&self) {
+        self.calls.set(self.calls.get() + 1);
+    }
 }
 
-/// The reference store's rows, or one [`ReadFailed`] first.
+/// The reference store's rows, or one [`ProbeStoreError::ReadFailed`] first.
 struct ProbeRows<T> {
     inner: Pin<Box<T>>,
     fail: bool,
@@ -125,13 +142,13 @@ impl<T> Stream for ProbeRows<T>
 where
     T: Stream<Item = Result<SequencedEvent, MemoryStoreError>>,
 {
-    type Item = Result<SequencedEvent, ReadFailed>;
+    type Item = Result<SequencedEvent, ProbeStoreError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
         if this.fail {
             this.fail = false;
-            return Poll::Ready(Some(Err(ReadFailed)));
+            return Poll::Ready(Some(Err(ProbeStoreError::ReadFailed)));
         }
         this.inner
             .as_mut()
@@ -141,13 +158,14 @@ where
 }
 
 impl EventStore for ProbeStore {
-    type Error = ReadFailed;
+    type Error = ProbeStoreError;
 
     fn read(
         &self,
         query: &Query,
         options: ReadOptions,
     ) -> impl Stream<Item = Result<SequencedEvent, Self::Error>> {
+        self.count();
         ProbeRows {
             inner: Box::pin(EventStore::read(&self.inner, query, options)),
             fail: self.fail_read.get(),
@@ -159,16 +177,18 @@ impl EventStore for ProbeStore {
         _events: &[Event],
         _condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<Self::Error>> {
-        Err(AppendError::Store(ReadFailed))
+        Err(AppendError::Store(ProbeStoreError::AppendThroughFake))
     }
 
     async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
+        self.count();
         EventStore::head(&self.inner)
             .await
             .map_err(|never| match never {})
     }
 
     async fn contains_event_id(&self, id: EventId) -> Result<bool, Self::Error> {
+        self.count();
         EventStore::contains_event_id(&self.inner, id)
             .await
             .map_err(|never| match never {})
@@ -179,6 +199,7 @@ impl IngestStore for ProbeStore {
     type Error = MemoryStoreError;
 
     async fn store_id(&self) -> Result<StoreId, Self::Error> {
+        self.count();
         IngestStore::store_id(&self.inner).await
     }
 
@@ -186,10 +207,12 @@ impl IngestStore for ProbeStore {
         &self,
         groups: &[IngestGroup<'_>],
     ) -> Result<Ingested, IngestError<Self::Error>> {
+        self.count();
         IngestStore::ingest(&self.inner, groups).await
     }
 
     async fn watermark(&self) -> Result<Watermark, Self::Error> {
+        self.count();
         IngestStore::watermark(&self.inner).await
     }
 }

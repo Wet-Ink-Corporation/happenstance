@@ -141,6 +141,62 @@ async fn pending_is_a_lower_bound_until_the_read_reaches_the_end() {
     );
 }
 
+/// The per-event limit ends the run too, though the batch has bytes to spare.
+/// Rejects a gather that checks only the batch budget: `MemorySyncPeer` polices
+/// only `max_batch_bytes` on a push, so that runner would push all three and
+/// hand the far side an event it declared it cannot hold.
+#[tokio::test]
+async fn the_push_stops_at_the_first_event_over_the_per_event_limit() {
+    let mut limits = PeerLimits::minimum();
+    limits.max_event_bytes = 5;
+    limits.max_batch_bytes = 100;
+    let peer = MemorySyncPeer::with_limits(FAR, limits);
+    let store = MemoryIngestStore::with_store_id(LOCAL);
+    let positions = append_sized(&store, &[1, 9, 1]).await;
+    let mut edge = Edge::new();
+
+    let stepped = edge.step(&peer, &store).await.expect("an in-memory step");
+
+    assert_eq!(stepped.pushed, 1);
+    assert_eq!(edge.status().confirmed, positions.first().copied());
+    assert_eq!(edge.status().pending, Pending::Exactly(2));
+}
+
+/// A first event over the per-event limit is offered alone, so the peer's
+/// refusal states the class (SY-36); the runner neither skips it nor infers a
+/// class. The peer here refuses through its batch budget, the one limit
+/// `MemorySyncPeer` polices on a push. Rejects a runner that pushes nothing
+/// and reports success, which stalls the edge with no failure anyone sees,
+/// and one that sends the event after it in the same push.
+#[tokio::test]
+async fn a_first_event_over_the_per_event_limit_is_offered_alone_and_refused() {
+    let mut limits = PeerLimits::minimum();
+    limits.max_event_bytes = 5;
+    limits.max_batch_bytes = 8;
+    let peer = MemorySyncPeer::with_limits(FAR, limits);
+    let store = MemoryIngestStore::with_store_id(LOCAL);
+    append_sized(&store, &[9, 1]).await;
+    let mut edge = Edge::new();
+
+    let refused = edge.step(&peer, &store).await;
+
+    assert!(
+        matches!(
+            refused,
+            Err(StepError::Push(
+                happenstance_sync::MemoryPeerError::BatchTooLarge { actual: 9, .. }
+            ))
+        ),
+        "the oversized event went alone and was refused: {refused:?}"
+    );
+    assert_eq!(
+        edge.status().last_failure,
+        Some(Failure::new(Phase::Push, FailureClass::Split))
+    );
+    assert_eq!(edge.status().confirmed, None);
+    assert_eq!(edge.status().pending, Pending::Exactly(2));
+}
+
 /// The byte budget ends the run at the first event that does not fit. Rejects
 /// a gather that skips the 9-byte event and pushes the 1-byte one after it:
 /// the watermark would then pass an event the far side never received, which
@@ -220,13 +276,14 @@ async fn a_stop_class_failure_stops_the_edge_and_the_next_step_does_no_io() {
     peer.inner
         .seed(EventGroup::new(None, vec![foreign(LOCAL, 9)]))
         .expect("an unpoisoned peer");
-    let store = MemoryIngestStore::with_store_id(LOCAL);
-    append_local(&store, 1).await;
-    let before = store.snapshot();
+    let store = ProbeStore::new(MemoryIngestStore::with_store_id(LOCAL));
+    append_local(&store.inner, 1).await;
+    let before = store.inner.snapshot();
     let mut edge = Edge::new();
 
     let stopped = edge.step(&peer, &store).await;
     let calls_before = peer.calls.get();
+    let store_calls_before = store.calls.get();
     let refused = edge.step(&peer, &store).await;
 
     let cause = Failure::new(Phase::Ingest, FailureClass::Stop);
@@ -242,7 +299,16 @@ async fn a_stop_class_failure_stops_the_edge_and_the_next_step_does_no_io() {
         "a stopped edge refuses: {refused:?}"
     );
     assert_eq!(calls_before, 1, "the first step pulled once and stopped");
-    assert_eq!(peer.calls.get(), 1, "the stopped step made no call");
+    assert_eq!(peer.calls.get(), 1, "the stopped step made no peer call");
+    assert_eq!(
+        store_calls_before, 1,
+        "the first step ingested once and stopped"
+    );
+    assert_eq!(
+        store.calls.get(),
+        1,
+        "the stopped step neither read nor ingested"
+    );
     assert_eq!(edge.status().state, EdgeState::Stopped(cause));
     assert_eq!(edge.resume_token(), None, "the token did not advance");
     assert_eq!(
@@ -251,7 +317,7 @@ async fn a_stop_class_failure_stops_the_edge_and_the_next_step_does_no_io() {
         "waiting is the pull's only once its batch has landed"
     );
     assert_eq!(edge.status().confirmed, None, "nothing was pushed");
-    assert_eq!(store.snapshot(), before, "the local log is unchanged");
+    assert_eq!(store.inner.snapshot(), before, "the local log is unchanged");
 }
 
 /// A pull that fails transiently is recorded and changes nothing else.
