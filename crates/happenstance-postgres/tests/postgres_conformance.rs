@@ -157,11 +157,10 @@ happenstance_testkit::event_store_model_conformance!(
 // channel available before the adapter has a body.
 // ---------------------------------------------------------------------------
 
-/// The columns migration 1 is allowed to have, and their shapes.
+/// The columns migrations 1 and 3 are allowed to give `event`, and their shapes.
 ///
-/// Held as data rather than as a sequence of assertions so that the "exactly
-/// these" check below can be a set comparison: a ninth column added in passing
-/// must fail a test rather than pass review.
+/// Held as data so the check below, which keeps its name but covers migration 3
+/// since #420, is a set comparison: a column added in passing must fail a test.
 const SETTLED_COLUMNS: &[(&str, &str, bool)] = &[
     // (name, data_type, is_nullable)
     ("position", "bigint", false),
@@ -172,11 +171,13 @@ const SETTLED_COLUMNS: &[(&str, &str, bool)] = &[
     ("origin_store", "bytea", true),
     ("origin_position", "bigint", true),
     ("recorded_at", "bigint", false),
-    // The visibility mechanism, added by `postgres-append-and-frontier-head` on
-    // ADR-0013's prior measurement. It was deliberately absent while the schema
-    // story owned this file, so that a schema could not answer the mechanism
-    // question by accident; it is deliberately present now.
+    // The visibility mechanism, on ADR-0013's measurement: absent while the
+    // schema story owned this file, deliberately present since ADR-0024.
     ("xact_id", "xid8", false),
+    // Write groups (#420, ADR-0105), added by migration 3, nullable with no
+    // default so a row from before it reads as a group of one.
+    ("write_group", "bigint", true),
+    ("group_guard", "bytea", true),
 ];
 
 #[tokio::test]
@@ -194,7 +195,7 @@ async fn migration_1_creates_the_settled_column_set() {
     .bind(fixture.schema())
     .fetch_all(store.pool())
     .await
-    .expect("the event table should exist after migration 1");
+    .expect("the event table should exist after migrations 1 and 3");
 
     let found: Vec<(String, String, bool)> = rows
         .iter()
@@ -214,11 +215,9 @@ async fn migration_1_creates_the_settled_column_set() {
 
     assert_eq!(
         found, expected,
-        "migration 1's column set drifted from the settled eight. \
-         A ninth column is not a formality: it is where ADR-0024 gets answered by accident."
+        "the event table's column set drifted: a new column is a decision, not a formality"
     );
 
-    // Both indexes the schema promises, read back rather than assumed.
     let indexes =
         query("SELECT indexname FROM pg_indexes WHERE schemaname = $1 AND tablename = 'event'")
             .bind(fixture.schema())
@@ -231,7 +230,8 @@ async fn migration_1_creates_the_settled_column_set() {
         .map(|row| row.get::<String, _>("indexname"))
         .collect();
 
-    for expected in ["event_tags_idx", "event_type_idx", "event_origin_idx"] {
+    let promised = ["event_tags_idx", "event_type_idx", "event_origin_idx"];
+    for expected in promised.into_iter().chain(["event_write_group_idx"]) {
         assert!(
             names.iter().any(|name| name == expected),
             "index `{expected}` is missing; found {names:?}"

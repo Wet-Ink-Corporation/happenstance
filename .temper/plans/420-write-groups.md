@@ -810,6 +810,26 @@ Architect decisions recorded for review (not H-16, but worth a glance):
   Citations into Neon `event_store.rs` and the Postgres `insert_statement` were repointed in
   the spec, standards, `.kb/open-questions` and the experiment README. Accepted `.kb/decisions`
   bodies were not touched; see the report.
+- 2026-11-08: review of `13896304` (F1-F5). Red runs:
+  - F1 `the_group_read_seeks_on_the_write_group_index` (Postgres live, 20,000 rows in groups
+    of four, `ANALYZE`d): FAILED on the plan's `Filter: ((ANY (write_group = (hashed SubPlan
+    4).col1)) OR ...)` over the table. Green once the outer read became two keyed joins under
+    `UNION ALL` (`ids JOIN event ON write_group = g`, and `ON position = g WHERE write_group IS
+    NULL`). Neon's shape test went red on the frontier count (2, now 3) and green with the same
+    rewrite; the new SQL was run by hand on the local Postgres against legacy singletons and two
+    interleaved groups, at four `after` values.
+  - F4: Postgres streams the read (`fetch`, dropped when the builder breaks). Both adapters
+    name groups from the first `max` scanned rows only: those rows' groups hold at least `max`
+    events, so a group named first by the probe row never fits, and `Nothing` needs a scan
+    short of the probe, which then has no probe row to leave out. Pages are unchanged.
+  - F3 `interleaved_groups_read_back_whole_and_page_on_first` (Neon live): left to `live-neon`.
+  - F2: the additions above cited lines moved below them (`APPEND_GROUP`, `ROW_PARAMETERS`,
+    Neon `MIGRATION_3`), `insert_rows`' signature back to four arguments (the group rides in
+    `origin`), and docs above cited lines rewritten line for line. Every `path:N` citation into
+    the files this branch changed resolves at the line it did before `13896304`; the spec,
+    standards and open-question repoints of `13896304` are reverted.
+  - F5: the gutter in `standards/rust/90` is consistent again with the restored line; migration
+    3's comment and the settled-column docs say what they now cover.
 - 2026-11-08: PR 3 (items 42-45), Durable Object and the workerd harness, on
   `claude/p13-420c` (based on 6681c129; PR 2 is not in this base). Red runs:
   - Host, before any adapter code: `ingest_store_satisfies_the_bare_bounds` and the class

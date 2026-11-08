@@ -12,6 +12,11 @@
 //! consumed sequence values, so the compensation the rule then writes lands
 //! past the identity it claimed. On this store the hidden case reduces to the
 //! landed one, which `claims.rs` verifies directly.
+//!
+//! The write-group family (SY-39, #420) mounts on the same fixture, below: the
+//! store a runner pushes from and a `StoreSyncPeer` serves a pull from. All six
+//! rules run; `groups.rs` beside this reads what the rules cannot, the stored
+//! columns and a schema from before migration 3.
 
 use happenstance_sync_testkit::{IngestFixture, Violation};
 use happenstance_testkit::Capability;
@@ -155,5 +160,29 @@ pub(crate) use emit_ignored_ingest_tokio;
 happenstance_sync_testkit::ingest_store_conformance!(
     mod_name = ingest_conformance,
     emit = super::emit_ignored_ingest_tokio,
+    fixture = super::NeonIngestFixture::new()
+);
+
+/// `happenstance_sync_testkit::emit_write_group_tokio`, with this crate's
+/// `#[ignore]` reason added, as every live test here carries.
+macro_rules! emit_ignored_write_group_tokio {
+    ($($name:ident),* $(,)?) => {
+        $(
+            #[tokio::test]
+            #[ignore = "needs a live Neon endpoint; set NEON_CONNECTION and run with `-- --ignored`"]
+            async fn $name() -> ::core::result::Result<(), ::happenstance_sync_testkit::Violation> {
+                ::happenstance_sync_testkit::write_group_rules::$name(__write_group_fixture)
+                    .await?
+                    .report(::core::stringify!($name));
+                Ok(())
+            }
+        )*
+    };
+}
+pub(crate) use emit_ignored_write_group_tokio;
+
+happenstance_sync_testkit::write_group_store_conformance!(
+    mod_name = write_group_conformance,
+    emit = super::emit_ignored_write_group_tokio,
     fixture = super::NeonIngestFixture::new()
 );

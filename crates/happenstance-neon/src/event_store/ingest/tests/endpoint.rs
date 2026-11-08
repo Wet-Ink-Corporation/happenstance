@@ -255,18 +255,26 @@ fn host_of(connection: &str) -> Option<String> {
     (!host.is_empty()).then(|| host.to_owned())
 }
 
-/// A fresh, migrated schema's configuration, and a transport onto it.
+/// A fresh schema's configuration, with the event log's migrations applied,
+/// 1 then 3 in one batch, and a transport onto it.
 pub(super) async fn fresh_schema() -> (NeonConfig, LiveTransport) {
-    let transport = LiveTransport::new();
-    SWEPT.get_or_init(|| sweep(&transport)).await;
-    let config = NeonConfig::default().with_schema(mint_schema());
+    let (config, transport) = empty_schema().await;
+    let both = format!("{}\n{}", migration::MIGRATION_1, migration::MIGRATION_3);
     execute(
         &transport,
-        migration::request(migration::MIGRATION_1, &config),
-        "migration 1",
+        migration::request(&both, &config),
+        "migrations 1 and 3",
     )
     .await;
     (config, transport)
+}
+
+/// A fresh schema's configuration with nothing applied, and a transport onto
+/// it: for a test that arranges a schema an older build left.
+pub(super) async fn empty_schema() -> (NeonConfig, LiveTransport) {
+    let transport = LiveTransport::new();
+    SWEPT.get_or_init(|| sweep(&transport)).await;
+    (NeonConfig::default().with_schema(mint_schema()), transport)
 }
 
 /// A store on a fresh schema of the live endpoint.

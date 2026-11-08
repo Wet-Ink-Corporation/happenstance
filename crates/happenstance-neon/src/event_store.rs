@@ -572,7 +572,7 @@ impl<T: SqlTransport> NeonEventStore<T> {
         let sql = self.insert_rows(
             &unpacked("$1", ""),
             &self.drawn_positions("jsonb_array_length($1::jsonb)"),
-            &self.local_origin(),
+            &format!("{}, {APPEND_GROUP}", self.local_origin()),
             &format!("{filter} RETURNING position::text AS position"),
         );
         SqlStatement::with_params(sql, params)
@@ -585,12 +585,12 @@ impl<T: SqlTransport> NeonEventStore<T> {
     /// `rows` is a subquery yielding `ord` and the four event columns, bound as
     /// `b`; `positions` is one yielding `ord` and `position`, bound as `a`.
     /// [`unpacked`] and [`drawn_positions`](Self::drawn_positions) build both for
-    /// every caller. `origin` is the one thing that differs between a row minted
-    /// here and one carried from a peer: the three expressions that fill
-    /// `origin_store`, `origin_position` and `recorded_at`, which
-    /// [`local_origin`](Self::local_origin) spells for a local row. `tail` is
-    /// whatever follows the join — an append's guard and `RETURNING`, an
-    /// ingest's conflict clause.
+    /// every caller. `origin` is what differs between a row minted here and one
+    /// carried from a peer: the four expressions that fill `origin_store`,
+    /// `origin_position`, `recorded_at` and `write_group` (#420), of which
+    /// [`local_origin`](Self::local_origin) spells the first three for a local
+    /// row. `tail` is whatever follows the join — an append's guard and
+    /// `RETURNING`, an ingest's conflict clause.
     ///
     /// Composed text rather than a shared statement, because a data-modifying
     /// CTE cannot call another statement: on this adapter sharing the write means
@@ -598,8 +598,8 @@ impl<T: SqlTransport> NeonEventStore<T> {
     /// one place and nowhere restated.
     fn insert_rows(&self, rows: &str, positions: &str, origin: &str, tail: &str) -> String {
         format!(
-            "INSERT INTO {event_table} \
-             (position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at) \
+            "INSERT INTO {event_table} (position, event_type, data, metadata, tags, \
+             origin_store, origin_position, recorded_at, write_group) \
              SELECT a.position, b.event_type, decode(b.data, 'base64'), \
              decode(b.metadata, 'base64'), b.tags, {origin} \
              FROM ({rows}) b \
@@ -715,9 +715,9 @@ impl<T: SqlTransport> NeonEventStore<T> {
     /// the first landed claim's 1-based index in `$1` (or nothing), and whether
     /// `own` was empty. The second statement refuses the whole call on either,
     /// so the gate on `c` is a second line rather than the only one: a store
-    /// with no identity row lands neither half of an ingest. Every
-    /// row, foreign or local, takes the one `xact_id` its transaction stamps, so
-    /// ES-10's frontier treats the batch as one write.
+    /// with no identity row lands neither half of an ingest. Every row takes the
+    /// one `xact_id` its transaction stamps, so ES-10's frontier sees one write,
+    /// and a provisional `write_group` the third statement replaces (#420).
     ///
     /// No ceiling is checked here, which is what lets the size test build 1,000
     /// rows: the port checks the whole call before it builds this.
@@ -756,7 +756,7 @@ impl<T: SqlTransport> NeonEventStore<T> {
              claimed AS (SELECT f.ord FROM ins JOIN fp USING (position) JOIN f USING (ord) \
              WHERE f.origin_store = (SELECT v FROM own)), \
              c AS (SELECT row_number() OVER (ORDER BY u.ord) AS ord, \
-             u.event_type, u.data, u.metadata, u.tags FROM ({u}) u \
+             u.event_type, u.data, u.metadata, u.tags, u.grp FROM ({u}) u \
              WHERE u.grp IN (SELECT grp FROM won) AND (SELECT count(*) FROM claimed) = 0 \
              AND EXISTS (SELECT 1 FROM own)), \
              comp AS ({comp}) \
@@ -780,7 +780,7 @@ impl<T: SqlTransport> NeonEventStore<T> {
             ins = self.insert_rows(
                 "SELECT * FROM f",
                 "SELECT * FROM fp",
-                "b.origin_store, b.origin_position, b.recorded_at",
+                write_group::FOREIGN_ORIGIN,
                 " ON CONFLICT (origin_store, origin_position) \
                  WHERE origin_store IS NOT NULL AND origin_position IS NOT NULL DO NOTHING \
                  RETURNING position",
@@ -789,7 +789,7 @@ impl<T: SqlTransport> NeonEventStore<T> {
             comp = self.insert_rows(
                 "SELECT * FROM c",
                 &self.drawn_positions("(SELECT count(*) FROM c)"),
-                &self.local_origin(),
+                &self.compensation_origin(),
                 " RETURNING position",
             ),
         );
@@ -797,14 +797,13 @@ impl<T: SqlTransport> NeonEventStore<T> {
     }
 
     /// The ingest batch as the one request that carries it: **one round trip of
-    /// two statements**, [`ingest_statement`](Self::ingest_statement) and then
-    /// the constant refusal, at `REPEATABLE READ`.
+    /// three statements**: [`ingest_statement`](Self::ingest_statement), the
+    /// constant refusal, and the `write_group` stamp, at `REPEATABLE READ`.
     ///
-    /// Two statements because the write decides SY-38 and a single statement
-    /// cannot refuse after writing: only an error undoes what `ins` wrote, and
-    /// the second statement raises one, carrying the claim's index, when the
-    /// first left it. The endpoint runs both in one `BEGIN`/`COMMIT`, so the
-    /// raise takes the whole call with it.
+    /// A single statement cannot refuse after writing (SY-38): only an error undoes what
+    /// `ins` wrote, and the second raises one, carrying the claim's index, when the first
+    /// left it. The stamp (#420) reads what `ins` wrote, after the refusal so a refused
+    /// call stamps nothing. One `BEGIN`/`COMMIT` holds all three; no provisional tag outlives it.
     ///
     /// `REPEATABLE READ`, fixed, rather than the store's configured level. It is
     /// the lowest at which `ON CONFLICT DO NOTHING` meeting a row committed by a
@@ -820,8 +819,9 @@ impl<T: SqlTransport> NeonEventStore<T> {
         groups: &[happenstance_sync::IngestGroup<'_>],
     ) -> Result<SqlRequest, NeonError<E>> {
         let write = self.ingest_statement(groups)?;
+        let stamp = self.stamp_statement(groups)?;
         Ok(SqlRequest::batch(
-            vec![write, ingest::refusal_statement()],
+            vec![write, ingest::refusal_statement(), stamp],
             crate::IsolationLevel::RepeatableRead,
         ))
     }
@@ -2040,9 +2040,10 @@ mod tests {
     ///
     /// The request carries a second statement since #108's part C, the
     /// constant refusal SY-38 needs, and so it is the batch form at
-    /// `REPEATABLE READ` (the owner's decision D5 on that part's plan). The
-    /// write is still one statement, and everything asserted of it is as it
-    /// was.
+    /// `REPEATABLE READ` (the owner's decision D5 on that part's plan), and a
+    /// third since #420, the write-group stamp, which must follow the write in
+    /// the same transaction (`write_group/tests.rs` pins its shape). The write
+    /// is still one statement, and everything asserted of it is as it was.
     #[test]
     #[cfg(feature = "sync")]
     fn ingest_batch_is_one_statement_regardless_of_size() {
@@ -2064,8 +2065,8 @@ mod tests {
 
             assert_eq!(
                 request.statements.len(),
-                2,
-                "{size} rows: the write, then the refusal"
+                3,
+                "{size} rows: the write, then the refusal, then the write-group stamp"
             );
             assert_eq!(
                 request.statements[1].query, refusal.query,
@@ -2186,8 +2187,11 @@ mod tests {
             2,
             "both ingest inserts are append's insert: {head}"
         );
+        // The foreign rows carry the peer's origin and, since #420, the
+        // provisional write group the request's stamp replaces.
         assert!(ingest.contains(&format!(
-            "{head}b.origin_store, b.origin_position, b.recorded_at FROM"
+            "{head}b.origin_store, b.origin_position, b.recorded_at, {} FROM",
+            super::write_group::PROVISIONAL_GROUP
         )));
         assert!(
             ingest.contains("IN (SELECT grp FROM won)"),
@@ -2482,3 +2486,19 @@ mod ingest;
 // `remint_identity` and the shared identity decoder (#104). A child for the
 // same two reasons, and in every build: a re-mint is not replication.
 mod remint;
+
+// The write-group port (#420, SY-39): the log read back in the writes that
+// made it, and the stamp an ingest's request ends with. A child for the
+// reasons `ingest` is one, and behind `sync` with it; the column it reads is
+// written unconditionally, by `insert_rows`.
+#[cfg(feature = "sync")]
+mod write_group;
+
+/// An append's `write_group` (#420, I-2): the lowest position the statement
+/// gives out, on every row it writes. A window over the joined rows, so it is
+/// computed after the `WHERE` and over exactly the rows that land; an append
+/// has no conflict clause, so every position it draws is a row it writes.
+///
+/// Declared down here, after the tests, so the lines above keep the numbers
+/// the decision records cite them by.
+const APPEND_GROUP: &str = "min(a.position) OVER ()";
