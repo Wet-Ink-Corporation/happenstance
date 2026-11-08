@@ -1,9 +1,9 @@
 //! What an edge reports about itself without a round trip.
 
-use happenstance_core::SequencePosition;
+use happenstance_core::{SequencePosition, StoreId};
 
 use super::error::Failure;
-use crate::classify::FailureClass;
+use super::incarnation::StopCause;
 use crate::identity::Watermark;
 use crate::ingest::Ingested;
 use crate::peer::Waiting;
@@ -46,14 +46,22 @@ pub enum Pending {
 /// One edge's status, as of its last step.
 ///
 /// Held by the edge and updated by every step, so reading it costs no round
-/// trip. `#[non_exhaustive]`: part 2 of #244 adds to it (a retention-gap flag
-/// for SY-32, the far side's incarnation), and a field added then must not
-/// break a reader.
+/// trip. `#[non_exhaustive]`: a retention-gap flag for SY-32 is still to come,
+/// and a field added then must not break a reader.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SyncStatus {
-    /// Running, or stopped and why.
+    /// Running, parked, or stopped, and why.
     pub state: EdgeState,
+    /// The far side's store incarnation as this edge knows it: the first
+    /// responder named by an answer that took effect, or the one
+    /// [`Edge::with_responder`](super::Edge::with_responder) named. `None`
+    /// until then, and for good if the far side never names one (ADR-0104).
+    ///
+    /// An answer naming another store stops the edge
+    /// ([`StopCause::Incarnation`]); this field keeps the pinned store, and the
+    /// cause names both.
+    pub responder: Option<StoreId>,
     /// The [`first`](crate::WriteGroup::first) position of the last local
     /// write group the far side acknowledged. Every local event at or below
     /// it, and every event of that group, has been acknowledged.
@@ -86,6 +94,7 @@ impl SyncStatus {
     pub(super) const fn resuming(confirmed: Option<SequencePosition>) -> Self {
         Self {
             state: EdgeState::Running,
+            responder: None,
             confirmed,
             pending: Pending::Unknown,
             waiting: Waiting::Unknown,
@@ -102,24 +111,29 @@ impl SyncStatus {
             && self.pending == Pending::Exactly(0)
             && self.waiting == Waiting::Nothing
     }
-
-    pub(super) fn record(&mut self, failure: Failure) {
-        self.last_failure = Some(failure);
-        if failure.class == FailureClass::Stop {
-            self.state = EdgeState::Stopped(failure);
-        }
-    }
 }
 
 /// Whether an edge still exchanges.
 ///
-/// `#[non_exhaustive]`: part 2's backoff may add a state between the two.
+/// `#[non_exhaustive]`, so a state added later does not break a `match`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum EdgeState {
     /// The next step exchanges.
     Running,
-    /// A failure of class [`Stop`](FailureClass::Stop) halted the edge. It does
-    /// no more I/O; an operator fixes the cause and builds a new edge.
-    Stopped(Failure),
+    /// Something at the head of the edge can never land, and the edge does no
+    /// more I/O: a failure of class [`Park`](crate::FailureClass::Park), or a
+    /// [`Split`](crate::FailureClass::Split) the runner could not halve — one
+    /// write group, which is never cut (SY-30), or a refusal outside the push,
+    /// where the runner holds no batch to halve.
+    ///
+    /// The whole edge parks, not one event: the watermark and the pull token
+    /// are both prefixes, so nothing behind the stuck group can move past it.
+    /// An operator raises the limit, or accepts the loss, and builds a new
+    /// edge.
+    Parked(Failure),
+    /// The edge halted for the cause named, and does no more I/O. An operator
+    /// fixes the cause and builds a new edge. The local log is never touched
+    /// on the way (SY-34).
+    Stopped(StopCause),
 }

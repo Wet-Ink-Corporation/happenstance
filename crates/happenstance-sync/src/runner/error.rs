@@ -5,6 +5,7 @@
 
 use core::fmt;
 
+use super::incarnation::{IncarnationChanged, StopCause};
 use crate::classify::{Classify, FailureClass};
 use crate::ingest::{IngestError, IngestStore};
 use crate::peer::SyncPeer;
@@ -81,9 +82,16 @@ impl fmt::Display for Phase {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum StepError<P, R, I> {
-    /// The edge was already stopped, by the failure named; nothing was done.
-    #[error("the edge is stopped by {0}")]
-    Stopped(Failure),
+    /// The edge was already stopped, for the cause named; nothing was done.
+    #[error("the edge is stopped: {0}")]
+    Stopped(StopCause),
+    /// The edge was already parked, by the failure named; nothing was done.
+    #[error("the edge is parked by {0}")]
+    Parked(Failure),
+    /// The far side answered as a different store; the answer was not acted
+    /// on, and the edge is now stopped.
+    #[error("{0}")]
+    Incarnation(IncarnationChanged),
     /// The pull failed.
     #[error("the pull from the far side failed")]
     Pull(#[source] P),
@@ -103,7 +111,9 @@ impl<P: Classify, R: Classify, I: Classify> StepError<P, R, I> {
     #[must_use]
     pub fn failure(&self) -> Failure {
         match self {
-            Self::Stopped(cause) => *cause,
+            Self::Stopped(cause) => cause.failure(),
+            Self::Parked(failure) => *failure,
+            Self::Incarnation(change) => change.failure(),
             Self::Pull(error) => Failure::new(Phase::Pull, error.class()),
             Self::Ingest(error) => Failure::new(Phase::Ingest, error.class()),
             Self::Read(error) => Failure::new(Phase::Read, error.class()),
@@ -113,7 +123,8 @@ impl<P: Classify, R: Classify, I: Classify> StepError<P, R, I> {
 }
 
 /// The class of the failure inside, so a step's error is handled like a peer's
-/// (ADR-0026 §2.4). A stopped edge answers [`Stop`](FailureClass::Stop).
+/// (ADR-0026 §2.4). A stopped edge, and a changed incarnation, answer
+/// [`Stop`](FailureClass::Stop); a parked edge answers the class that parked it.
 impl<P: Classify, R: Classify, I: Classify> Classify for StepError<P, R, I> {
     fn class(&self) -> FailureClass {
         self.failure().class

@@ -15,9 +15,12 @@ with programs you can run.
 > Two things a replicating application needs are not finished yet:
 >
 > - **the runner**, the loop that pulls from a peer, ingests, and acknowledges
->   (issue #244): `runner::Edge` drives one edge a step at a time and reports
->   its status, and the backoff, bounded buffer, owned tasks and
->   peer-incarnation check are still to come, and
+>   (issue #244): `runner::Edge` drives one edge, a step at a time or through
+>   `Edge::run`, a loop the caller drives on its own runtime with a seeded,
+>   jittered, capped backoff. It acts on each failure class, bounds what it
+>   holds in memory, and stops when the far side answers as a new store
+>   incarnation, never touching the local log. Still to come: a peer set above
+>   the single edge, and the watermark's storage (SY-31), and
 > - **a network transport**: `StoreSyncPeer`, `serve_sync` and
 >   `RemoteSyncPeer` are a network peer's transport-free halves (#117), and
 >   no crate yet supplies an `Exchange` over a real network.
