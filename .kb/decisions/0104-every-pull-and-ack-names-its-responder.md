@@ -2,7 +2,7 @@
 id: kb-decision-0104
 title: Every pulled and ack message names the store that answered, and the wire format is version 3
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0104
 reversibility: low
