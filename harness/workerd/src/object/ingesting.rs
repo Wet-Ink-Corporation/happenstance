@@ -1,5 +1,7 @@
 //! The `/ingest-...` routes: the ingest family, its ceiling and its failure
-//! census, each on the object it is sent to (#108 part E3).
+//! census, each on the object it is sent to (#108 part E3); and
+//! `/write-group-rule/<name>`, the write-group family on the same fixtures
+//! (#420).
 //!
 //! Status codes: 200 a rule ran or skipped, an attempt was accepted or a case
 //! was judged; 400 a bad shape or count; 404 an unknown rule, case or route;
@@ -34,12 +36,15 @@ pub(super) struct Ingesting<'a> {
 }
 
 impl Ingesting<'_> {
-    /// `ingest-rule/<name>`, `ingest-ceiling/<shape>?events=<n>` or
-    /// `ingest-class/<case>`.
+    /// `ingest-rule/<name>`, `ingest-ceiling/<shape>?events=<n>`,
+    /// `ingest-class/<case>` or `write-group-rule/<name>`.
     pub(super) async fn run(&self, route: &str, arg: &str, req: &Request) -> Result<Response> {
         let mut response = match route {
             "ingest-rule" => {
                 super::answer(dispatch::run(self.state, self.object_state, arg).await)?
+            }
+            "write-group-rule" => {
+                super::answer(crate::write_group::run(self.state, self.object_state, arg).await)?
             }
             "ingest-ceiling" => self.ceiling(arg, req).await?,
             "ingest-class" => match arg.parse::<Case>() {

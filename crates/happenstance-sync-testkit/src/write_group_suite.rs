@@ -605,6 +605,30 @@ macro_rules! emit_write_group_blocking {
     };
 }
 
+/// Emits one `#[wasm_bindgen_test]` per write-group rule.
+///
+/// The caller's crate needs `wasm-bindgen-test` in its `dev-dependencies`,
+/// gated on `cfg(target_arch = "wasm32")`. A skip is logged through
+/// `console_log!` rather than reported on stdout, which writes nowhere on that
+/// target: [`emit_ingest_wasm!`](crate::emit_ingest_wasm)'s twin, and the
+/// harness the Durable Object's ingest store runs this family under.
+#[macro_export]
+macro_rules! emit_write_group_wasm {
+    ($($name:ident),* $(,)?) => {
+        $(
+            #[::wasm_bindgen_test::wasm_bindgen_test]
+            async fn $name() -> ::core::result::Result<(), $crate::Violation> {
+                let __outcome =
+                    $crate::__private::write_group_rules::$name(__write_group_fixture).await?;
+                if let Some(__line) = __outcome.skip_line(::core::stringify!($name)) {
+                    ::wasm_bindgen_test::console_log!("{}", __line);
+                }
+                Ok(())
+            }
+        )*
+    };
+}
+
 /// Expands to a `[&str; N]` of the rule names, for the orphan meta-test.
 ///
 /// Not an emitter and not promised; exported only because `macro_rules!` has no

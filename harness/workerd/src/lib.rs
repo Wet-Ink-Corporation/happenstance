@@ -62,6 +62,10 @@
 //! on the same object, and one attempt of the ingest ceiling, which the runner
 //! bisects.
 //!
+//! [`write_group`] runs the write-group family (#420, SY-39) on the same
+//! ingest fixtures: the store reads its log back in the writes that made it,
+//! through the columns its own `migrate` adds on this runtime.
+//!
 //! [`probe`] is the other half of the job: the platform's SQLite walls, measured
 //! on the runtime that imposes them (`experiments/durable-object-limits`).
 //!
@@ -79,3 +83,4 @@ mod object;
 pub mod probe;
 pub mod remint;
 pub mod restart;
+pub mod write_group;

@@ -124,7 +124,16 @@ impl DurableObject for ConformanceObject {
             (Some("ingest-rules"), None) => {
                 Response::ok(crate::ingest::dispatch::rule_names().join("\n"))
             }
-            (Some(route @ ("ingest-rule" | "ingest-ceiling" | "ingest-class")), Some(arg)) => {
+            (Some("write-group-rules"), None) => {
+                Response::ok(crate::write_group::rule_names().join("\n"))
+            }
+            (
+                Some(
+                    route
+                    @ ("ingest-rule" | "ingest-ceiling" | "ingest-class" | "write-group-rule"),
+                ),
+                Some(arg),
+            ) => {
                 let ingesting = ingesting::Ingesting {
                     state: &self.state,
                     object_state: &self.object_state,

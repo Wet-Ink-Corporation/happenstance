@@ -662,14 +662,14 @@ SQLite (`happenstance-sqlite`):
 
 ### PR 3 — Durable Object and the workerd harness
 
-- [ ] 42. `migrate` on an object with the pre-#420 tables adds both columns once; a second
+- [x] 42. `migrate` on an object with the pre-#420 tables adds both columns once; a second
       `migrate` is a no-op (extend `migrate_is_idempotent`); namespaced logs migrate per
       namespace.
-- [ ] 43. Pre-existing rows read as singletons; appends and ingested groups stamp; the stamp is
+- [x] 43. Pre-existing rows read as singletons; appends and ingested groups stamp; the stamp is
       a rowid seek.
-- [ ] 44. `write_group_store_conformance!` with `emit_write_group_wasm!` in the crate's
+- [x] 44. `write_group_store_conformance!` with `emit_write_group_wasm!` in the crate's
       `family.rs`, green under `wasm-bindgen-test`.
-- [ ] 45. `harness/workerd`: dispatch by name over `for_each_write_group_rule!` (mirroring
+- [x] 45. `harness/workerd`: dispatch by name over `for_each_write_group_rule!` (mirroring
       `src/ingest/dispatch.rs`), a vitest entry per rule, run locally and against the
       deployed object in the `workerd` job.
 
@@ -830,3 +830,36 @@ Architect decisions recorded for review (not H-16, but worth a glance):
     standards and open-question repoints of `13896304` are reverted.
   - F5: the gutter in `standards/rust/90` is consistent again with the restored line; migration
     3's comment and the settled-column docs say what they now cover.
+- 2026-11-08: PR 3 (items 42-45), Durable Object and the workerd harness, on
+  `claude/p13-420c` (based on 6681c129; PR 2 is not in this base). Red runs:
+  - Host, before any adapter code: `ingest_store_satisfies_the_bare_bounds` and the class
+    table failed to compile, E0277 `CloudflareIngestStore: WriteGroupStore` and E0599 no
+    `StoredGuard` / `GroupOrder` variants.
+  - The wasm tests were written with the code, so red was taken by mutation, each reverted:
+    - A (append stamp `write_group = position + 0 * ?`, probe for `write_group` only, group
+      read without `position > ?`): 11 failures, among them
+      `an_append_names_every_row_by_its_first_position`,
+      `a_half_applied_migration_is_completed_by_the_next`,
+      `a_row_from_before_the_columns_reads_as_its_own_group`,
+      `the_group_read_seeks_on_the_position_without_a_sort` and the mounted family.
+    - B (guard stored on every candidate row; append stamp bounded by `? IS NOT NULL`):
+      `the_append_stamp_is_a_rowid_seek`,
+      `an_ingested_group_is_named_by_its_first_landed_row_and_holds_its_guard_there`,
+      `a_replay_across_a_refused_append`.
+    - C (compensation stamped as a group of its own; foreign stamp unbound from the
+      position): `the_foreign_stamp_is_a_rowid_seek`, the groups test above,
+      `compensation_joins_its_group`.
+  Green: wasm lib 171 passed (17 new), host lib 45, harness host 64. Local workerd:
+  write-group warm and cold 15/15; conformance, ingest, classes, transaction and remint
+  236/236 (restart and idle not run); the CI step scripts report collected 8 / passed 8 and
+  collected 7 / passed 7. `deployed.mjs` against `wrangler dev`: 98/98, 10/10, 6/6, 0 failed.
+  Deviations from §6/§8:
+  - No separate stamp `UPDATE`: the append's identity stamp and ingest's per-row foreign
+    stamp carry `write_group` (and the guard on the first landed row). An append has no
+    transaction here, so a second statement could leave a batch of events with no group,
+    and a Durable Object bills every row an `UPDATE` writes.
+  - `migrate_is_idempotent` was not extended; a dedicated test migrates twice.
+  - The harness reuses the ingest dispatcher through a `Family` enum rather than a copy.
+  - `deployed.mjs` gives every family a floor, not only the new one.
+  Expectations moved: additions only (two class-table rows, one bound, two exhaustive-match
+  arms, and a signature-mechanical argument in `writes.rs`).

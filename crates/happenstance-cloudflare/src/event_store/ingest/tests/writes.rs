@@ -629,7 +629,7 @@ async fn the_ingest_only_statements_touch_only_rows_that_are_not_events() {
     };
 
     let restamped = store
-        .stamp_foreign(position, foreign)
+        .stamp_foreign(position, foreign, position, None)
         .expect("the stamp statement runs");
     store
         .discard_staged(position)
