@@ -495,10 +495,14 @@ mod wire {
         ack.confirmed.advance(ORIGIN, SequencePosition::FIRST);
         ack.confirmed.advance(OTHER_ORIGIN, second());
         round_trip(&ack);
+        round_trip(&ack.clone().with_responder(OTHER_ORIGIN));
 
         round_trip(&PullRequest::from_start());
         round_trip(&PullRequest::after(ResumeToken::new("group:2")));
         round_trip(&Pulled::new(two_groups(), ResumeToken::new("group:2")));
+        round_trip(
+            &Pulled::new(two_groups(), ResumeToken::new("group:2")).with_responder(OTHER_ORIGIN),
+        );
         for waiting in [
             Waiting::Nothing,
             Waiting::Unknown,
@@ -522,22 +526,25 @@ mod wire {
         let nothing = pulled.clone().with_waiting(Waiting::Nothing);
         let counted = pulled.clone().with_waiting(Waiting::Events(three));
 
+        // Since format version 3 the responder follows the waiting field
+        // (ADR-0104), and the test pinning the responder covers it in full.
         assert_eq!(
             serde_json::to_string(&nothing).expect(ENCODES),
-            r#"{"batch":{"groups":[]},"resume":"group:0","waiting":"nothing"}"#
+            r#"{"batch":{"groups":[]},"resume":"group:0","waiting":"nothing","responder":null}"#
         );
         assert_eq!(
             serde_json::to_string(&counted).expect(ENCODES),
-            r#"{"batch":{"groups":[]},"resume":"group:0","waiting":{"events":3}}"#
+            r#"{"batch":{"groups":[]},"resume":"group:0","waiting":{"events":3},"responder":null}"#
         );
         assert_eq!(
             serde_json::to_string(&pulled).expect(ENCODES),
-            r#"{"batch":{"groups":[]},"resume":"group:0","waiting":"unknown"}"#,
+            r#"{"batch":{"groups":[]},"resume":"group:0","waiting":"unknown","responder":null}"#,
             "the default travels too, never as a missing key (WF-2)"
         );
 
         // The fields before `waiting`, encoded positionally as postcard
-        // encodes the struct, so only the trailing bytes are asserted here.
+        // encodes the struct, so only the trailing bytes are asserted here:
+        // `waiting`, then `responder`'s `None`.
         let before =
             postcard::to_stdvec(&(PushBatch::empty(), ResumeToken::new("group:0"))).expect(ENCODES);
         let tail = |pulled: &Pulled<ResumeToken>| {
@@ -548,9 +555,9 @@ mod wire {
                 .expect("the prefix was just checked")
                 .to_vec()
         };
-        assert_eq!(tail(&nothing), [0x00]);
-        assert_eq!(tail(&pulled), [0x01]);
-        assert_eq!(tail(&counted), [0x02, 0x03]);
+        assert_eq!(tail(&nothing), [0x00, 0x00]);
+        assert_eq!(tail(&pulled), [0x01, 0x00]);
+        assert_eq!(tail(&counted), [0x02, 0x03, 0x00]);
     }
 
     /// `Events(0)` would be a second spelling of `Nothing`, so the decoder
@@ -1005,6 +1012,197 @@ mod wire {
                 .into_message(),
             PullRequest::from_start(),
             "and the push decodes as a pull from the start of the log"
+        );
+    }
+
+    // =====================================================================
+    // The responder (ADR-0104, format version 3)
+    // =====================================================================
+
+    /// The store `responder` names in this section: sixteen bytes that render
+    /// as thirty-two `5e`s in JSON and travel raw in postcard (WF-6).
+    const RESPONDER: StoreId = ORIGIN;
+    const RESPONDER_HEX: &str = "5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e5e";
+
+    /// The trailing bytes `responder` adds in postcard: `None` is one zero,
+    /// `Some` is a one and then the identity's sixteen raw bytes.
+    fn responder_tail(responder: Option<StoreId>) -> Vec<u8> {
+        match responder {
+            None => vec![0x00],
+            Some(store) => [vec![0x01], store.to_bytes().to_vec()].concat(),
+        }
+    }
+
+    /// `Pulled::responder` on the wire: declared last, after `waiting`, and
+    /// always present, `None` included (WF-2).
+    ///
+    /// **Wrong implementations it rejects:** the field declared anywhere but
+    /// last, which moves the JSON key and breaks the postcard prefix below; and
+    /// `skip_serializing_if = "Option::is_none"`, which drops the key and the
+    /// `00` byte, so a version-3 body without a responder reads as a version-2
+    /// one.
+    #[test]
+    fn pulled_names_its_responder_last_in_both_formats() {
+        const ENCODES: &str = "a `Pulled` of an empty batch always encodes";
+        let unnamed = Pulled::new(PushBatch::empty(), ResumeToken::new("group:0"));
+        let named = unnamed.clone().with_responder(RESPONDER);
+
+        assert_eq!(
+            serde_json::to_string(&named).expect(ENCODES),
+            format!(
+                r#"{{"batch":{{"groups":[]}},"resume":"group:0","waiting":"unknown","responder":"{RESPONDER_HEX}"}}"#
+            )
+        );
+        assert_eq!(
+            serde_json::to_string(&unnamed).expect(ENCODES),
+            r#"{"batch":{"groups":[]},"resume":"group:0","waiting":"unknown","responder":null}"#
+        );
+
+        let before = postcard::to_stdvec(&(
+            PushBatch::empty(),
+            ResumeToken::new("group:0"),
+            Waiting::Unknown,
+        ))
+        .expect(ENCODES);
+        for (pulled, responder) in [(&unnamed, None), (&named, Some(RESPONDER))] {
+            let bytes = postcard::to_stdvec(pulled).expect(ENCODES);
+            assert_eq!(
+                bytes,
+                [before.clone(), responder_tail(responder)].concat(),
+                "{responder:?}"
+            );
+        }
+    }
+
+    /// `Ack::responder` on the wire: declared last, after `confirmed`, and
+    /// always present (WF-2). The same wrong implementations as the test above.
+    #[test]
+    fn ack_names_its_responder_last_in_both_formats() {
+        const ENCODES: &str = "an `Ack` always encodes";
+        let mut unnamed = Ack::default();
+        unnamed.appended = 2;
+        unnamed.skipped = 1;
+        let named = unnamed.clone().with_responder(RESPONDER);
+
+        assert_eq!(
+            serde_json::to_string(&named).expect(ENCODES),
+            format!(r#"{{"appended":2,"skipped":1,"confirmed":[],"responder":"{RESPONDER_HEX}"}}"#)
+        );
+        assert_eq!(
+            serde_json::to_string(&unnamed).expect(ENCODES),
+            r#"{"appended":2,"skipped":1,"confirmed":[],"responder":null}"#
+        );
+
+        let before = postcard::to_stdvec(&(2_u64, 1_u64, Watermark::new())).expect(ENCODES);
+        for (ack, responder) in [(&unnamed, None), (&named, Some(RESPONDER))] {
+            let bytes = postcard::to_stdvec(ack).expect(ENCODES);
+            assert_eq!(
+                bytes,
+                [before.clone(), responder_tail(responder)].concat(),
+                "{responder:?}"
+            );
+        }
+    }
+
+    /// A pulled message as format version 2 shaped it: no `responder`.
+    #[derive(Serialize)]
+    struct PulledAtVersion2 {
+        batch: PushBatch,
+        resume: ResumeToken,
+        waiting: Waiting,
+    }
+
+    /// The version before this one, spelled as a literal on purpose: this test
+    /// is about the buffers a version-2 peer sends, whatever this build speaks.
+    const VERSION_2: u16 = 2;
+    const _: () = assert!(
+        VERSION_2 < FORMAT_VERSION,
+        "the bump this test is about landed"
+    );
+
+    /// A version-2 peer's pulled message is refused whole, by number, in both
+    /// formats (WF-8), so a runner never reads a missing responder as "the far
+    /// side has no identity".
+    #[test]
+    fn a_version_2_pulled_is_refused_as_an_unsupported_version() {
+        let old = PulledAtVersion2 {
+            batch: two_groups(),
+            resume: ResumeToken::new("group:2"),
+            waiting: Waiting::Nothing,
+        };
+
+        let json = foreign_json(VERSION_2, &old);
+        let refused = serde_json::from_str::<Envelope<Pulled<ResumeToken>>>(&json)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            refused.contains(WireError::UNSUPPORTED_FORMAT_VERSION),
+            "{refused}"
+        );
+
+        let bytes = foreign_postcard(VERSION_2, &old);
+        assert_eq!(
+            postcard::from_bytes::<Envelope<Pulled<ResumeToken>>>(&bytes).unwrap_err(),
+            postcard::Error::SerdeDeCustom
+        );
+        let (found, _) = postcard::take_from_bytes::<u16>(&bytes).unwrap();
+        assert_eq!(
+            check_format_version(found),
+            Err(WireError::UnsupportedFormatVersion {
+                found: VERSION_2,
+                supported: FORMAT_VERSION,
+            })
+        );
+    }
+
+    /// An ack as format version 2 shaped it: no `responder`.
+    #[derive(Serialize)]
+    struct AckAtVersion2 {
+        appended: u64,
+        skipped: u64,
+        confirmed: Watermark,
+    }
+
+    /// A version-3 body with no `responder` key is refused in JSON, on pulled
+    /// and on ack: the key is required, `null` when there is no responder
+    /// (ADR-0104). Postcard needs no rule of its own, because it is positional
+    /// and a body one field short runs out of bytes.
+    ///
+    /// **Wrong implementation it rejects:** a derived `Deserialize`, which reads
+    /// a missing `Option` key as `None` — so a body from a peer that left the
+    /// field out, under the current number, would read as a peer that names no
+    /// responder, and nothing would say so.
+    #[test]
+    fn a_current_version_body_without_a_responder_key_is_refused_in_json() {
+        let pulled = PulledAtVersion2 {
+            batch: two_groups(),
+            resume: ResumeToken::new("group:2"),
+            waiting: Waiting::Nothing,
+        };
+        let ack = AckAtVersion2 {
+            appended: 2,
+            skipped: 1,
+            confirmed: Watermark::new(),
+        };
+
+        let refused_pulled = serde_json::from_str::<Envelope<Pulled<ResumeToken>>>(&foreign_json(
+            FORMAT_VERSION,
+            &pulled,
+        ))
+        .unwrap_err()
+        .to_string();
+        let refused_ack =
+            serde_json::from_str::<Envelope<Ack>>(&foreign_json(FORMAT_VERSION, &ack))
+                .unwrap_err()
+                .to_string();
+
+        assert!(
+            refused_pulled.contains("missing field `responder`"),
+            "{refused_pulled}"
+        );
+        assert!(
+            refused_ack.contains("missing field `responder`"),
+            "{refused_ack}"
         );
     }
 }
