@@ -325,6 +325,34 @@ not the same as what a user needed to be told.
   promise nothing about `Send`, so the impl is written per peer. Additive; the
   two peers' own types and impls are unchanged.
 
+- `happenstance-cloudflare`: the Durable Object as a sync peer over HTTP
+  (#130), the `sync_http` module behind `sync` (additive).
+  `serve_sync_request` answers one `POST` on `/sync/pull` or `/sync/push`
+  through a `CloudflareSyncPeer`, a `StoreSyncPeer` whose two halves are the
+  object's `CloudflareIngestStore`, by handing the body to
+  `happenstance_sync::serve_sync`. A method other than `POST` answers 405; a
+  body over `max_request_bytes` (the peer's `max_batch_bytes` plus a 1 MiB
+  `ENVELOPE_ALLOWANCE`) answers 413 on its declared length or as soon as the
+  bytes read pass the cap, so it is never buffered whole; a refusal answers
+  the status its class maps to. `status_for` and `class_for` are the one
+  table both ends read (`Transient` 503, `Split` 413, `Park` 422, `Stop`
+  400; any other 5xx, 408 and 429 read back as `Transient`, and every other
+  status as `Stop`), and `sync_route` names the two paths. A client behind
+  Cloudflare's edge reads the platform's own pages (a 404 "There is nothing
+  here yet", say) as `Transient` before it consults the table, as
+  `class_for`'s documentation says. A refusal's body is the store's whole
+  error chain, so a public mount belongs behind authentication. The sync family
+  runs against it on the Node shim in the gate, through real
+  `worker::Request`s, and under local `workerd` and on a deployed object in
+  the `workerd` job (`harness/workerd`'s `/sync-peer-rule/<name>`), where
+  every rule must answer `ran`. A native SQLite store replicates through
+  the harness object over real HTTP in the same job, against `wrangler dev`
+  and against the deployed Worker: payload bytes come back byte-identical in
+  both directions, a batch replayed at the object or into SQLite changes
+  nothing, and an object reset to nothing answers under a new identity,
+  which stops the runner's edge before it acts on the answer and leaves the
+  local log alone.
+
 ### Changed
 
 - `happenstance-postgres`: a handle no longer caches the store's identity

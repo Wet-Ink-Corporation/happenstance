@@ -1041,11 +1041,19 @@ dependencies = [
 name = "happenstance-workerd-harness"
 version = "0.5.1"
 dependencies = [
+ "bytes",
  "futures-core",
  "happenstance-cloudflare",
  "happenstance-core",
+ "happenstance-sqlite",
  "happenstance-sync-testkit",
  "happenstance-testkit",
+ "http-body-util",
+ "hyper",
+ "hyper-rustls",
+ "hyper-util",
+ "rustls",
+ "tokio",
  "worker",
 ]
 

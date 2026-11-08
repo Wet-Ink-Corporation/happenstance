@@ -1171,3 +1171,9 @@ pub use event_store::CloudflareIngestStore;
 #[cfg(feature = "sync")]
 #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 pub use happenstance_sync;
+
+// The Durable Object as a sync peer over HTTP (#130). Its documentation is the
+// module's own, so its links resolve in the module.
+#[cfg(feature = "sync")]
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+pub mod sync_http;
