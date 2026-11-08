@@ -1233,6 +1233,14 @@ fn decode_append_response<E>(
         _ => return Err(NeonError::MissingColumn { column: "results" }),
     };
 
+    // The batch's probe reports both on one snapshot, and a missing identity
+    // outranks a conflict: the insert is guarded on the row, so nothing was
+    // written, and a caller told `Conflict` would re-decide and retry forever.
+    // Postgres gives the same answer by reading the identity first.
+    if unidentified && conflict.is_some() {
+        return Err(NeonError::MissingIdentity);
+    }
+
     if let Some(conflict) = conflict {
         return Ok(AppendOutcome::Conflict(position_from_text(conflict)?));
     }
@@ -2281,6 +2289,20 @@ mod tests {
         match decode(CONFLICTED, 200) {
             Ok(AppendOutcome::Conflict(position)) => assert_eq!(position.get(), 3),
             other => panic!("expected a conflict, got {:?}", other.err()),
+        }
+    }
+
+    /// A conditional append against a schema with no identity row whose
+    /// condition also fails. The missing identity outranks the conflict, as it
+    /// does on Postgres, which reads the identity before it checks the
+    /// condition: a caller told `Conflict` would re-decide and retry an append
+    /// that can never succeed. Seen on the live endpoint (#104).
+    #[test]
+    fn a_missing_identity_outranks_a_conflict() {
+        const UNIDENTIFIED_AND_CONFLICTED: &[u8] = br#"{"results":[{"fields":[],"rows":[{"conflict":"1","identified":"false"}],"command":"SELECT","rowCount":1,"rowAsArray":false},{"fields":[],"rows":[],"command":"INSERT","rowCount":0,"rowAsArray":false}]}"#;
+        match decode(UNIDENTIFIED_AND_CONFLICTED, 200) {
+            Err(NeonError::MissingIdentity) => {}
+            other => panic!("expected MissingIdentity, got {other:?}"),
         }
     }
 
