@@ -299,7 +299,10 @@ struct Declared {
 ///   whose observation needs a real restart, a real connection pool or a real
 ///   transaction manager. That limitation is the event-store family's too
 ///   (`tests/mutation_coverage.rs`, "Real faults"), and it is stated so that a
-///   green run here is not read as evidence about durability.
+///   green run here is not read as evidence about durability. What *is* modelled
+///   is a store that loses a commit to an **instruction** — a reopen that
+///   discards what was never on the medium (`InMemoryDatabaseStore`,
+///   `VolatileReadModelStore`) — not one that loses it to a fault.
 /// * **A checkpoint keyed on a cryptographic or wide hash of the id.** It is
 ///   lossy, and PS-39 forbids it, but no fixed set of ids can show it: a rule
 ///   would need two ids that collide, and finding them is the hash's whole
@@ -320,6 +323,10 @@ const REGISTRY: &[Declared] = &[
             "commit_is_atomic_with_the_read_model",
             "dropped_batch_leaves_store_usable",
             "distinct_projections_advance_independently",
+            // The fourth arrived with #422's reopen rule, for the same reason as
+            // the two above: a store that applies no rows fails any rule that
+            // reads one back, and this one reads it back after a reopen.
+            "committed_rows_and_checkpoint_survive_a_reopen",
         ],
         provenance: "an adapter whose read model does not live in the same store as its \
                      checkpoint — a Redis or search-index projection with its checkpoint \
@@ -341,6 +348,10 @@ const REGISTRY: &[Declared] = &[
             (
                 "distinct_projections_advance_independently",
                 "may disturb the other's rows, and the row the first commit wrote",
+            ),
+            (
+                "committed_rows_and_checkpoint_survive_a_reopen",
+                "must survive a reopen together with its checkpoint",
             ),
         ],
     },
@@ -376,6 +387,9 @@ const REGISTRY: &[Declared] = &[
             // that commits nothing reads every id's checkpoint as `NeverRun`,
             // so the first id fails to read its own commit.
             "projection_ids_round_trip_by_bytes",
+            // The ninth, from #422's reopen rule, at the same anchor: nothing was
+            // committed, so nothing is there after the reopen either.
+            "committed_rows_and_checkpoint_survive_a_reopen",
         ],
         provenance: "an adapter whose `commit` executes the batch inside a transaction it \
                      never commits — the statements go out, the connection returns to the \
@@ -940,6 +954,66 @@ const REGISTRY: &[Declared] = &[
         )],
     },
     Declared {
+        name: "InMemoryDatabaseStore",
+        kind: Kind::Mutant,
+        // Exactly one, by construction: the defect lives in `survive_reopen`,
+        // which only `ProjectionFixture::reopen` reaches, and the only rule that
+        // reopens is the one this store is written for.
+        fails: &["committed_rows_and_checkpoint_survive_a_reopen"],
+        provenance: "an adapter whose committed state lives in process memory: SQLite's \
+                     `open_in_memory` held behind an `Arc` so that a second `connect` sees the \
+                     first's writes, or a write-back cache acknowledged on insert and never \
+                     flushed. Every handle is a handle onto the same live process, so it \
+                     passes every rule that reads back through a fresh one — which, until \
+                     #422, was every rule in this family — and a reopen finds nothing",
+        mode: FailureMode::Assertion,
+        // Pinned at the checkpoint, which the rule asserts first: this store
+        // loses both halves, and the read-model assertion belongs to the row
+        // below.
+        expect: &[(
+            "committed_rows_and_checkpoint_survive_a_reopen",
+            "a committed checkpoint must survive a reopen",
+        )],
+    },
+    Declared {
+        name: "VolatileReadModelStore",
+        kind: Kind::Mutant,
+        fails: &["committed_rows_and_checkpoint_survive_a_reopen"],
+        provenance: "an adapter whose checkpoint table is durable and whose read model is a \
+                     process-local map or cache filled at commit, because the read model is \
+                     \"cheap to rebuild\". Before a restart both halves are present, so it \
+                     passes `commit_is_atomic_with_the_read_model`; after one, the checkpoint \
+                     claims rows the read model no longer has, and a runner resuming from it \
+                     never rewrites them. It is PS-1's coupling broken by a restart rather \
+                     than by a commit",
+        mode: FailureMode::Assertion,
+        // Pinned at the read model: the checkpoint survives, so the first
+        // assertion passes and the second is the one this defect trips.
+        expect: &[(
+            "committed_rows_and_checkpoint_survive_a_reopen",
+            "must survive a reopen together with its checkpoint",
+        )],
+    },
+    Declared {
+        name: "UnreopenedProjectionFixture",
+        kind: Kind::Mutant,
+        fails: &["committed_rows_and_checkpoint_survive_a_reopen"],
+        provenance: "a fixture that declares `REOPEN` supported and leaves `reopen` to the \
+                     trait's provided body, which answers `Reopened::Nothing`. It is the author \
+                     who claims the capability first and means to write the teardown later. \
+                     The read-back assertions cannot be what fails it: the store is correct \
+                     and its medium is shared by every handle, so a reopen that discarded \
+                     nothing still finds the checkpoint and the row, as an undrained pool \
+                     would. The answer from the provided body is what fails it",
+        mode: FailureMode::Assertion,
+        // Pinned at the reopen answer, for `UnarmedFrontierFixture`'s reason in
+        // the event-store family: it is the one assertion this defect reaches.
+        expect: &[(
+            "committed_rows_and_checkpoint_survive_a_reopen",
+            "reopened nothing: the provided body",
+        )],
+    },
+    Declared {
         name: "NoBatchReadStore",
         kind: Kind::ConformantVariant,
         // CF-5's first projection row, and `fails` is empty because the store is
@@ -1051,6 +1125,10 @@ macro_rules! for_each_projection_mutant {
             crate::correct::MutantFixture<crate::mutants::SluggedKeyStore>,
             crate::correct::MutantFixture<crate::mutants::TrailingSpaceKeyStore>,
             crate::correct::MutantFixture<crate::mutants::CanonicalEquivalenceKeyStore>,
+
+            crate::correct::MutantFixture<crate::mutants::InMemoryDatabaseStore>,
+            crate::correct::MutantFixture<crate::mutants::VolatileReadModelStore>,
+            crate::mutants::UnreopenedProjectionFixture,
 
             crate::correct::MutantFixture<crate::variants::NoBatchReadStore>,
             crate::correct::MutantFixture<crate::variants::AbsentAfterResetStore>,

@@ -788,11 +788,11 @@ pub trait Fixture {
 ///
 /// # Capability constants, and where an empty reason fires
 ///
-/// Three constants, all required and all answered deliberately:
+/// Four constants, all answered deliberately:
 /// [`SECOND_HANDLE`](Self::SECOND_HANDLE) is a MUST, and
-/// [`RESET_REFUSAL`](Self::RESET_REFUSAL) and
-/// [`COMMIT_FAULT`](Self::COMMIT_FAULT) are the port's two genuinely
-/// declinable capabilities. A declined one must name a reason —
+/// [`RESET_REFUSAL`](Self::RESET_REFUSAL),
+/// [`COMMIT_FAULT`](Self::COMMIT_FAULT) and [`REOPEN`](Self::REOPEN) are the
+/// port's genuinely declinable capabilities. A declined one must name a reason —
 /// [`Capability::declined`] rejects the empty string in a `const fn` `assert!`
 /// — but on an **associated** const that rejection arrives later than one would
 /// like. An associated const is evaluated lazily, only when monomorphised code
@@ -819,6 +819,10 @@ pub trait Fixture {
 ///     const RESET_REFUSAL: Capability = Capability::declined("");
 ///     const COMMIT_FAULT: Capability = Capability::declined(
 ///         "this store cannot make a commit fail once it has been accepted",
+///     );
+///     const REOPEN: Capability = Capability::declined(
+///         "this store keeps everything in process memory, so a reopen has \
+///          no medium to read back from",
 ///     );
 ///
 ///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
@@ -861,6 +865,10 @@ pub trait Fixture {
 ///     const COMMIT_FAULT: Capability = Capability::declined(
 ///         "this store cannot make a commit fail once it has been accepted",
 ///     );
+///     const REOPEN: Capability = Capability::declined(
+///         "this store keeps everything in process memory, so a reopen has \
+///          no medium to read back from",
+///     );
 ///
 ///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
 ///         core::future::ready(MemoryProjectionHandle::new(std::sync::Arc::clone(&self.0)))
@@ -895,6 +903,10 @@ pub trait Fixture {
 ///     const COMMIT_FAULT: Capability = Capability::declined(
 ///         "this store applies both halves of a commit under one lock and has \
 ///          no write it can be made to fail between them",
+///     );
+///     const REOPEN: Capability = Capability::declined(
+///         "this store keeps its read model and checkpoints in process memory \
+///          only, so there is no medium a reopen could read them back from",
 ///     );
 ///
 ///     fn connect(&self) -> impl core::future::Future<Output = Self::Store> {
@@ -1079,6 +1091,68 @@ pub trait ProjectionFixture {
     /// capability with that as its stated reason, rather than declare it and
     /// contribute an `Ok`.
     const COMMIT_FAULT: Capability = Capability::declined(UNSTATED_COMMIT_FAULT);
+
+    /// Whether this fixture can be **reopened**: every outstanding handle's
+    /// process-level state discarded, so that a later
+    /// [`connect`](Self::connect) observes only what was durably committed.
+    ///
+    /// [`Fixture::REOPEN`] for the projection port, and CF-17 governs it in the
+    /// same words: a fixture declaring it supported MUST make
+    /// [`reopen`](Self::reopen) discard that state **over a medium that outlives
+    /// the process's hold on it**, and MUST state the mechanism — which file is
+    /// closed, which pool is drained. A fixture over a store with no medium
+    /// outside the process MUST decline it, with that as its stated reason.
+    ///
+    /// It is read by exactly one rule,
+    /// [`committed_rows_and_checkpoint_survive_a_reopen`](crate::projection::rules::committed_rows_and_checkpoint_survive_a_reopen),
+    /// which reads PS-1's *durable* across a reopen: until it existed, no
+    /// projection rule showed that a committed read model and its checkpoint
+    /// outlive every handle that wrote them. A store that keeps either half in
+    /// process memory passes every other rule in the family, because every
+    /// other rule reads back through a handle onto the same live process.
+    ///
+    /// # Why it is defaulted, unlike `Fixture::REOPEN`
+    ///
+    /// Every capability on this trait is defaulted to a declension, for the
+    /// reason [`SECOND_HANDLE`](Self::SECOND_HANDLE) gives: a default may decline
+    /// on an author's behalf, never declare. A fixture that inherits this
+    /// default is still told so, in its own CI, by
+    /// [`assert_projection_declensions_are_stated`].
+    ///
+    /// # What declaring it does not prove
+    ///
+    /// What [`Fixture::REOPEN`] does not: an override that answers
+    /// [`Reopened::Discarded`] over a volatile store and discards nothing is
+    /// indistinguishable, through the port, from an honest reopen over a file.
+    /// So the rule rejects a *store* that loses a commit across a reopen and
+    /// cannot reject a *fixture* that only claims to reopen. The declaration
+    /// MUST above is what carries that hazard, exactly as it does on the
+    /// event-store side.
+    const REOPEN: Capability = Capability::declined(UNSTATED_PROJECTION_REOPEN);
+
+    /// Closes and reopens the underlying storage, discarding every outstanding
+    /// handle's process-level state, and says whether it did.
+    ///
+    /// After an override returns [`Reopened::Discarded`], a fresh
+    /// [`connect`](Self::connect) must observe exactly what was durably
+    /// committed and nothing else. Handles obtained before the call may stop
+    /// working; a rule must not use one afterwards.
+    ///
+    /// # The provided body says it reopened nothing
+    ///
+    /// It returns [`Reopened::Nothing`], and the rule asserts on that answer
+    /// before it reads anything back. A fixture that declares
+    /// [`REOPEN`](Self::REOPEN) supported and forgets this override therefore
+    /// fails on every run, with a message naming this method.
+    ///
+    /// This is [`Fixture::arm_held_above_frontier`]'s shape rather than
+    /// [`Fixture::reopen`]'s panicking provided body, and the difference is
+    /// deliberate: an answer the rule asserts on puts the failure in the rule,
+    /// where an adapter author's CI reports it as that rule failing, and keeps
+    /// a panic out of this crate's library code.
+    fn reopen(&self) -> impl Future<Output = Reopened> {
+        core::future::ready(Reopened::Nothing)
+    }
 
     /// Arms the store so that the **next** `commit` fails.
     ///
@@ -1321,7 +1395,7 @@ pub const NO_CEILING_REASON: &str = "this fixture states no ceiling for any stor
 // The declensions a fixture inherits by saying nothing
 // ---------------------------------------------------------------------------
 //
-// Six capabilities default to a declension, and the reason each carries is
+// Seven capabilities default to a declension, and the reason each carries is
 // THIS CRATE'S prose. That is what makes them different in kind from every
 // other declined capability, and the difference is the one `NO_CEILING_REASON`
 // above already names: a declined capability's reason is the adapter's account
@@ -1345,7 +1419,7 @@ pub const UNSTATED_READ_FAULT: &str = "this fixture cannot make its store fail p
 
 /// What [`ProjectionFixture::SECOND_HANDLE`] says when a fixture does not.
 ///
-/// The only one of the five that defaults a **MUST**, which is why the rules
+/// The only one of these that defaults a **MUST**, which is why the rules
 /// reject rather than skip on it: an unanswered MUST is answered `no`.
 pub const UNSTATED_PROJECTION_SECOND_HANDLE: &str = "this fixture has not said whether it can open a second, independent handle      onto its projection store, and the default answer to an unanswered MUST is      no: every rule in this family reads the read model and the checkpoint back      through a fresh handle, so a fixture that cannot open one cannot observe      PS-1 at all";
 
@@ -1354,6 +1428,11 @@ pub const UNSTATED_RESET_REFUSAL: &str = "this fixture has not said whether its 
 
 /// What [`ProjectionFixture::COMMIT_FAULT`] says when a fixture does not.
 pub const UNSTATED_COMMIT_FAULT: &str = "this fixture has not said whether it can make a commit report failure;      nothing a caller holds can make a conformant `commit` fail, so the      injection has to come from the adapter and this fixture has offered none";
+
+/// What [`ProjectionFixture::REOPEN`] says when a fixture does not.
+pub const UNSTATED_PROJECTION_REOPEN: &str = "this fixture has not said whether it can be reopened; a store with no \
+     medium outside the process has nothing a reopen could read back, and this is \
+     that answer given by default rather than by its author";
 
 /// What a conformance rule did.
 ///
@@ -1480,7 +1559,7 @@ impl RuleOutcome {
 /// repository's own operating notes warn about, arriving from the direction
 /// nobody watches.
 ///
-/// The gap that is real is **declension by inheritance**. Five capabilities
+/// The gap that is real is **declension by inheritance**. Seven capabilities
 /// default to a declension whose words are *this crate's*, so a fixture that
 /// says nothing prints the testkit's prose as though it were its own account of
 /// its own store — which is precisely the misrepresentation CF-18 exists to
@@ -1539,7 +1618,7 @@ pub fn assert_declensions_are_stated<F: Fixture>(_opener: impl AsyncFn() -> F) {
 
 /// [`assert_declensions_are_stated`]'s sibling for the projection port.
 ///
-/// Three capabilities rather than two, and one of them —
+/// Four capabilities rather than two, and one of them —
 /// [`SECOND_HANDLE`](ProjectionFixture::SECOND_HANDLE) — defaults a **MUST**,
 /// so a fixture that inherits it is not merely silent about a trade: it is
 /// silently failing every rule in the family for a reason it did not write.
@@ -1559,6 +1638,7 @@ pub fn assert_projection_declensions_are_stated<F: ProjectionFixture>(
         ),
         ("RESET_REFUSAL", F::RESET_REFUSAL, UNSTATED_RESET_REFUSAL),
         ("COMMIT_FAULT", F::COMMIT_FAULT, UNSTATED_COMMIT_FAULT),
+        ("REOPEN", F::REOPEN, UNSTATED_PROJECTION_REOPEN),
     ]);
 }
 
@@ -1622,6 +1702,25 @@ pub enum Armed {
     /// frontier.
     Staged,
     /// Nothing was armed. Only the provided body returns this.
+    Nothing,
+}
+
+/// What [`ProjectionFixture::reopen`] reports it did.
+///
+/// The rule asserts [`Reopened::Discarded`] before it reads anything back.
+/// That is how a fixture that claims [`REOPEN`](ProjectionFixture::REOPEN) and
+/// forgets the override fails on every run, rather than passing over a store
+/// nobody reopened.
+///
+/// Deliberately exhaustive, like [`Armed`]. A reopen either happened or it did
+/// not, and a third answer would be one the rule could not judge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use = "the rule asserts on this answer; dropping it hides a forgotten override"]
+pub enum Reopened {
+    /// The override discarded every outstanding handle's process-level state,
+    /// over a medium that outlives it.
+    Discarded,
+    /// Nothing was reopened. Only the provided body returns this.
     Nothing,
 }
 

@@ -6046,7 +6046,7 @@ subject as *absent from the tree*, and that is no longer true: `reset` is a
 method on the port (`crates/happenstance-core/src/projection.rs:852`),
 `ResetError::Refused` is a variant (`:287`), and
 `refused_reset_changes_nothing` is a real rule registered in the projection
-suite (`crates/happenstance-testkit/src/projection.rs:1573`, `:2128`). The
+suite (`crates/happenstance-testkit/src/projection.rs:1681`, `:2239`). The
 mechanism and its instrument are both here.
 
 **What is still absent is an adapter, and the count is therefore unavailable
@@ -6800,20 +6800,22 @@ whoever adds the first defaulted method rather than by whoever designed it.
 
 ### 4.11 The suite this section obliges
 
-Eighteen rules, emitted by `projection_store_conformance!` through the same
+Nineteen rules, emitted by `projection_store_conformance!` through the same
 registry macro `event_store_conformance!` uses, so it inherits the tokio,
 blocking and wasm flavours without a second mechanism.
 
-**All eighteen now exist.** `for_each_projection_store_rule`
-(`crates/happenstance-testkit/src/projection.rs:2100-2138`) is the single
+**All nineteen now exist.** `for_each_projection_store_rule`
+(`crates/happenstance-testkit/src/projection.rs:2208-2249`) is the single
 enumeration they are emitted from, and `no_orphan_projection_rules` holds that
 list and the module's own rules to each other in both directions — so the table
 below is checkable against one place rather than counted by hand. Two sentences
 have stood here and both were true when written: *"Every one is new"*, and the
 one that said sixteen of the seventeen existed.
-`fresh_projection_has_no_checkpoint` was the last to land, and it landed against
-PS-38 rather than by widening `[FROZEN]` PS-19 — no rule in the table below is
-daggered in §7.2.
+`fresh_projection_has_no_checkpoint` landed against PS-38 rather than by
+widening `[FROZEN]` PS-19 — no rule in the table below is daggered in §7.2.
+`committed_rows_and_checkpoint_survive_a_reopen` is the nineteenth (#422), and
+it is claimed by CF-17's `Rule:` rather than by PS-1's, which is `[FROZEN]`: it
+reads PS-1's *durable* across a reopen without adding an obligation to it.
 
 | Rule | Clause | Rejects |
 |---|---|---|
@@ -6821,6 +6823,7 @@ daggered in §7.2.
 | `commit_advances_the_checkpoint` | PS-1, PS-38 | — (the baseline the rest are differential against) |
 | `commit_is_atomic_with_the_read_model` | PS-1, PS-4, PS-11 | checkpoint on one connection, rows on another |
 | `failed_commit_leaves_both_unchanged` | PS-1 | a partial apply that reports failure |
+| `committed_rows_and_checkpoint_survive_a_reopen` | PS-1, CF-17 | a read model or checkpoint held in process memory |
 | `rollback_leaves_both_unchanged` | PS-8 | a rollback that only discards the buffer |
 | `dropped_batch_leaves_store_usable` | PS-7 | a pooled connection `Drop` never returns |
 | `distinct_projections_advance_independently` | PS-23 | a single-row checkpoint table |
@@ -9121,6 +9124,14 @@ fixture in the workspace supplying this capability, and therefore the only reaso
 the rule executed rather than reporting a skip everywhere; since phase 8
 `SqliteFixture` in `crates/happenstance-sqlite/tests/support/mod.rs` supplies it
 too, and it is the first that supplies it over a medium outside the process.
+On the projection port the same capability is `ProjectionFixture::REOPEN`, and it
+gates `committed_rows_and_checkpoint_survive_a_reopen` (#422): a commit through
+the port, every handle dropped, a reopen, and the read-model row and the
+checkpoint both read back — the read of PS-1's *durable* that no other projection
+rule makes, because every other one reads back through a handle onto the same
+live process. `InMemoryDatabaseStore` and `VolatileReadModelStore` in the
+testkit's own `tests/` fail it; the SQLite, Postgres and Neon projection fixtures
+supply the capability and the reference fixture declines it.
 Cases: E2E-07.
 Rejects: `NoopReopenFixture` in the testkit's own `tests/` — declares the
 capability supported and **overrides `reopen` with an empty body** over a
@@ -9195,7 +9206,7 @@ repository.
 `event_store_conformance!` and `projection_store_conformance!` now emit
 `every_declined_capability_is_stated_by_this_fixture` into the adapter's own
 test binary, observable in a default `cargo test`. It rejects **declension by
-inheritance**: six capabilities default to a declension whose words are the
+inheritance**: seven capabilities default to a declension whose words are the
 testkit's, so a fixture that says nothing prints this crate's prose as though it
 were its own account of its own store — which is the misrepresentation this
 clause is about, one level in from where it was looking. The candidate the
@@ -10520,7 +10531,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-14 | DEFERRED | `acknowledged_writes_survive_a_reopen` | E2E-07 |
 | CF-15 | FROZEN | `two_fixture_instances_observe_none_of_each_others_appends` (the suite rule; t… | E2E-08, E2E-09 |
 | CF-16 | FROZEN | `two_handles_observe_each_others_appends` | E2E-08 |
-| CF-17 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` | E2E-07 |
+| CF-17 | PROVISIONAL | `acknowledged_writes_survive_a_reopen`, `committed_rows_and_checkpoint_survive… | E2E-07 |
 | CF-18 | FROZEN | `mutation_coverage::capability_skips_are_reported` — a meta-test in `crates/ha… | E2E-07, E2E-08 |
 | CF-19 | FROZEN | `two_handles_observe_each_others_appends` | E2E-08 |
 | CF-20 | FROZEN | the wasm32 step of `cargo xtask ci` (`xtask/src/main.rs:190-271`), extended to… | E2E-52, E2E-30 |

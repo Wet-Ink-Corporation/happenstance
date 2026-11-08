@@ -87,6 +87,26 @@ not the same as what a user needed to be told.
   READMEs carry the procedure. Events already written keep their identity.
   No schema change and no new migration: the re-mint updates the row
   migration 1 already writes.
+- `happenstance-testkit`: a projection conformance rule,
+  `committed_rows_and_checkpoint_survive_a_reopen` (PS-1, CF-17, #422). It
+  commits a read-model row and a checkpoint through the port, drops every
+  handle, reopens the fixture's storage and reads both back. It fails a
+  projection store that keeps its committed state in process memory — an
+  in-memory database shared behind one handle, or a write-back cache never
+  flushed — and one whose checkpoint is durable while its read model is a
+  process-local cache, which comes back claiming rows it no longer has. Every
+  other projection rule reads back through a handle onto the same live
+  process, so both passed the suite until now.
+- `happenstance-testkit`: `ProjectionFixture::REOPEN` and
+  `ProjectionFixture::reopen`, the capability that rule is gated on, with the
+  `Reopened` answer `reopen` returns and `UNSTATED_PROJECTION_REOPEN`, the
+  default declension. A fixture that declines `REOPEN` gets the rule as a
+  reported skip carrying its own reason. **This can turn a passing adapter's CI
+  red without a code change in the adapter**: the suite's
+  `every_declined_capability_is_stated_by_this_fixture` now also fails a
+  fixture that inherits `REOPEN`'s default reason, so a projection fixture
+  written against `0.5.1` states `REOPEN` — declined with its own reason, or
+  supported with an override of `reopen` that answers `Reopened::Discarded`.
 
 ### Changed
 

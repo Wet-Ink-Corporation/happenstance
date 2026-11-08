@@ -5247,6 +5247,7 @@ mod mutation_coverage {
         "commit_advances_the_checkpoint",
         "commit_is_atomic_with_the_read_model",
         "failed_commit_leaves_both_unchanged",
+        "committed_rows_and_checkpoint_survive_a_reopen",
         "rollback_leaves_both_unchanged",
         "dropped_batch_leaves_store_usable",
         "commit_accepts_a_position_the_batch_did_not_write",
@@ -5318,7 +5319,8 @@ mod mutation_coverage {
                 assert!(
                     *reason == DecliningProjectionFixture::SECOND_HANDLE_REASON
                         || *reason == DecliningProjectionFixture::RESET_REFUSAL_REASON
-                        || *reason == DecliningProjectionFixture::COMMIT_FAULT_REASON,
+                        || *reason == DecliningProjectionFixture::COMMIT_FAULT_REASON
+                        || *reason == DecliningProjectionFixture::REOPEN_REASON,
                     "`{rule}` skipped with a reason the fixture never gave: \
                      {reason:?}. The reason is the only record of the trade, so \
                      it has to be the adapter's own words"
@@ -5437,13 +5439,15 @@ mod mutation_coverage {
             capable.skipped(),
             vec![
                 "failed_commit_leaves_both_unchanged",
+                "committed_rows_and_checkpoint_survive_a_reopen",
                 "refused_reset_changes_nothing",
             ],
             "`{}` supports every capability the registered rules ask for except \
              `COMMIT_FAULT`, which the reference store cannot offer — it applies \
-             both halves of a commit under one write lock — and `RESET_REFUSAL`, \
-             which it cannot offer either, because it holds no protection policy. \
-             So exactly two rules may skip against it, in enumeration order. A \
+             both halves of a commit under one write lock — `RESET_REFUSAL`, \
+             which it cannot offer either, because it holds no protection policy, \
+             and `REOPEN`, because it has no medium outside the process. So \
+             exactly three rules may skip against it, in enumeration order. A \
              rule that joined this set means a gate reads the wrong const or a \
              capability was declined to turn a red build green; a rule that left \
              it means the gate went away",
@@ -5459,6 +5463,13 @@ mod mutation_coverage {
                 <MemoryProjectionFixture as happenstance_testkit::ProjectionFixture>::COMMIT_FAULT
                     .reason()
                     .expect("the reference fixture declines COMMIT_FAULT"),
+            ),
+            (
+                "committed_rows_and_checkpoint_survive_a_reopen",
+                "REOPEN",
+                <MemoryProjectionFixture as happenstance_testkit::ProjectionFixture>::REOPEN
+                    .reason()
+                    .expect("the reference fixture declines REOPEN"),
             ),
             (
                 "refused_reset_changes_nothing",
@@ -5551,9 +5562,10 @@ mod mutation_coverage {
                     "COMMIT_FAULT",
                     DecliningProjectionFixture::COMMIT_FAULT_REASON
                 ),
+                ("REOPEN", DecliningProjectionFixture::REOPEN_REASON),
             ],
             "the declining instrument's reported declensions must be its own \
-             three constants, in the order `projection_declines` lists them"
+             four constants, in the order `projection_declines` lists them"
         );
 
         // The reference fixture declines exactly two things and supports the
@@ -5568,12 +5580,13 @@ mod mutation_coverage {
             .collect();
         assert_eq!(
             names,
-            ["RESET_REFUSAL", "COMMIT_FAULT"],
+            ["RESET_REFUSAL", "COMMIT_FAULT", "REOPEN"],
             "`MemoryProjectionFixture` must support `SECOND_HANDLE` — it is a \
              MUST — and decline `RESET_REFUSAL`, because the store under it has \
-             no protection policy and cannot honestly claim one, and \
+             no protection policy and cannot honestly claim one, \
              `COMMIT_FAULT`, because that store applies both halves of a commit \
-             under one write lock and has no write that can be made to fail"
+             under one write lock and has no write that can be made to fail, and \
+             `REOPEN`, because that store has no medium outside the process"
         );
     }
 
