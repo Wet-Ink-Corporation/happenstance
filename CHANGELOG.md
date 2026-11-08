@@ -56,6 +56,25 @@ not the same as what a user needed to be told.
   so it can tear a multi-event local append across two pushes (SY-30, #420).
   Not yet built: backoff, the bounded outbound buffer, owned tasks, what
   `Split` and `Park` call for, and the far side's incarnation check.
+- `happenstance-sync`: a network peer's transport-free halves (#117), with no
+  feature and on wasm32. `StoreSyncPeer` is a `SyncPeer` over a store the
+  caller holds — pull reads it above a `StoreResume` token (the store's own
+  position), within the declared `PeerLimits`, and says `Waiting::Nothing` only
+  when the read reached the end of the log; push ingests each group atomically
+  through `IngestStore`. `serve_sync` answers a postcard envelope, given the
+  `wire::Route` it arrived on, through a `StoreSyncPeer`. `Exchange` (and its
+  `Send` flavour `SendExchange`) is the one-method transport, and
+  `RemoteSyncPeer` the client peer over it, whose resume token is the wire's
+  `ResumeToken`. Every new error states its class (SY-36): a version mismatch or
+  undecodable bytes is `wire::CodecError`, `Stop`; a token no store peer minted
+  is `ForeignToken`, `Stop`; a transport failure keeps the `Exchange` error's
+  own class. `postcard` becomes a normal dependency of the crate. A pull hands
+  its page back as one group, because `EventStore::read` does not say which
+  write an event came in (#420): every origin group inside a page arrives
+  whole, and one that straddles a page cut is split. `StoreSyncPeer` ingests
+  with no compensation, so it cannot be SY-7's adjudicator; that hook is
+  planned with SY-7 (#136). Both peers pass
+  `sync_peer_conformance!`, and `StoreSyncPeer` the model family too.
 
 ## [0.5.1] — 2026-11-08
 

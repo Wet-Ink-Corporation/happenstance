@@ -21,9 +21,9 @@ keywords.workspace = true
 categories.workspace = true
 readme = "README.md"
 # Published since #108 part E, and still unfinished: the port, the wire
-# messages and the reference peer ship, and the runner's single edge (#244 part
-# 1); the rest of the runner and a network peer do not exist yet. The crate
-# root's `# Status` says which clauses are provisional.
+# messages, the reference peer, the runner's single edge (#244 part 1) and a
+# network peer's transport-free halves (#117) ship; the rest of the runner and a
+# real transport do not. The crate root's `# Status` says which clauses are provisional.
 
 [dependencies]
 # `serde` is non-optional here: replication is the reason `happenstance-core`'s
@@ -41,6 +41,10 @@ happenstance-core = { workspace = true, features = ["std", "serde"] }
 # carries a `Serialize` derive and a hand-written `Deserialize`. The message types
 # carry derives since #114, when the message set was decided — see `lib.rs`.
 serde.workspace = true
+# The bytes `serve_sync` and `RemoteSyncPeer` exchange (#117). The workspace
+# entry's comment says why its default features are off. Unconditional: the
+# Durable Object side mounts `serve_sync` on wasm32 with no features at all.
+postcard.workspace = true
 thiserror.workspace = true
 trait-variant.workspace = true
 
@@ -56,7 +60,7 @@ futures-core.workspace = true
 # WF-8's two rules run in both formats, because the obligation the clause states
 # is discharged differently in each: by position in postcard, by an explicit
 # check in `serde_json`, where key order is not observable (ADR-0016 §11).
-postcard.workspace = true
+# postcard is a normal dependency since #117, and the tests reach it there.
 serde_json.workspace = true
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
