@@ -1,7 +1,7 @@
 # happenstance-workerd-harness
 
 Runs every event-store conformance rule, and every rule of `happenstance-sync`'s
-ingest and write-group families, against `happenstance-cloudflare` inside `workerd`, through a real
+ingest, write-group and sync peer families, against `happenstance-cloudflare` inside `workerd`, through a real
 Durable Object. The gate runs the same rules against a
 `node:sqlite` shim, which takes `workerd`'s four statement limits but none of the
 platform's other properties, so this harness checks conformance on the real
@@ -15,6 +15,12 @@ it has two legs over one Worker:
   version `package-lock.json` pins.
 - **deployed**: the same Worker deployed to a Cloudflare account and driven over
   HTTPS by `deployed.mjs`.
+
+Both legs also run the **SQLite round trip** (#130): a native SQLite store, in
+this crate's `tests/sqlite_round_trip/`, replicating through the object's
+`/sync/pull` and `/sync/push` over real HTTP with `hyper`, against
+`wrangler dev` locally and against the deployed Worker. `round-trip.sh` runs
+it, strictly, in both.
 
 ## Running it locally
 
@@ -34,6 +40,7 @@ $ npx vitest run test/remint.test.ts --reporter=verbose   # the re-mint leg's lo
 $ npx vitest run test/transaction.test.ts --reporter=verbose  # transactionSync's properties
 $ npx vitest run test/ingest.test.ts test/ingest-cold.test.ts --reporter=verbose  # the ingest family, warm and cold
 $ npx vitest run test/write-group.test.ts test/write-group-cold.test.ts --reporter=verbose  # the write-group family, warm and cold
+$ npx vitest run test/sync-peer.test.ts --reporter=verbose        # the sync peer family, and the mounted routes
 $ npx vitest run test/ingest-classes.test.ts --reporter=verbose    # F's D7 classes, by an identical retry
 $ npx vitest run test/ingest-ceiling-bisect.test.ts               # the bisection, without a runtime
 $ npx vitest run test/ingest-ceiling.test.ts --reporter=verbose    # the ingest ceiling (~2 min)
@@ -48,7 +55,13 @@ $ npx wrangler dev --port 8799 &
 $ HARNESS_TOKEN=local node deployed.mjs http://127.0.0.1:8799 local-1
 $ HARNESS_TOKEN=local HIBERNATE_WAIT_MS=12000 node deployed-restart.mjs http://127.0.0.1:8799 local-1
 $ HARNESS_TOKEN=local node deployed-ingest.mjs http://127.0.0.1:8799 local-1
+$ HARNESS_TOKEN=local ./round-trip.sh local http://127.0.0.1:8799 local-1   # the SQLite round trip
 ```
+
+The round trip's live tests are `#[ignore]`d, so `cargo test` alone runs only
+its two offline tests; `round-trip.sh` passes `--ignored` and sets
+`WORKERD_HARNESS_URL`, `WORKERD_HARNESS_RUN` and (from the environment)
+`HARNESS_TOKEN`, which the tests read and refuse to run without.
 
 ## How it fits together
 
@@ -82,8 +95,13 @@ $ HARNESS_TOKEN=local node deployed-ingest.mjs http://127.0.0.1:8799 local-1
 | `test/write-group.test.ts`, `test/write-group-cold.test.ts` | One `it()` per write-group rule, each on its own object, warm and on a primed and evicted object, where a second instance's `migrate` must find both write-group columns and add neither. Every rule must answer `ran`. |
 | `test/ingest-classes.test.ts` | The D7 census, strict: `trigger-abort` and `missing-schema` must hold, `storage-full` must hold or be unreachable. |
 | `test/ingest-ceiling.test.ts`, `test/ingest-ceiling-bisect.test.ts` | The ingest ceiling, strict on the `minimal` axis only, and the bisection pinned without a runtime. |
+| `src/sync_peer.rs`, `src/sync_peer/fixture.rs` | The sync peer family (#130): its names from `for_each_sync_peer_rule!`, run through the ingest dispatcher's opener, each rule handed a `WorkerdSyncFixture` over one ingest fixture's log. Its peer is a `RemoteSyncPeer` whose every pull and push is a real `worker::Request` to `serve_sync_request`, read back through `class_for`; only the socket is left out. Routed `/sync-peer-rules` and `/sync-peer-rule/<name>`. |
+| `src/object/syncing.rs` | `/sync/pull` and `/sync/push`, mounted as an application mounts them: the object's own unprefixed log, migrated on each request, served by `happenstance_cloudflare::sync_http::serve_sync_request` under `PeerLimits::minimum`; and `/sync-reset`, which empties the object so the next request answers under a new identity. |
+| `test/sync-peer.test.ts` | One `it()` per sync rule, each on its own object; every rule must answer `ran`. And the mounted routes' refusals: a `GET` (405), an unknown sync path (404), an empty `POST` (400). |
+| `tests/sqlite_round_trip/` | The native half (#130): `http.rs`, an `Exchange` over `hyper` with a timeout per round trip, a capped reply and every failure classed; `main.rs`, four live tests (byte-identical both ways, a replay that changes nothing, a reset that stops the edge, a refused token that is `Stop`) and two offline ones (a timeout and a refused connection, both `Transient`). |
+| `round-trip.sh` | Runs the live tests against one Worker: every listed test executed and passed, none left ignored, and a floor under the list. |
 | `test/limits.test.ts`, `test/platform-miss.test.ts` | The probe, and what the deployed leg retries. |
-| `deployed.mjs` | The deployed leg's runner: all three families, each strict. |
+| `deployed.mjs` | The deployed leg's runner: all four families, each strict. |
 | `ingest-ceiling.mjs` | The ingest ceiling's bisection, shared by the local test and the deployed script. One object per attempt, because a call near the top can trap the object. |
 | `deployed-ingest.mjs` | The deployed leg's ingest ceiling and D7 census. Record-only. |
 | `deployed-restart.mjs` | The deployed leg's hibernation cells, over `wss://`, and its idle cells. Record-only. |
@@ -191,5 +209,16 @@ The deployed cells are asserted when the restore runs and recorded when it
 cannot: a cell that observed the restore and failed the judge fails the step,
 while a cell that could not run, or whose restore or restart never landed, only
 warns, for the hibernation cells' reason.
+
+The sync peer family (#130) runs inside the object, so its client cannot reach
+the object over a socket: each rule's requests are real `worker::Request`s
+handed to the same handler `/sync/pull` and `/sync/push` serve, and only the
+network between them is missing. The SQLite round trip is what crosses it,
+from a native process through the Worker's router to the object, locally under
+`wrangler dev` and on the deployed Worker. A reset there is `/sync-reset`,
+which empties the object; the next request migrates a fresh log under a new
+`StoreId`, and the runner's edge stops on it (SY-34, ADR-0104). That is a
+reset to nothing, not a restore to an earlier bookmark, which is
+`remint_identity`'s subject above and not this one's.
 
 It does not reach the memory ceiling.
