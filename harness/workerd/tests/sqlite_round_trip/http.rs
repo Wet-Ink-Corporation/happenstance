@@ -7,7 +7,17 @@
 //! class (SY-36) — a status through `class_for`, and a failure to get one at
 //! all, a refused connection or a timeout, as `Transient`.
 //!
+//! One more, because the deployed leg reaches the object through Cloudflare's
+//! edge: the platform's own answers while a fresh Worker lands
+//! (`platform-miss.mjs`, matched exactly as it matches them) are
+//! [`HttpError::PlatformMiss`] and `Transient`, read before `class_for` is
+//! consulted. Without it the edge's 404 page would read as `Stop`. The
+//! object's own 404s are plain text and never match. [`retrying`] is the
+//! small bounded retry the tests' direct calls go through; an [`Edge`] has
+//! its own backoff.
+//!
 //! [`Exchange`]: happenstance_cloudflare::happenstance_sync::Exchange
+//! [`Edge`]: happenstance_cloudflare::happenstance_sync::runner::Edge
 
 use core::future::Future;
 use core::time::Duration;
@@ -130,12 +140,69 @@ impl HttpExchange {
             // Reuses the buffer when the body is its only handle.
             return Ok(Vec::from(body));
         }
-        Err(HttpError::Refused {
+        Err(refusal(status, String::from_utf8_lossy(&body).into_owned()))
+    }
+}
+
+/// What a status other than 200 with `body` reads as: a
+/// [`HttpError::PlatformMiss`] when it is one of the platform's own answers,
+/// and otherwise a [`HttpError::Refused`] carrying `class_for`'s class.
+pub(crate) fn refusal(status: u16, body: String) -> HttpError {
+    if is_platform_miss(status, &body) {
+        HttpError::PlatformMiss { status, body }
+    } else {
+        HttpError::Refused {
             status,
             class: class_for(status),
-            body: String::from_utf8_lossy(&body).into_owned(),
-        })
+            body,
+        }
     }
+}
+
+/// `platform-miss.mjs`'s `isPlatformMiss`, signature for signature: exact, so
+/// that no answer the object or the harness writes is ever taken for one.
+fn is_platform_miss(status: u16, body: &str) -> bool {
+    match status {
+        500 => {
+            matches!(
+                body.trim(),
+                "Worker not found." | "Durable Object reset because its code was updated."
+            ) || body.contains(r#"<span class="cf-error-code">1104</span>"#)
+        }
+        404 => body.contains("<h1>There is nothing here yet</h1>"),
+        _ => false,
+    }
+}
+
+/// How many times [`retrying`] tries before it returns the last failure.
+pub(crate) const RETRY_ATTEMPTS: usize = 3;
+
+/// The pause before the second attempt; each later pause doubles it.
+const RETRY_FIRST_PAUSE: Duration = Duration::from_secs(2);
+
+/// Runs `attempt` until it answers with anything but a `Transient` failure, or
+/// [`RETRY_ATTEMPTS`] times, pausing between attempts; and returns the last
+/// outcome.
+///
+/// For the tests' direct calls — the reset, and a push or a pull made outside
+/// an [`Edge`](happenstance_cloudflare::happenstance_sync::runner::Edge) — so a
+/// platform miss on the deployed leg does not fail a test the object never
+/// saw. Bounded, so a far side that is down stays a failure.
+pub(crate) async fn retrying<T, E: Classify>(
+    mut attempt: impl AsyncFnMut() -> Result<T, E>,
+) -> Result<T, E> {
+    let mut pause = RETRY_FIRST_PAUSE;
+    let mut outcome = attempt().await;
+    for _ in 1..RETRY_ATTEMPTS {
+        match &outcome {
+            Err(error) if error.class() == FailureClass::Transient => {}
+            _ => break,
+        }
+        tokio::time::sleep(pause).await;
+        pause = pause.saturating_mul(2);
+        outcome = attempt().await;
+    }
+    outcome
 }
 
 impl SendExchange for HttpExchange {
@@ -179,6 +246,14 @@ pub(crate) enum HttpError {
         /// The cap.
         cap: usize,
     },
+    /// The platform answered, not the object: one of `platform-miss.mjs`'s
+    /// signatures, raised while a fresh Worker lands. `Transient`.
+    PlatformMiss {
+        /// The status.
+        status: u16,
+        /// The platform's page or message.
+        body: String,
+    },
     /// The answer was a status other than 200, read back as its class.
     Refused {
         /// The status.
@@ -199,6 +274,9 @@ impl core::fmt::Display for HttpError {
             Self::Body(error) => write!(f, "the answer broke off: {error}"),
             Self::Timeout { after } => write!(f, "no answer within {after:?}"),
             Self::ReplyTooLarge { cap } => write!(f, "the answer is over {cap} bytes"),
+            Self::PlatformMiss { status, body } => {
+                write!(f, "the platform answered {status}, not the object: {body}")
+            }
             Self::Refused {
                 status,
                 class,
@@ -215,17 +293,24 @@ impl core::error::Error for HttpError {
             Self::Request(error) => Some(error),
             Self::Transport(error) => Some(error),
             Self::Body(error) => Some(error.as_ref()),
-            Self::Timeout { .. } | Self::ReplyTooLarge { .. } | Self::Refused { .. } => None,
+            Self::Timeout { .. }
+            | Self::ReplyTooLarge { .. }
+            | Self::PlatformMiss { .. }
+            | Self::Refused { .. } => None,
         }
     }
 }
 
-/// A transport failure is `Transient` (the owner's default for #130); a
-/// status is its class; anything that would fail the same way again is `Stop`.
+/// A transport failure is `Transient` (the owner's default for #130), and so
+/// is a platform miss; a status is its class; anything that would fail the
+/// same way again is `Stop`.
 impl Classify for HttpError {
     fn class(&self) -> FailureClass {
         match self {
-            Self::Transport(_) | Self::Body(_) | Self::Timeout { .. } => FailureClass::Transient,
+            Self::Transport(_)
+            | Self::Body(_)
+            | Self::Timeout { .. }
+            | Self::PlatformMiss { .. } => FailureClass::Transient,
             Self::Refused { class, .. } => *class,
             Self::Roots(_) | Self::Request(_) | Self::ReplyTooLarge { .. } => FailureClass::Stop,
         }

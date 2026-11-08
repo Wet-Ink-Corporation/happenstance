@@ -20,7 +20,11 @@ Both legs also run the **SQLite round trip** (#130): a native SQLite store, in
 this crate's `tests/sqlite_round_trip/`, replicating through the object's
 `/sync/pull` and `/sync/push` over real HTTP with `hyper`, against
 `wrangler dev` locally and against the deployed Worker. `round-trip.sh` runs
-it, strictly, in both.
+it, strictly, in both. Its client reads the platform's own answers while a
+fresh Worker lands (`platform-miss.mjs`'s signatures, matched exactly) as
+`Transient`, so an edge waits them out; the tests' direct calls go through a
+three-attempt retry for the same reason. The object's own 404s never match
+and stay `Stop`.
 
 ## Running it locally
 
@@ -59,7 +63,7 @@ $ HARNESS_TOKEN=local ./round-trip.sh local http://127.0.0.1:8799 local-1   # th
 ```
 
 The round trip's live tests are `#[ignore]`d, so `cargo test` alone runs only
-its two offline tests; `round-trip.sh` passes `--ignored` and sets
+its five offline tests; `round-trip.sh` passes `--ignored` and sets
 `WORKERD_HARNESS_URL`, `WORKERD_HARNESS_RUN` and (from the environment)
 `HARNESS_TOKEN`, which the tests read and refuse to run without.
 
@@ -98,7 +102,7 @@ its two offline tests; `round-trip.sh` passes `--ignored` and sets
 | `src/sync_peer.rs`, `src/sync_peer/fixture.rs` | The sync peer family (#130): its names from `for_each_sync_peer_rule!`, run through the ingest dispatcher's opener, each rule handed a `WorkerdSyncFixture` over one ingest fixture's log. Its peer is a `RemoteSyncPeer` whose every pull and push is a real `worker::Request` to `serve_sync_request`, read back through `class_for`; only the socket is left out. Routed `/sync-peer-rules` and `/sync-peer-rule/<name>`. |
 | `src/object/syncing.rs` | `/sync/pull` and `/sync/push`, mounted as an application mounts them: the object's own unprefixed log, migrated on each request, served by `happenstance_cloudflare::sync_http::serve_sync_request` under `PeerLimits::minimum`; and `/sync-reset`, which empties the object so the next request answers under a new identity. |
 | `test/sync-peer.test.ts` | One `it()` per sync rule, each on its own object; every rule must answer `ran`. And the mounted routes' refusals: a `GET` (405), an unknown sync path (404), an empty `POST` (400). |
-| `tests/sqlite_round_trip/` | The native half (#130): `http.rs`, an `Exchange` over `hyper` with a timeout per round trip, a capped reply and every failure classed; `main.rs`, four live tests (byte-identical both ways, a replay that changes nothing, a reset that stops the edge, a refused token that is `Stop`) and two offline ones (a timeout and a refused connection, both `Transient`). |
+| `tests/sqlite_round_trip/` | The native half (#130): `http.rs`, an `Exchange` over `hyper` with a timeout per round trip, a capped reply and every failure classed; `main.rs`, four live tests (byte-identical both ways, a replay that changes nothing, a reset that stops the edge, a refused token that is `Stop`) and five offline ones (a timeout and a refused connection, both `Transient`; each platform miss `Transient` and the object's own 404 `Stop`; and the bounded retry). |
 | `round-trip.sh` | Runs the live tests against one Worker: every listed test executed and passed, none left ignored, and a floor under the list. |
 | `test/limits.test.ts`, `test/platform-miss.test.ts` | The probe, and what the deployed leg retries. |
 | `deployed.mjs` | The deployed leg's runner: all four families, each strict. |

@@ -291,7 +291,11 @@ not the same as what a user needed to be told.
   the status its class maps to. `status_for` and `class_for` are the one
   table both ends read (`Transient` 503, `Split` 413, `Park` 422, `Stop`
   400; any other 5xx, 408 and 429 read back as `Transient`, and every other
-  status as `Stop`), and `sync_route` names the two paths. The sync family
+  status as `Stop`), and `sync_route` names the two paths. A client behind
+  Cloudflare's edge reads the platform's own pages (a 404 "There is nothing
+  here yet", say) as `Transient` before it consults the table, as
+  `class_for`'s documentation says. A refusal's body is the store's whole
+  error chain, so a public mount belongs behind authentication. The sync family
   runs against it on the Node shim in the gate, through real
   `worker::Request`s, and under local `workerd` and on a deployed object in
   the `workerd` job (`harness/workerd`'s `/sync-peer-rule/<name>`), where

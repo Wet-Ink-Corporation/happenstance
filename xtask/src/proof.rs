@@ -1323,6 +1323,7 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::ingest::tests::served::a_push_and_a_pull_through_requests_round_trip_byte_identical",
     "event_store::ingest::tests::served::a_request_that_is_not_a_post_is_refused_with_405",
     "event_store::ingest::tests::served::a_body_over_the_cap_is_refused_as_split_before_the_store",
+    "event_store::ingest::tests::served::a_declared_length_over_the_cap_is_refused_before_the_body_is_read",
     "event_store::ingest::tests::served::a_post_with_no_body_answers_400",
     "event_store::ingest::tests::served::a_foreign_token_answers_400_and_reads_back_as_stop",
     "event_store::ingest::tests::served::sync_conformance::ingest_never_rejects",

@@ -202,3 +202,43 @@ changed and then reverted.
 - `cargo xtask spec-trace`, `lint-constitution`, `lints`: green. Two `standards/`
   citations into `ci.yml` (`:2168`, `:2233`) repointed by referent to `:2242`, `:2307`.
 - temper gate: GREEN (fingerprint a382cf9cfd9424c7).
+
+## Review round 1 (changes requested: F1-F8)
+
+- [x] F2: `served::a_declared_length_over_the_cap_is_refused_before_the_body_is_read`. A
+  valid push body (recorded from a push that landed on a throwaway object) sent with an
+  explicit `content-length: cap+1` through `RequestInit::with_headers`. Node 24 keeps
+  the header. **Red first:** with the declared-length branch disabled
+  (`length > usize::MAX - 1 && length > cap`), `served.rs:258: left: 200, right: 413`
+  (the batch landed); restored, green. Shim: 191 passed.
+- [x] F3: comment in `read_capped` that an unparsable header is ignored because the
+  streaming cap still bounds the read.
+- [x] F1 (option a): `HttpError::PlatformMiss { status, body }`, `Transient`, built by
+  `refusal(status, body)` from `platform-miss.mjs`'s four exact signatures before
+  `class_for` is consulted; `retrying` (3 attempts, 2 s then 4 s, on `Transient` only)
+  wraps `reset`, `drain`'s pulls and the replay test's two pushes. **Red first:** the
+  three new host tests failed to compile (no `PlatformMiss`, `refusal`, `retrying`,
+  `RETRY_ATTEMPTS`); green after, 5 passed. **Mutation red:** the 404 signature loosened
+  to `body.contains("There is nothing here yet")` turned
+  `the_objects_own_404_stays_stop` red (`PlatformMiss { status: 404, body: "There is
+  nothing here yet" }`); reverted, green.
+- [x] F4: `class_for`'s rustdoc says a client behind Cloudflare's edge recognises the
+  platform's pages first and treats them as `Transient`, naming `HttpExchange`.
+- [x] F5 mutation reds, both run together and reverted:
+  - `sync_route` as a suffix matcher (`path.rsplit('/').next()?`):
+    `sync_route_names_exactly_the_two_paths` red, `tests.rs:27: /other/pull, left:
+    Some(Pull), right: None`.
+  - `class_for` with a `Transient` default: `every_class_round_trips_through_its_status`
+    red (`tests.rs:43: 400, left: Transient, right: Stop`) and
+    `a_status_no_class_maps_to_reads_as_transient_or_stop` red (`tests.rs:60: 200`).
+- [x] F7: `serve_sync_request`'s rustdoc says the refusal body is the whole error chain,
+  so a public mount belongs behind authentication.
+- [x] F8: `timeout-minutes: 10` on both round-trip steps. The two `standards/`
+  citations into `ci.yml` moved two lines and are repointed by referent
+  (`:2242` -> `:2244`, `:2307` -> `:2309`).
+- [x] F6: no change.
+- Re-run after round 1: temper gate GREEN (fingerprint 7ed6b3e341942c51); shim 191 passed;
+  clippy `-D warnings` at default, `--no-default-features` and `--all-features`
+  (cloudflare, harness, xtask); private-items rustdoc `-D warnings`; `cargo test -p
+  xtask`; `cargo xtask wasm`, `spec-trace`, `lint-constitution`, `lints`: green. Live
+  local round trip against `wrangler dev`: `listed 4; passed 4`.

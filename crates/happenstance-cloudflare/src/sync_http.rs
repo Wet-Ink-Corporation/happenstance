@@ -129,6 +129,15 @@ pub const fn status_for(class: FailureClass) -> u16 {
 /// and every 5xx are `Transient` — the platform's own failures land there, and
 /// a transport failure is transient — and every other status is `Stop`: a
 /// refused token, a missing route or a wrong method fails the same way again.
+///
+/// The table reads statuses this module's server answers. A client reaching an
+/// object through Cloudflare's edge also meets answers the platform gives
+/// before any object code runs — a 404 "There is nothing here yet" page, a 500
+/// "Worker not found.", a 500 page carrying error code 1104 — and a 404 among
+/// them would read here as `Stop`. Such a client recognises the platform's own
+/// pages first, by exact match, and treats them as `Transient` before it
+/// consults this table; `harness/workerd`'s round-trip client,
+/// `HttpExchange`, does exactly that.
 #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 #[must_use]
 pub const fn class_for(status: u16) -> FailureClass {
@@ -153,6 +162,11 @@ pub const fn class_for(status: u16) -> FailureClass {
 ///   `application/octet-stream`.
 /// * A request `serve_sync` refuses answers [`status_for`] its class, with the
 ///   error's text as the body.
+///
+/// That text is the whole error chain, the store's own errors included, so
+/// that a client can say why it was refused. It is written for an operator,
+/// not a stranger: mount this behind authentication, as `harness/workerd`
+/// mounts it behind a bearer token, rather than on a public route.
 ///
 /// # Errors
 ///
@@ -186,6 +200,8 @@ pub async fn serve_sync_request(
 
 /// The request's body, or `None` once it is longer than `cap`.
 async fn read_capped(request: &mut Request, cap: usize) -> worker::Result<Option<Vec<u8>>> {
+    // A header that does not parse is ignored rather than refused: it is only
+    // an early answer, and the streaming cap below still bounds the read.
     let declared = request
         .headers()
         .get("content-length")?

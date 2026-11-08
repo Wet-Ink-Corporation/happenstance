@@ -8,6 +8,7 @@
 //! The sync family is mounted at the bottom over it. `harness/workerd` runs the
 //! same family on a real object, and the round trip over a real socket.
 
+use core::cell::RefCell;
 use core::future::Future;
 
 use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
@@ -123,6 +124,43 @@ fn awkward_batch() -> PushBatch {
     PushBatch::new(vec![EventGroup::new(None, events)])
 }
 
+/// A [`RequestExchange`] that keeps a copy of the last request body it sent.
+struct Recording {
+    inner: RequestExchange,
+    sent: RefCell<Vec<u8>>,
+}
+
+impl Exchange for Recording {
+    type Error = RequestError;
+
+    async fn exchange(&self, route: Route, request: Vec<u8>) -> Result<Vec<u8>, Self::Error> {
+        // A copy, because the body is consumed by the request and the test
+        // sends the same bytes again.
+        self.sent.replace(request.clone());
+        self.inner.exchange(route, request).await
+    }
+}
+
+/// The bytes of a push of [`awkward_batch`], as a client sends them, proved
+/// valid by landing on a throwaway object first.
+async fn a_valid_push_body() -> Vec<u8> {
+    let (throwaway, _) = remote();
+    let limits = throwaway.exchange().far.limits();
+    let recording = RemoteSyncPeer::new(
+        Recording {
+            inner: throwaway.into_exchange(),
+            sent: RefCell::new(Vec::new()),
+        },
+        limits,
+    );
+    let ack = recording
+        .push(&awkward_batch())
+        .await
+        .expect("the push lands");
+    assert_eq!(ack.appended, 3);
+    recording.into_exchange().sent.into_inner()
+}
+
 /// The bytes go in through a request and come back out through a response,
 /// identical, with their identity and recorded time; and a replay lands
 /// nothing.
@@ -190,6 +228,37 @@ async fn a_body_over_the_cap_is_refused_as_split_before_the_store() {
             .contains("over the"),
         "the body says why"
     );
+    assert_eq!(log(&store).await, Vec::new());
+}
+
+/// A request that declares a `Content-Length` over the cap is refused as
+/// `Split` on the header alone, and the store holds nothing.
+///
+/// The body itself is a valid push of one small batch, well under the cap, so
+/// only the declared length can refuse it. Rejects a binding that drops the
+/// declared-length check and trusts the streaming cap alone, which would read
+/// this body, find it small, and land the batch with a 200.
+#[wasm_bindgen_test]
+async fn a_declared_length_over_the_cap_is_refused_before_the_body_is_read() {
+    let body = a_valid_push_body().await;
+    let (peer, store) = remote();
+    let far = &peer.exchange().far;
+    let cap = max_request_bytes(&far.limits());
+    let headers = worker::Headers::new();
+    headers
+        .set("content-length", &cap.saturating_add(1).to_string())
+        .expect("the header sets");
+    let mut init = RequestInit::new();
+    init.with_method(Method::Post)
+        .with_headers(headers)
+        .with_body(Some(Uint8Array::from(body.as_slice()).into()));
+    let request = Request::new_with_init("https://object/sync/push", &init).expect("a POST");
+
+    let response = serve_sync_request(far, Route::Push, request)
+        .await
+        .expect("an answer");
+
+    assert_eq!(response.status_code(), 413);
     assert_eq!(log(&store).await, Vec::new());
 }
 

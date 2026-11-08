@@ -1926,6 +1926,7 @@ jobs:
       # so its readiness wait is not spent compiling.
       - name: The SQLite round trip against local workerd
         if: always()
+        timeout-minutes: 10
         env:
           WRANGLER_SEND_METRICS: "false"
         run: |
@@ -2060,6 +2061,7 @@ jobs:
       # object emptied before and after it. Covered by the delete step's `if:`.
       - name: The SQLite round trip against a deployed Durable Object
         if: always() && steps.deploy.outputs.url != ''
+        timeout-minutes: 10
         run: |
           ./round-trip.sh deployed "${{ steps.deploy.outputs.url }}" \
             "deployed-${{ github.run_id }}-${{ github.run_attempt }}"

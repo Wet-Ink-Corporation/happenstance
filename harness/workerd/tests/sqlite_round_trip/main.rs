@@ -45,7 +45,7 @@ use happenstance_core::{
 use happenstance_sqlite::event_store::SqliteEventStore;
 use hyper::Method;
 
-use crate::http::{HttpError, HttpExchange, bounded};
+use crate::http::{HttpError, HttpExchange, RETRY_ATTEMPTS, bounded, refusal, retrying};
 
 /// The most pulls a drain makes before it decides the object will never say
 /// it is done: far above what these few groups need (H-13).
@@ -99,13 +99,16 @@ impl Harness {
 }
 
 /// Empties the object behind `peer`: the next sync request migrates a fresh
-/// log under a fresh identity.
+/// log under a fresh identity. Retried past a platform miss, and idempotent,
+/// so a retry after a cut request empties the same object again.
 async fn reset(peer: &RemoteSyncPeer<HttpExchange>) {
-    let answer = peer
-        .exchange()
-        .call(Method::GET, "/sync-reset", Vec::new())
-        .await
-        .expect("the object resets");
+    let answer = retrying(async || {
+        peer.exchange()
+            .call(Method::GET, "/sync-reset", Vec::new())
+            .await
+    })
+    .await
+    .expect("the object resets");
     assert_eq!(answer, b"reset");
 }
 
@@ -164,7 +167,9 @@ async fn drain(peer: &RemoteSyncPeer<HttpExchange>) -> Vec<EventGroup> {
     let mut groups = Vec::new();
     let mut from: Option<ResumeToken> = None;
     for _ in 0..MAX_PULLS {
-        let pulled = peer.pull(from.as_ref()).await.expect("a pull");
+        let pulled = retrying(async || peer.pull(from.as_ref()).await)
+            .await
+            .expect("a pull");
         groups.extend(pulled.batch.groups);
         if pulled.waiting == Waiting::Nothing {
             return groups;
@@ -265,9 +270,17 @@ async fn replaying_a_batch_twice_changes_nothing() {
         .collect();
     let batch = PushBatch::new(vec![EventGroup::new(None, events)]);
 
-    let first = peer.push(&batch).await.expect("the first push");
+    // Retried past a platform miss. A miss raised before the object runs
+    // leaves nothing behind; one that cut a push after it landed would turn
+    // the first ack into the replay's, and this test red, which is a loud
+    // failure rather than a silent pass.
+    let first = retrying(async || peer.push(&batch).await)
+        .await
+        .expect("the first push");
     let held = drain(&peer).await;
-    let replay = peer.push(&batch).await.expect("the replay");
+    let replay = retrying(async || peer.push(&batch).await)
+        .await
+        .expect("the replay");
 
     assert_eq!((first.appended, first.skipped), (3, 0));
     assert_eq!((replay.appended, replay.skipped), (0, 3));
@@ -399,4 +412,101 @@ async fn a_refused_connection_is_transient() {
         "{refused:?}"
     );
     assert_eq!(refused.class(), FailureClass::Transient);
+}
+
+/// Each answer `platform-miss.mjs` records Cloudflare giving while a fresh
+/// Worker lands is a platform miss, and a platform miss is `Transient`.
+///
+/// Rejects a client that reads the edge's 404 page through `class_for` alone,
+/// which would stop the deployed leg's edge on a propagation delay.
+#[test]
+fn a_platform_miss_reads_as_transient() {
+    let misses = [
+        (500, "Worker not found.\n"),
+        (
+            404,
+            "<html><body><h1>There is nothing here yet</h1></body></html>",
+        ),
+        (500, " Durable Object reset because its code was updated. "),
+        (
+            500,
+            "<html><span class=\"cf-error-code\">1104</span></html>",
+        ),
+    ];
+
+    for (status, body) in misses {
+        let error = refusal(status, body.to_owned());
+        assert!(matches!(error, HttpError::PlatformMiss { .. }), "{error:?}");
+        assert_eq!(error.class(), FailureClass::Transient, "{error:?}");
+    }
+}
+
+/// The object's own 404s are plain text, never one of the platform's pages,
+/// and stay `Stop`; so does a 404 that only mentions the page's words.
+///
+/// Rejects a recogniser that matches loosely (any 404, or the heading's text
+/// without its element), which would retry a missing route as if the Worker
+/// were still landing.
+#[test]
+fn the_objects_own_404_stays_stop() {
+    for body in [
+        "no sync route /sync/pul",
+        "no such rule",
+        "expected /do/<object>/<route>",
+        "There is nothing here yet",
+    ] {
+        let error = refusal(404, body.to_owned());
+        assert!(
+            matches!(error, HttpError::Refused { status: 404, .. }),
+            "{error:?}"
+        );
+        assert_eq!(error.class(), FailureClass::Stop, "{error:?}");
+    }
+}
+
+/// A `Transient` failure is tried again after a pause, up to
+/// [`RETRY_ATTEMPTS`]; the first answer that is not `Transient` ends it.
+///
+/// Rejects a retry that never retries, one that retries a `Stop` (a refused
+/// token would be sent three times), and one without a bound. On paused time,
+/// so the pauses read no wall clock.
+#[tokio::test(start_paused = true)]
+async fn retrying_retries_a_transient_failure_and_nothing_else() {
+    let attempts = core::cell::Cell::new(0_usize);
+    let transient = || HttpError::Timeout {
+        after: Duration::from_millis(1),
+    };
+
+    let recovered = retrying(async || {
+        attempts.set(attempts.get() + 1);
+        if attempts.get() < RETRY_ATTEMPTS {
+            Err(transient())
+        } else {
+            Ok("answered")
+        }
+    })
+    .await;
+    assert_eq!(recovered.expect("the last attempt answers"), "answered");
+    assert_eq!(attempts.get(), RETRY_ATTEMPTS);
+
+    attempts.set(0);
+    let gave_up: Result<(), HttpError> = retrying(async || {
+        attempts.set(attempts.get() + 1);
+        Err(transient())
+    })
+    .await;
+    assert!(
+        matches!(gave_up, Err(HttpError::Timeout { .. })),
+        "{gave_up:?}"
+    );
+    assert_eq!(attempts.get(), RETRY_ATTEMPTS, "bounded");
+
+    attempts.set(0);
+    let stopped: Result<(), HttpError> = retrying(async || {
+        attempts.set(attempts.get() + 1);
+        Err(refusal(403, "forbidden".to_owned()))
+    })
+    .await;
+    assert_eq!(stopped.expect_err("a refusal").class(), FailureClass::Stop);
+    assert_eq!(attempts.get(), 1, "a Stop is not retried");
 }
