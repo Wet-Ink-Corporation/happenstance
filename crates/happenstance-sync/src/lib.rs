@@ -56,16 +56,16 @@
 //! **Peer-to-peer.** A local-first application holds its own event store on the
 //! device and syncs with a shared instance — the motivating deployment being
 //! SQLite inside a Cloudflare Durable Object, reached through a Rust Worker.
-//! Both peers are happenstance instances; neither is privileged in the protocol,
-//! though a deployment may well designate one as authoritative.
+//! Both peers are happenstance instances, neither is privileged in the protocol,
+//! and each direction of their edge takes what it is sent, judged by nobody.
 //!
 //! **Hub and spoke.** Many devices sync to one authoritative store, and never to
 //! each other. This is at least as common as the symmetric case and it is not a
 //! special case of it: the hub sees every log, the spokes see one each, and the
-//! merge rule a spoke needs is not the merge rule the hub needs. Both must be
-//! expressible, which is a constraint on the port's shape and not merely on its
-//! documentation — and it is why
-//! [`Watermark`] is a version vector rather than a scalar.
+//! merge rule a spoke needs is not the merge rule the hub needs. The hub
+//! adjudicates what spokes push (SY-7); a spoke takes what the hub sends, unjudged,
+//! and keeps its own log when refused (SY-34). So a merge rule belongs to one
+//! *direction* of an edge (SY-10), never to a type (SY-9) or to the port.
 //!
 //! # Why this is a thin crate and not a hard one
 //!

@@ -130,6 +130,8 @@ pub mod ingest_rules {
     // SY-7's arrangement and the runner the rule plays, beside VT-36's for the
     // same reason.
     mod adjudication;
+    // SY-10's two topologies and the per-direction runner the rule plays.
+    mod topology;
 
     const SHIPPED: EventType = EventType::from_static("Shipped");
     const LOCAL: EventType = EventType::from_static("Local");
@@ -1319,6 +1321,64 @@ pub mod ingest_rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-10: the runner may give each direction of one edge its own merge
+    /// rule, and a store takes what each direction hands it, judging nothing
+    /// itself.
+    ///
+    /// Two walks over two stores each, both played by one runner that holds a
+    /// merge rule per direction, and each claim carries the guard it was
+    /// decided under: "no claim on this seat".
+    ///
+    /// * **Hub and spoke.** The hub holds another spoke's claim. The spoke
+    ///   appends its own, and its push is refused (SY-33), which writes
+    ///   nothing anywhere. It pulls the other claim, which its own log breaks
+    ///   the guard of, and takes it unjudged: one event, no reversal. Its
+    ///   push is re-offered and the hub adjudicates it, writing the claim
+    ///   with its reversal (SY-7). The spoke pulls the reversal. Both logs
+    ///   end with the two claims and the hub's one reversal, and the spoke
+    ///   still holds its own claim under its own identity (SY-34, E2E-45).
+    /// * **Peer to peer.** Each peer appends its own claim. Neither
+    ///   adjudicates the family on this edge, so each takes the other's claim
+    ///   unjudged. Both logs end with the two claims and no reversal.
+    ///
+    /// Every ingest's counts must be what the runner handed the store, and
+    /// every log is compared by type and bytes, never decoded (SY-35).
+    ///
+    /// # Rejects
+    ///
+    /// A store with the merge rule built in: it answers a group whose
+    /// travelling guard its log breaks with a reversal of its own, in the
+    /// same write. As a spoke it judges what the hub sends, which is SY-10's
+    /// falsifier, and on either topology it writes a reversal no direction
+    /// asked for. `tests/wrong_ingest_stores.rs` carries it.
+    ///
+    /// # Does not reject
+    ///
+    /// **A runner that forces one rule on both directions.** No runner in
+    /// `happenstance-sync` takes a merge rule yet, so the rule plays the
+    /// runner and always honours each direction's. That configuration, the
+    /// hub's rule on the spoke, is the clause's falsification test, in this
+    /// crate's own tests: it leaves no claim to the seat standing. The shipped
+    /// `Edge`'s half is checked in `happenstance-sync`'s
+    /// `tests/runner/directions.rs`: its pull never adjudicates, and the far
+    /// side's push handler can.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-10 if the fixture gives both stores of an edge one
+    /// identity, if a store cannot say who it is, refuses its own claim or an
+    /// ingest, miscounts one, or ends holding other facts than its edge's
+    /// rules leave, or without its own claim.
+    pub async fn directional_merge_rules_compose<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        let hub = topology::hub_and_spoke(&open, topology::HUB_AND_SPOKE).await?;
+        topology::judge(&hub, &topology::hub_and_spoke_facts()).await?;
+        let peers = topology::peer_to_peer(&open, topology::PEER_TO_PEER).await?;
+        topology::judge(&peers, &topology::peer_to_peer_facts()).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What a refused or skipped ingest must leave as it found it.
     #[derive(Debug, PartialEq)]
     struct Observed {
@@ -1619,6 +1679,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- Only the assigned adjudicator compensates (SY-7) ------------
             only_the_adjudicator_compensates,
+
+            // --- Each direction of an edge keeps its own merge rule (SY-10) -
+            directional_merge_rules_compose,
         }
     };
 }
