@@ -978,12 +978,12 @@ and the contract MUST NOT state any relationship between `RecordedAt` order and
 unchanged through the phase-13 envelope (ADR-0066 §2). The frozen-clock falsifier
 this marker used to name has fired on wasm32 with no effect, and is retired]`
 `Rule:` `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`;
+the ingest half by `happenstance-sync-testkit`'s `ingest_preserves_the_recorded_time`;
 the "not an ordering key" half by §5's new
 `convergent_projection_is_interleaving_independent` (SY-20), which fails any fold
-that reads either the position or the time. Neither of the first two rules may
-compare two `RecordedAt` values in either direction, compare a `RecordedAt`
-against a `SequencePosition`, or check a value for plausibility against the
-harness's own clock — which CF-33 forbids independently.
+that reads either the position or the time. None of the first three rules may order
+two `RecordedAt` values, compare one against a `SequencePosition`, or check one for
+plausibility against the harness's own clock — which CF-33 forbids independently.
 `Cases:` E2E-41, E2E-43
 `Rejects:` a receiving store that overwrites an ingested event's `RecordedAt`
 with its own arrival time. That destroys the only audit answer the field exists
@@ -8039,8 +8039,11 @@ show either that a fact it must hold in two slices cannot be written to two
 stores, or that its adjudicator must see across slices. A firing is answered by
 scoped replication as an additive opt-in with its own ADR, never by changing what
 a whole-log peer does.]`
-Rule: `round_trip_preserves_the_whole_log` (new, `happenstance-sync-testkit`) —
-SY-28's rule, which rejects a peer that withholds the events matching a filter.
+Rule: `round_trip_preserves_the_whole_log` (`happenstance-sync-testkit`, #140) —
+SY-28's rule, which rejects a peer that withholds the events a type or tag filter matches,
+among the types and tags its own log carries, and compares recorded time too (VT-9):
+`tests/wrong_scopes.rs` withholds a slice by tag, by type, and by type and tag,
+and each fails this rule and no other.
 Cases: E2E-33, E2E-36, E2E-44, E2E-46.
 
 Decided by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md). The clause read *"Whether
@@ -8081,7 +8084,11 @@ compare positions.**
 scoped replication arrives as an opt-in, a scoped edge needs its own round-trip
 rule over the scope its peers agreed. Falsification test: SY-27's. A firing adds
 a rule for the opt-in and leaves this one binding on whole-log edges.]`
-Rule: `round_trip_preserves_the_whole_log` (new, `happenstance-sync-testkit`).
+Rule: `round_trip_preserves_the_whole_log` (`happenstance-sync-testkit`, #140) —
+the rule plays one side, pushes a log spanning two origins, three types, two
+regions, a pricing slice in a two-event group, an untagged event and metadata,
+pulls to an empty batch, and holds every `EventId` to its push byte for byte. It
+compares no position, and its origin positions leave gaps.
 Cases: E2E-44, E2E-46.
 
 Decided with SY-27 by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md). The clause
@@ -10349,7 +10356,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-6 | PROVISIONAL | `reopened_store_does_not_reissue_an_event_id`, `restored_peer_does_not_reissue… | E2E-34, E2E-42 |
 | VT-7 | FROZEN | `event_id_is_not_matchable_by_query`, `contains_event_id_reports_membership` | E2E-32, E2E-34, E2E-36 |
 | VT-8 | FROZEN | `event_ids_are_unique_within_a_store` | E2E-33, E2E-36 |
-| VT-9 | PROVISIONAL | `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`, `convergen… | E2E-41, E2E-43 |
+| VT-9 | PROVISIONAL | `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`, `ingest_pr… | E2E-41, E2E-43 |
 | VT-10 | FROZEN | the spike's unit tests in `crates/happenstance-sqlite/src/ingest_spike.rs` unt… | E2E-33, E2E-35, E2E-36, E2E-39, E2E-42 |
 | VT-11 | FROZEN | `positions_are_unique`, `positions_are_strictly_monotonic`, `positions_are_uni… | E2E-10, E2E-46 |
 | VT-12 | NON-NORMATIVE | *(none — see clause)* | E2E-01, E2E-02, E2E-08 |
@@ -10517,8 +10524,8 @@ between them because its *shape* does not wait on a transport but its
 | SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-25 | FROZEN | `forwarding_order_is_arrival_order` | E2E-42 |
 | SY-26 | FROZEN | `causality_is_expressible_without_a_contract_change` † | E2E-42, E2E-41 |
-| SY-27 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-33, E2E-36, E2E-44, E2E-46 |
-| SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-44, E2E-46 |
+| SY-27 | PROVISIONAL | `round_trip_preserves_the_whole_log` | E2E-33, E2E-36, E2E-44, E2E-46 |
+| SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` | E2E-44, E2E-46 |
 | SY-29 | PROVISIONAL | `ingest_refuses_an_unbounded_peer_query` † | E2E-40 |
 | SY-30 | PROVISIONAL | `push_envelope_preserves_group_boundaries` †, `ingest_group_is_atomic_under_a_… | E2E-35, E2E-39 |
 | SY-31 | PROVISIONAL | `watermark_advances_transactionally_with_a_read_model` †, `ack_never_confirms_… | E2E-33, E2E-44 |

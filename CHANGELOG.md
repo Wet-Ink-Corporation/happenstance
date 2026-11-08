@@ -107,6 +107,36 @@ not the same as what a user needed to be told.
   fixture that inherits `REOPEN`'s default reason, so a projection fixture
   written against `0.5.1` states `REOPEN` — declined with its own reason, or
   supported with an override of `reopen` that answers `Reopened::Discarded`.
+- `happenstance-sync-testkit`: a sync conformance rule,
+  **`round_trip_preserves_the_whole_log`** (SY-28, SY-27, #140). The defect it
+  detects is a peer that replicates a slice: it stores and acknowledges every
+  push, and withholds from its counterpart the events a type or tag filter
+  matches, by tag, by type, or both (a filter on something the rule's log never
+  carries passes) — the scoped hub, or the filtered spoke, that ADR-0027
+  kept off the 1.0 port. Every other sync rule passed such a peer. The rule
+  pushes a log spanning origins, types, regions, an untagged event and
+  metadata, pulls it back to an empty batch, and holds every `EventId` to its
+  push byte for byte, comparing no position. A new rule is a minor of this
+  crate, and it can turn a passing peer adapter's CI red.
+- `happenstance-sync-testkit`: an ingest rule of VT-9's own,
+  `ingest_preserves_the_recorded_time` (#134). After one local append, it
+  ingests two groups whose events were recorded before 1970, off a whole
+  second, earlier than the event their origin numbered before them, and in
+  2200, and
+  requires each held event to carry exactly the `RecordedAt` its origin sent.
+  It compares a held time with the sent one and nothing else: never two held
+  times, never a time with a position, never the harness's clock. It fails a
+  store that restamps an ingested event with its arrival time, one that keeps
+  whole seconds, one that holds a time before 1970 as the epoch, one that
+  holds recorded times non-decreasing with position, one that binds one
+  time per group, and one that clamps a future time to its own clock;
+  `tests/wrong_ingest_stores.rs` carries all six, each
+  failing this rule alone. `ingest_preserves_origin_identity` no longer
+  compares the recorded time, which was VT-9's half of it, so the restamping
+  store fails VT-9's rule rather than VT-5's. Every adapter that mounts
+  `ingest_store_conformance!` runs it with no edit. **This can turn a passing
+  ingest adapter's CI red** without a code change in the adapter, as any new
+  rule can.
 
 - `happenstance-sync-testkit`: two rules (#136). `only_the_adjudicator_compensates`
   (SY-7) joins the ingest family: two stores take one conflicting pair in

@@ -44,9 +44,26 @@ enum Mistake {
     /// own identity at the position it took, keeping the origin's only for
     /// dedupe and the watermark. Everything a runner counts still adds up.
     RemintsOnIngest,
-    /// VT-9's, through VT-5's rule: stamp an ingested event with the arrival
-    /// time instead of the origin's.
+    /// VT-9's, the one its `Rejects:` names: stamp an ingested event with the
+    /// arrival time instead of the origin's.
     RestampsRecordedAt,
+    /// VT-9's second: keep the origin's time in whole seconds, as a store does
+    /// that writes it through a seconds-resolution column or `strftime('%s')`.
+    TruncatesRecordedAtToSeconds,
+    /// VT-9's third: keep the time in an unsigned column, so one recorded
+    /// before 1970 is held as the epoch. `happenstance-sync`'s placeholder
+    /// `RecordedAt` was a `u64` until ADR-0073.
+    ClampsRecordedAtAtTheEpoch,
+    /// VT-9's fourth: hold recorded times non-decreasing with position, by
+    /// raising an ingested time to the one before it. The ordering relation
+    /// VT-9 forbids the contract to state, enforced by a store.
+    KeepsRecordedAtMonotonic,
+    /// VT-9's fifth: bind one recorded time per group, its head's, as a
+    /// multi-row insert does that binds the value once.
+    StampsEachGroupWithItsHeadsTime,
+    /// VT-9's sixth: refuse to hold a time from the future, and clamp any
+    /// foreign time later than its own clock, [`MUTANT_NOW`], to that clock.
+    ClampsRecordedAtToItsClock,
     /// SY-5's: an order-preserving merge. An ingested event is inserted where
     /// its origin numbered it and every later row is renumbered, so an event
     /// lands below a checkpoint a projection already read past.
@@ -156,6 +173,13 @@ const PLACEHOLDER: StoreId = StoreId::from_bytes([0; 16]);
 
 /// The time this store stamps everything it writes itself.
 const ARRIVAL: RecordedAt = RecordedAt::from_millis(1_234_567_890_123);
+
+/// What [`Mistake::ClampsRecordedAtToItsClock`] reads as now: 2027-01-15, a
+/// plausible clock, later than every past time any rule sends and earlier
+/// than VT-9's far-future one. Not [`ARRIVAL`], which every ordinary time any
+/// rule sends is already later than, so a clamp there would not need the
+/// far-future event to be seen.
+const MUTANT_NOW: i64 = 1_800_000_000_000;
 
 /// What a wrong store fails with.
 #[derive(Debug)]
@@ -400,12 +424,18 @@ impl WrongIngestStore {
             let committed =
                 (self.mistake == Mistake::KeepsGroupsBeforeTheClaim).then(|| working.clone());
             let landed_before = counts.appended;
+            // The recorded time of the group's head, which the multi-row
+            // insert of `StampsEachGroupWithItsHeadsTime` binds once.
+            let group_head = group.events.first().map(|head| head.recorded_at);
             for (event_index, shipped) in group.events.iter().enumerate() {
                 let head_of_batch = group_index == 0 && event_index == 0;
                 match self.verdict(&held, &working, shipped, head_of_batch) {
                     Verdict::Skip => counts.skipped += 1,
                     Verdict::Land => {
-                        self.land(&mut working, shipped);
+                        // Inside the loop the group has a head, so the
+                        // fallback is never taken.
+                        let heads_time = group_head.unwrap_or(shipped.recorded_at);
+                        self.land(&mut working, shipped, heads_time);
                         counts.appended += 1;
                     }
                     Verdict::Refuse => {
@@ -470,16 +500,14 @@ impl WrongIngestStore {
     }
 
     /// Writes one foreign event at the tail, or where the mistake puts it.
-    fn land(&self, working: &mut Vec<Row>, shipped: &ReplicatedEvent) {
+    /// `group_head` is the recorded time of its group's first event.
+    fn land(&self, working: &mut Vec<Row>, shipped: &ReplicatedEvent, group_head: RecordedAt) {
         let position = next_position(working);
         let stored_id = match self.mistake {
             Mistake::RemintsOnIngest => EventId::new(self.own, position),
             _ => shipped.id,
         };
-        let recorded_at = match self.mistake {
-            Mistake::RestampsRecordedAt => ARRIVAL,
-            _ => shipped.recorded_at,
-        };
+        let recorded_at = self.kept_time(working, shipped.recorded_at, group_head);
         let row = Row {
             stored: SequencedEvent::new(position, stored_id, recorded_at, shipped.event.clone()),
             origin: shipped.id,
@@ -488,6 +516,28 @@ impl WrongIngestStore {
             merge_at_origin_position(working, row);
         } else {
             working.push(row);
+        }
+    }
+
+    /// The recorded time this store keeps for an ingested event its origin
+    /// recorded at `sent`: that time, or what the mistake makes of it.
+    fn kept_time(&self, working: &[Row], sent: RecordedAt, group_head: RecordedAt) -> RecordedAt {
+        let millis = sent.as_millis();
+        match self.mistake {
+            Mistake::RestampsRecordedAt => ARRIVAL,
+            // Toward zero, as an integer division in SQL truncates.
+            Mistake::TruncatesRecordedAtToSeconds => {
+                RecordedAt::from_millis(millis - millis % 1_000)
+            }
+            Mistake::ClampsRecordedAtAtTheEpoch => RecordedAt::from_millis(millis.max(0)),
+            // `RecordedAt` is deliberately not `Ord` (VT-9), so the mistake
+            // compares the raw milliseconds, as a store's SQL would.
+            Mistake::KeepsRecordedAtMonotonic => working.last().map_or(sent, |before| {
+                RecordedAt::from_millis(millis.max(before.stored.recorded_at.as_millis()))
+            }),
+            Mistake::StampsEachGroupWithItsHeadsTime => group_head,
+            Mistake::ClampsRecordedAtToItsClock => RecordedAt::from_millis(millis.min(MUTANT_NOW)),
+            _ => sent,
         }
     }
 
@@ -855,6 +905,7 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
     let all = outcomes(async || WrongFixture::new(Mistake::CannotReadItsIdentity));
     let clauses = [
         ("ingest_preserves_origin_identity", "VT-5"),
+        ("ingest_preserves_the_recorded_time", "VT-9"),
         ("ingested_events_land_above_the_local_head", "SY-5"),
         ("dedupe_reaches_identity_without_decoding", "SY-12"),
         ("an_unheld_own_identity_stops_the_ingest", "SY-38"),
@@ -895,11 +946,63 @@ fn ingest_preserves_origin_identity_fails_a_store_that_remints_on_ingest() {
 }
 
 #[test]
-fn ingest_preserves_origin_identity_fails_a_store_that_restamps_recorded_at() {
+fn ingest_preserves_the_recorded_time_fails_a_store_that_restamps_recorded_at() {
     fails_exactly(
         &verdicts(async || WrongFixture::new(Mistake::RestampsRecordedAt)),
-        "ingest_preserves_origin_identity",
-        "VT-5",
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// Only an event recorded off a whole second sees it, which is why the rule
+/// sends none on one.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_truncates_to_seconds() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::TruncatesRecordedAtToSeconds)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// Only the event recorded before 1970 sees it.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_clamps_at_the_epoch() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::ClampsRecordedAtAtTheEpoch)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// The event its origin recorded earlier than the one it numbered before it
+/// sees it, whatever the store stamped its own local event with.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_keeps_recorded_at_monotonic() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::KeepsRecordedAtMonotonic)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// Only the event recorded in the far future sees it.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_clamps_to_its_clock() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::ClampsRecordedAtToItsClock)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// Only a group of more than one event, each recorded at its own time, sees it.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_stamps_each_group_with_its_heads_time() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::StampsEachGroupWithItsHeadsTime)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
     );
 }
 
