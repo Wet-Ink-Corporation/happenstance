@@ -43,11 +43,13 @@
 //! | [`every_refusal_states_its_class`](rules::every_refusal_states_its_class) | SY-36 | a peer whose errors all state one failure class, whatever the failure |
 //! | [`nothing_waiting_means_the_next_pull_is_empty`](rules::nothing_waiting_means_the_next_pull_is_empty) | SY-37 | a peer that says nothing is waiting when its page ran out, not its log |
 //! | [`ack_never_confirms_a_non_durable_event`](rules::ack_never_confirms_a_non_durable_event) | SY-31 | a peer that confirms an event before it is durable |
+//! | [`round_trip_preserves_the_whole_log`](rules::round_trip_preserves_the_whole_log) | SY-28, SY-27 | a peer that withholds from its counterpart the events a filter matches |
 //!
 //! Each rule names a wrong implementation, and that implementation lives in
 //! this crate's `tests/wrong_peers.rs` — SY-18's in `tests/wrong_limits.rs`,
-//! over [`KvCappedFixture`], and its batch rule's in `tests/wrong_peers.rs` —
-//! where the rule is shown to fail it. A rule no peer can fail is decorative.
+//! over [`KvCappedFixture`], its batch rule's in `tests/wrong_peers.rs`, and
+//! SY-28's in `tests/wrong_scopes.rs` — where the rule is shown to fail it. A
+//! rule no peer can fail is decorative.
 //!
 //! **No rule decodes a payload** (SY-35), and **no rule in [`rules`] holds two
 //! peers** (SY-8). [`rules`] says how the rules keep both. The model family

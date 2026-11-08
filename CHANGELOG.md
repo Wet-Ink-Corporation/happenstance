@@ -107,6 +107,16 @@ not the same as what a user needed to be told.
   fixture that inherits `REOPEN`'s default reason, so a projection fixture
   written against `0.5.1` states `REOPEN` — declined with its own reason, or
   supported with an override of `reopen` that answers `Reopened::Discarded`.
+- `happenstance-sync-testkit`: a sync conformance rule,
+  **`round_trip_preserves_the_whole_log`** (SY-28, SY-27, #140). The defect it
+  detects is a peer that replicates a slice: it stores and acknowledges every
+  push, and withholds from its counterpart the events a filter matches, by
+  tag, by type, or both — the scoped hub, or the filtered spoke, that ADR-0027
+  kept off the 1.0 port. Every other sync rule passed such a peer. The rule
+  pushes a log spanning origins, types, regions, an untagged event and
+  metadata, pulls it back to an empty batch, and holds every `EventId` to its
+  push byte for byte, comparing no position. A new rule is a minor of this
+  crate, and it can turn a passing peer adapter's CI red.
 
 ### Changed
 

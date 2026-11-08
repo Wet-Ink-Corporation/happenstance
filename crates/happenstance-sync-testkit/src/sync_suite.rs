@@ -135,6 +135,8 @@ pub mod rules {
     use crate::violation::{Violation, ensure};
     use crate::{MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, SyncFixture};
 
+    mod whole_log;
+
     /// The most pulls a rule makes before it decides the peer will never say
     /// it has caught up. Far above what two or three tiny groups need under the
     /// minimum conformant limits; its job is to turn a peer that loops into a
@@ -875,6 +877,63 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-28, and SY-27 beneath it: a round trip preserves the whole log. Once
+    /// the two sides have pushed and pulled to quiescence, each holds the same
+    /// set of `EventId`s, each event with byte-identical type, tags, data and
+    /// metadata.
+    ///
+    /// The rule plays one side (SY-8). It pushes a log spread over both axes
+    /// a filter on `Query`'s surface cuts along, types and tags — two origins,
+    /// three event types, two regions, a confidential pricing slice in a
+    /// two-event group, an untagged event and one with metadata — pulls from
+    /// the start until the peer hands back an empty batch, and holds what came
+    /// back to what went: every identity, every byte. It compares no position
+    /// (SY-19): an identity is the origin's, compared whole, and the origin
+    /// positions leave gaps, as a conformant origin may.
+    ///
+    /// # Rejects
+    ///
+    /// A peer that replicates a slice: one that withholds from its
+    /// counterpart the events a filter matches, the scoped hub or filtered
+    /// spoke ADR-0027 kept off the 1.0 port. It stores and acknowledges every
+    /// push truthfully, so no other rule sees it. `tests/wrong_scopes.rs`
+    /// carries it with three filters, by tag, by type, and by type and tag.
+    ///
+    /// # Does not reject
+    ///
+    /// An identity the rule never pushed: on a far side that holds more, the
+    /// rule's side would hold it too once it had pulled, and the two sets would
+    /// still agree. Nor a peer that hands an event back twice, byte-identical:
+    /// redelivery is SY-11's, and the model family judges it.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-28 if the peer refuses the push or a pull, keeps
+    /// handing back groups past the suite's pull bound, withholds a pushed
+    /// event, hands one back changed, or hands one identity back as two
+    /// different events.
+    pub async fn round_trip_preserves_the_whole_log<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-28";
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+        let log = whole_log::sliced_log(CLAUSE)?;
+        peer.push(&log).await.map_err(|error| {
+            Violation::new(
+                CLAUSE,
+                format!("the peer refused a batch well inside the minimum limits: {error}"),
+            )
+        })?;
+        let handed_back = pull_everything(&peer, CLAUSE).await?;
+        whole_log::holds_the_whole_log(
+            &log,
+            handed_back.into_iter().flat_map(|group| group.events),
+            CLAUSE,
+        )?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What one log SY-37's rule wrote showed it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Log {
@@ -1465,6 +1524,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- An ack confirms only what is durable (SY-31) ---------------
             ack_never_confirms_a_non_durable_event,
+
+            // --- A round trip preserves the whole log (SY-27, SY-28) --------
+            round_trip_preserves_the_whole_log,
         }
     };
 }

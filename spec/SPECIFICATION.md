@@ -8020,8 +8020,10 @@ show either that a fact it must hold in two slices cannot be written to two
 stores, or that its adjudicator must see across slices. A firing is answered by
 scoped replication as an additive opt-in with its own ADR, never by changing what
 a whole-log peer does.]`
-Rule: `round_trip_preserves_the_whole_log` (new, `happenstance-sync-testkit`) —
-SY-28's rule, which rejects a peer that withholds the events matching a filter.
+Rule: `round_trip_preserves_the_whole_log` (`happenstance-sync-testkit`, #140) —
+SY-28's rule, which rejects a peer that withholds the events matching a filter:
+`tests/wrong_scopes.rs` withholds a slice by tag, by type, and by type and tag,
+and each fails this rule and no other.
 Cases: E2E-33, E2E-36, E2E-44, E2E-46.
 
 Decided by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md). The clause read *"Whether
@@ -8062,7 +8064,11 @@ compare positions.**
 scoped replication arrives as an opt-in, a scoped edge needs its own round-trip
 rule over the scope its peers agreed. Falsification test: SY-27's. A firing adds
 a rule for the opt-in and leaves this one binding on whole-log edges.]`
-Rule: `round_trip_preserves_the_whole_log` (new, `happenstance-sync-testkit`).
+Rule: `round_trip_preserves_the_whole_log` (`happenstance-sync-testkit`, #140) —
+the rule plays one side, pushes a log spanning two origins, three types, two
+regions, a pricing slice in a two-event group, an untagged event and metadata,
+pulls to an empty batch, and holds every `EventId` to its push byte for byte. It
+compares no position, and its origin positions leave gaps.
 Cases: E2E-44, E2E-46.
 
 Decided with SY-27 by [ADR-0027](../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md). The clause
@@ -10498,8 +10504,8 @@ between them because its *shape* does not wait on a transport but its
 | SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-25 | FROZEN | `forwarding_order_is_arrival_order` | E2E-42 |
 | SY-26 | FROZEN | `causality_is_expressible_without_a_contract_change` † | E2E-42, E2E-41 |
-| SY-27 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-33, E2E-36, E2E-44, E2E-46 |
-| SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` † | E2E-44, E2E-46 |
+| SY-27 | PROVISIONAL | `round_trip_preserves_the_whole_log` | E2E-33, E2E-36, E2E-44, E2E-46 |
+| SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` | E2E-44, E2E-46 |
 | SY-29 | PROVISIONAL | `ingest_refuses_an_unbounded_peer_query` † | E2E-40 |
 | SY-30 | PROVISIONAL | `push_envelope_preserves_group_boundaries` †, `ingest_group_is_atomic_under_a_… | E2E-35, E2E-39 |
 | SY-31 | PROVISIONAL | `watermark_advances_transactionally_with_a_read_model` †, `ack_never_confirms_… | E2E-33, E2E-44 |
