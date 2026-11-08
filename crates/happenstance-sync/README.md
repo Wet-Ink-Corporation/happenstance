@@ -24,7 +24,7 @@ with programs you can run.
 > - **a network transport**: `StoreSyncPeer`, `serve_sync` and
 >   `RemoteSyncPeer` are a network peer's transport-free halves (#117), and
 >   no crate yet supplies an `Exchange` over a real network. Wrapped in
->   `SendPeer`, either half over `Send` parts is a `SendSyncPeer`, so code
+>   `SendPeer`, either half over `Send + Sync` parts is a `SendSyncPeer`, so code
 >   that spawns from a generic function takes it (#421).
 >
 > A `[FROZEN]` `SY` clause of the

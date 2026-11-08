@@ -52,7 +52,7 @@ use crate::write_group::SendWriteGroupStore;
 /// # fn main() {
 /// use happenstance_sync::{SendPeer, SendSyncPeer, StoreSyncPeer};
 ///
-/// // Generic code that spawns knows the peer by the `Send` flavour only.
+/// // Generic code that may spawn knows the peer by the `Send` flavour only.
 /// fn spawnable<P: SendSyncPeer + Sync>(_peer: &P) {}
 ///
 /// let hub = Shared(std::sync::Arc::new(happenstance_sync::MemoryIngestStore::new()));
