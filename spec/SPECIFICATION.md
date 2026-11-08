@@ -978,12 +978,12 @@ and the contract MUST NOT state any relationship between `RecordedAt` order and
 unchanged through the phase-13 envelope (ADR-0066 §2). The frozen-clock falsifier
 this marker used to name has fired on wasm32 with no effect, and is retired]`
 `Rule:` `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`;
+the ingest half by `happenstance-sync-testkit`'s `ingest_preserves_the_recorded_time`;
 the "not an ordering key" half by §5's new
 `convergent_projection_is_interleaving_independent` (SY-20), which fails any fold
-that reads either the position or the time. Neither of the first two rules may
-compare two `RecordedAt` values in either direction, compare a `RecordedAt`
-against a `SequencePosition`, or check a value for plausibility against the
-harness's own clock — which CF-33 forbids independently.
+that reads either the position or the time. None of the first three rules may order
+two `RecordedAt` values, compare one against a `SequencePosition`, or check one for
+plausibility against the harness's own clock — which CF-33 forbids independently.
 `Cases:` E2E-41, E2E-43
 `Rejects:` a receiving store that overwrites an ingested event's `RecordedAt`
 with its own arrival time. That destroys the only audit answer the field exists
@@ -10337,7 +10337,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-6 | PROVISIONAL | `reopened_store_does_not_reissue_an_event_id`, `restored_peer_does_not_reissue… | E2E-34, E2E-42 |
 | VT-7 | FROZEN | `event_id_is_not_matchable_by_query`, `contains_event_id_reports_membership` | E2E-32, E2E-34, E2E-36 |
 | VT-8 | FROZEN | `event_ids_are_unique_within_a_store` | E2E-33, E2E-36 |
-| VT-9 | PROVISIONAL | `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`, `convergen… | E2E-41, E2E-43 |
+| VT-9 | PROVISIONAL | `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`, `ingest_pr… | E2E-41, E2E-43 |
 | VT-10 | FROZEN | the spike's unit tests in `crates/happenstance-sqlite/src/ingest_spike.rs` unt… | E2E-33, E2E-35, E2E-36, E2E-39, E2E-42 |
 | VT-11 | FROZEN | `positions_are_unique`, `positions_are_strictly_monotonic`, `positions_are_uni… | E2E-10, E2E-46 |
 | VT-12 | NON-NORMATIVE | *(none — see clause)* | E2E-01, E2E-02, E2E-08 |
