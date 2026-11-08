@@ -110,14 +110,16 @@ not the same as what a user needed to be told.
 - `happenstance-sync-testkit`: an ingest rule of VT-9's own,
   `ingest_preserves_the_recorded_time` (#134). After one local append, it
   ingests two groups whose events were recorded before 1970, off a whole
-  second, and earlier than the event their origin numbered before them, and
+  second, earlier than the event their origin numbered before them, and in
+  2200, and
   requires each held event to carry exactly the `RecordedAt` its origin sent.
   It compares a held time with the sent one and nothing else: never two held
   times, never a time with a position, never the harness's clock. It fails a
   store that restamps an ingested event with its arrival time, one that keeps
   whole seconds, one that holds a time before 1970 as the epoch, one that
-  holds recorded times non-decreasing with position, and one that binds one
-  time per group; `tests/wrong_ingest_stores.rs` carries all five, each
+  holds recorded times non-decreasing with position, one that binds one
+  time per group, and one that clamps a future time to its own clock;
+  `tests/wrong_ingest_stores.rs` carries all six, each
   failing this rule alone. `ingest_preserves_origin_identity` no longer
   compares the recorded time, which was VT-9's half of it, so the restamping
   store fails VT-9's rule rather than VT-5's. Every adapter that mounts

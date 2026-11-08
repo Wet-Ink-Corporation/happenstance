@@ -73,3 +73,11 @@ carried, unchanged. Named wrong implementations in
   rule `Ran`; the faithful store `Ran` on all eight.
 - Mounts: memory, local, memory wasm32, SQLite spike, Postgres live, Cloudflare
   `--lib` on wasm32 (Node 24) all pass the new rule.
+- Review F1 red: added `ClampsRecordedAtToItsClock` (clamps above its clock,
+  2027-01-15, to it) and its test before the far-future event existed;
+  `ingest_preserves_the_recorded_time_fails_a_store_that_clamps_to_its_clock`
+  failed at `wrong_ingest_stores.rs:848`: "`ingest_preserves_the_recorded_time`
+  must reject its mutant" (the rule returned `Ran`). Green after adding origin
+  position 9 at 7,258,118,400,123 (2200): 30/30; Postgres live and Cloudflare
+  wasm32 still pass.
+- Review F2: `group_head` computed once per group, before the inner loop.

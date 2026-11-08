@@ -236,8 +236,9 @@ pub mod ingest_rules {
     /// One local event first, stamped by the store with whatever its clock
     /// reads. Then one call of two groups from one origin: three events at
     /// origin positions 2, 3 and 5, recorded before 1970, off a whole second,
-    /// and earlier than the event the origin numbered before it; and one at
-    /// position 8. Read back, each sent event is held with the recorded time
+    /// and earlier than the event the origin numbered before it; and two at
+    /// positions 8 and 9, the second recorded in 2200, later than any store's
+    /// clock will read. Read back, each sent event is held with the recorded time
     /// it was sent with. Events are found by their distinct bytes, never by
     /// identity, so a store that re-mints fails VT-5's rule and not this one.
     ///
@@ -250,9 +251,10 @@ pub mod ingest_rules {
     /// A store that restamps an ingested event with its arrival time, the one
     /// VT-9's `Rejects:` names; one that keeps whole seconds; one that keeps
     /// the time unsigned and holds a time before 1970 as the epoch; one that
-    /// holds recorded times non-decreasing with position; and one that binds
-    /// one time per group, its head's. `tests/wrong_ingest_stores.rs` carries
-    /// all five.
+    /// holds recorded times non-decreasing with position; one that binds
+    /// one time per group, its head's; and one that clamps a time from the
+    /// future to its own clock. `tests/wrong_ingest_stores.rs` carries all
+    /// six.
     ///
     /// # Errors
     ///
@@ -284,13 +286,23 @@ pub mod ingest_rules {
                 CLAUSE,
             )?,
         ];
-        let second = [shipped(
-            RECORDED_ORIGIN,
-            8,
-            1_650_000_000_789,
-            b"vt9-second-group",
-            CLAUSE,
-        )?];
+        let second = [
+            shipped(
+                RECORDED_ORIGIN,
+                8,
+                1_650_000_000_789,
+                b"vt9-second-group",
+                CLAUSE,
+            )?,
+            // 2200-01-01, inside the ±2^53 a JavaScript number carries exactly.
+            shipped(
+                RECORDED_ORIGIN,
+                9,
+                7_258_118_400_123,
+                b"vt9-far-future",
+                CLAUSE,
+            )?,
+        ];
         let groups = [
             IngestGroup::new(&first, &[]),
             IngestGroup::new(&second, &[]),
@@ -298,7 +310,7 @@ pub mod ingest_rules {
 
         let ingested = ingest(&store, &groups, CLAUSE).await?;
 
-        ensure_counts(ingested, (4, 0, 0), "four new foreign events", CLAUSE)?;
+        ensure_counts(ingested, (5, 0, 0), "five new foreign events", CLAUSE)?;
         let log = read_all(&store, CLAUSE).await?;
         for sent in first.iter().chain(&second) {
             let held = held_once(&log, &sent.event, CLAUSE)?;

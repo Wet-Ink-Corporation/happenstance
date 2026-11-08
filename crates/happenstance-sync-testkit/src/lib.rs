@@ -107,7 +107,7 @@
 //! | Rule | Clause | What it rejects |
 //! |---|---|---|
 //! | [`ingest_preserves_origin_identity`](ingest_rules::ingest_preserves_origin_identity) | VT-5 | a store that re-mints an ingested event |
-//! | [`ingest_preserves_the_recorded_time`](ingest_rules::ingest_preserves_the_recorded_time) | VT-9 | a store that restamps an ingested event with its arrival time, keeps whole seconds, holds a time before 1970 as the epoch, holds times non-decreasing with position, or binds one time per group |
+//! | [`ingest_preserves_the_recorded_time`](ingest_rules::ingest_preserves_the_recorded_time) | VT-9 | a store that restamps an ingested event with its arrival time, keeps whole seconds, holds a time before 1970 as the epoch, holds times non-decreasing with position, binds one time per group, or clamps a future time to its own clock |
 //! | [`ingested_events_land_above_the_local_head`](ingest_rules::ingested_events_land_above_the_local_head) | SY-5 | an order-preserving merge, which hides an event below a checkpoint already read past |
 //! | [`dedupe_reaches_identity_without_decoding`](ingest_rules::dedupe_reaches_identity_without_decoding) | SY-12, SY-11 | content-keyed dedupe, and a compensation written again on redelivery |
 //! | [`an_unheld_own_identity_stops_the_ingest`](ingest_rules::an_unheld_own_identity_stops_the_ingest) | SY-38 | a dropped claim, a check of the batch's head only, a group-by-group commit, a claim hidden by the call's own compensation, and a refused held echo |

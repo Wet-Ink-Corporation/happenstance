@@ -60,6 +60,9 @@ enum Mistake {
     /// VT-9's fifth: bind one recorded time per group, its head's, as a
     /// multi-row insert does that binds the value once.
     StampsEachGroupWithItsHeadsTime,
+    /// VT-9's sixth: refuse to hold a time from the future, and clamp any
+    /// foreign time later than its own clock, [`MUTANT_NOW`], to that clock.
+    ClampsRecordedAtToItsClock,
     /// SY-5's: an order-preserving merge. An ingested event is inserted where
     /// its origin numbered it and every later row is renumbered, so an event
     /// lands below a checkpoint a projection already read past.
@@ -157,6 +160,13 @@ const WRONG_MAX_TAGS_PER_BATCH: usize = 64;
 
 /// The time this store stamps everything it writes itself.
 const ARRIVAL: RecordedAt = RecordedAt::from_millis(1_234_567_890_123);
+
+/// What [`Mistake::ClampsRecordedAtToItsClock`] reads as now: 2027-01-15, a
+/// plausible clock, later than every past time any rule sends and earlier
+/// than VT-9's far-future one. Not [`ARRIVAL`], which every ordinary time any
+/// rule sends is already later than, so a clamp there would not need the
+/// far-future event to be seen.
+const MUTANT_NOW: i64 = 1_800_000_000_000;
 
 /// What a wrong store fails with.
 #[derive(Debug)]
@@ -401,17 +411,18 @@ impl WrongIngestStore {
             let committed =
                 (self.mistake == Mistake::KeepsGroupsBeforeTheClaim).then(|| working.clone());
             let landed_before = counts.appended;
+            // The recorded time of the group's head, which the multi-row
+            // insert of `StampsEachGroupWithItsHeadsTime` binds once.
+            let group_head = group.events.first().map(|head| head.recorded_at);
             for (event_index, shipped) in group.events.iter().enumerate() {
                 let head_of_batch = group_index == 0 && event_index == 0;
                 match self.verdict(&held, &working, shipped, head_of_batch) {
                     Verdict::Skip => counts.skipped += 1,
                     Verdict::Land => {
-                        // The group's head, which this iteration proves exists.
-                        let group_head = group
-                            .events
-                            .first()
-                            .map_or(shipped.recorded_at, |head| head.recorded_at);
-                        self.land(&mut working, shipped, group_head);
+                        // Inside the loop the group has a head, so the
+                        // fallback is never taken.
+                        let heads_time = group_head.unwrap_or(shipped.recorded_at);
+                        self.land(&mut working, shipped, heads_time);
                         counts.appended += 1;
                     }
                     Verdict::Refuse => {
@@ -512,6 +523,7 @@ impl WrongIngestStore {
                 RecordedAt::from_millis(millis.max(before.stored.recorded_at.as_millis()))
             }),
             Mistake::StampsEachGroupWithItsHeadsTime => group_head,
+            Mistake::ClampsRecordedAtToItsClock => RecordedAt::from_millis(millis.min(MUTANT_NOW)),
             _ => sent,
         }
     }
@@ -937,6 +949,16 @@ fn ingest_preserves_the_recorded_time_fails_a_store_that_clamps_at_the_epoch() {
 fn ingest_preserves_the_recorded_time_fails_a_store_that_keeps_recorded_at_monotonic() {
     fails_exactly(
         &verdicts(async || WrongFixture::new(Mistake::KeepsRecordedAtMonotonic)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// Only the event recorded in the far future sees it.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_clamps_to_its_clock() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::ClampsRecordedAtToItsClock)),
         "ingest_preserves_the_recorded_time",
         "VT-9",
     );
