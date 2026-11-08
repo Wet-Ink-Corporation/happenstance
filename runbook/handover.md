@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/project-thread-u1dtdj-050`, cut from `phase-18` at `0f0e3c3`. 2026-11-07.
+`claude/project-thread-m9xoqd`, cut from `main` at `301d8213`. 2026-11-08.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -20,47 +20,33 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.5.0` is prepared, not yet tagged** (D9, the owner, AFK batch 9: `0.5.0` at phase
-18's exit, and no `0.4.7`). Its release PR, for `phase-18`, moves `[Unreleased]` to
-`[0.5.0] — 2026-11-07`; all nine crates were already at `0.5.0` (#375). It is breaking
-from `0.4.x`: the typed runner leaves `unstable-projection`, which is removed (#132),
-with an async `apply` handed a `Delivered<E>` (ADR-0074), a projection's own
-`type Error` (PS-28), a `Chunk` (ADR-0070) and a derived checkpoint id (PS-25). The
-CHANGELOG's `0.5.0` trace has ten hand rows and no tool rows, and
-[`docs/upgrading-to-0-5.md`](../docs/upgrading-to-0-5.md) walks each row.
+**`0.5.1` is prepared, not yet tagged.** Its release PR, for `main`, moves `[Unreleased]`
+to `[0.5.1] — 2026-11-08` and all nine crates to `0.5.1`. It changes no public API: the
+testkit's and neon's rustdoc build under their default features again (#396, #409), the
+gate builds the testkit's docs that way (#412), and the rest is documentation, tests and
+an experiment (#381, #389, #397, #398, #400, #401).
 
-**Phase 18 is done** on `phase-18`. [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md)
-froze PS-16, PS-18, PS-25, PS-27, PS-30, PS-38, SY-21 and CF-43. The specification
-counts 168 `[FROZEN]`, 29 `[PROVISIONAL]`, 7 `[DEFERRED]` and 7 `[NON-NORMATIVE]`
-(`cargo xtask spec-trace` is the authority).
+**`0.5.0` is released** (2026-11-07; all nine crates on crates.io and docs.rs). Phases
+0–12, 15–17b and 18 are done. [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md)
+froze phase 18's clauses; `cargo xtask spec-trace` is the authority on the counts. What
+remains is sequenced in [`roadmap.md`](roadmap.md): sync (13) and retention (14), then
+`1.0.0` (21).
 
-**`0.4.6` is released** (2026-11-02; all nine crates on crates.io). Phases 0–12, 15–17b
-and 18 are done. What remains is sequenced in [`roadmap.md`](roadmap.md): sync (13)
-and retention (14), then `1.0.0` (21).
-
-**This release is tagged on `main`, at #403's merge commit**, not at its release PR's
-merge commit as earlier releases were: that PR merges into `phase-18`, which is not on
-`main` until #403 lands, and `release.yml` publishes only a tag on `main`. Tag that
-merge commit, not a later `main`. Cloud sessions cannot push tags; the owner pushes them.
+**Tag the release PR's merge commit on `main`**, not a later `main`. Cloud sessions
+cannot push tags; the owner pushes them.
 
 ## In flight
 
-The `0.5.0` release PR, from `claude/project-thread-u1dtdj-050` into `phase-18`, and
-then PR #403, `phase-18` into `main`. No release PR is open yet.
+The `0.5.1` release PR, from `claude/project-thread-m9xoqd` into `main`.
 
 ## Next action
 
-1. The owner merges the `0.5.0` release PR into `phase-18`, then merges #403
-   (`phase-18` → `main`). Before tagging, run `cargo semver-checks check-release
-   --workspace --baseline-version 0.4.6 --release-type minor` on that merge commit;
-   any lint it reports that no hand row covers becomes a **T** row in the `0.5.0`
-   trace. The CI semver job does not stand in for it: its registry step passes no
-   `--release-type`, so `0.4.6` → `0.5.0` reads as major and requires nothing. Then
-   tag #403's merge commit (`git tag -a v0.5.0 <merge-sha> -m "0.5.0"`, then push the
-   tag); `release.yml` publishes from the tag.
-2. The two follow-ups #127 named are filed: #400, the `experiments/polling-cost` fan-out
-   passes 002/003, and #401, optional, a live-Postgres reset through `TRUNCATE`.
-3. Phase 13 (#64). It inherits SY-21's `convergent_projection_cannot_observe_local_position`,
+1. The owner merges the `0.5.1` release PR. Before tagging, run `cargo semver-checks
+   check-release --workspace --baseline-version 0.5.0 --release-type minor` on its merge
+   commit (a `0.x` patch is checked as a minor); it should report nothing. Then tag that
+   merge commit (`git tag -a v0.5.1 <merge-sha> -m "0.5.1"`, then push the tag);
+   `release.yml` publishes from the tag.
+2. Phase 13 (#64). It inherits SY-21's `convergent_projection_cannot_observe_local_position`,
    declared `Scheduled` in `UNRESOLVABLE_RULE_NAMES`; write it beside #141, and the entry
    goes stale on purpose.
 
@@ -70,10 +56,11 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- The `0.5.0` release PR, #403, and the `v0.5.0` tag.
-- Two protected files still describe `unstable-projection` or `0.4.x` as current, and
-  agent sessions may not edit them: `CLAUDE.md` and
-  `.github/ISSUE_TEMPLATE/bug_report.yml`. The release PR's body lists the lines.
+- The `0.5.1` release PR and the `v0.5.1` tag.
+- Protected files agent sessions may not edit: `CLAUDE.md`'s gate enumeration omits the
+  testkit default-features doc build #412 added, and `CLAUDE.md:440-443` and
+  `.github/ISSUE_TEMPLATE/bug_report.yml:32-33` still describe `unstable-projection` as
+  current.
 - Calls taken *as recommended* while the owner was asked, still unconfirmed: #101 O1–O3,
   #103 O1(a), #118's schema call, and #123 O1(B)/O2. No freeze depends on them (ADR-0102).
 - #123 left phase 13 a crate-boundary call: `happenstance-sync-testkit` depending on
