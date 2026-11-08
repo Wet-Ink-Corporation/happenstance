@@ -7777,10 +7777,13 @@ everywhere else.**
 written as a commutative fold, and cannot be excluded under SY-22. Falsification
 test: express it as a commutative fold over `EventId`-ordered events, or show
 why it cannot be.]`
-Rule: `convergent_projection_is_interleaving_independent` (new,
-`happenstance-sync-testkit`) — takes a projection and a set of events from two
-origins, applies them under two interleavings, asserts byte-identical read
-models.
+Rule: `convergent_projection_is_interleaving_independent`
+(`happenstance-sync-testkit`, #141) — takes a projection and a set of events from two
+origins, applies them under two interleavings, asserts byte-identical read models. The
+interleavings are origin one's events first and origin two's first, and a case with one
+origin empty, or a run that applied fewer events than it was handed, is refused rather
+than passed. The crate's wrong-projection tests fail unit-ledger and three more
+arrival-order folds against it, beside a control ordered by origin identity.
 Cases: E2E-41, E2E-22.
 
 *Rejects:* `unit-ledger` — a per-serial state machine folded over
@@ -7855,8 +7858,11 @@ convergence check MUST exclude it rather than fail it.**
 `[PROVISIONAL — falsified if every non-convergent projection in the catalogue
 turns out to be repairable, making the escape hatch a licence rather than a
 necessity. Falsification test: express `cost-layers` convergently.]`
-Rule: `non_convergent_projections_are_excluded_not_failed` (new,
-`happenstance-sync-testkit`).
+Rule: `non_convergent_projections_are_excluded_not_failed`
+(`happenstance-sync-testkit`, #141) — the cost-layers test: FIFO cost layers, undeclared,
+must commit two read models under SY-20's two interleavings where stock-on-hand over the
+same events commits one, and handing it to SY-20's rule is a compile-fail fence beside a
+compiling control.
 Cases: E2E-41.
 
 *Rejects:* a blanket convergence obligation on every projection, which would be a
@@ -10517,9 +10523,9 @@ between them because its *shape* does not wait on a transport but its
 | SY-17 | FROZEN | the existing CLAUDE.md rule 4, checked by `happenstance-sync-testkit` compilin… | E2E-52, E2E-30 |
 | SY-18 | DEFERRED | `peer_declares_its_own_limits`, `ingest_validates_every_event_not_the_head`, `… | E2E-35 |
 | SY-19 | FROZEN | `two_peers_disagree_on_total_order` † | E2E-41, E2E-42 |
-| SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` † | E2E-41, E2E-22 |
+| SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` | E2E-41, E2E-22 |
 | SY-21 | FROZEN | `apply_is_handed_the_origin_identity_not_the_local_position` †, `convergent_pr… | E2E-41 |
-| SY-22 | PROVISIONAL | `non_convergent_projections_are_excluded_not_failed` † | E2E-41 |
+| SY-22 | PROVISIONAL | `non_convergent_projections_are_excluded_not_failed` | E2E-41 |
 | SY-23 | PROVISIONAL | `event_id_order_is_identical_on_every_peer` | E2E-41, E2E-43 |
 | SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-25 | FROZEN | `forwarding_order_is_arrival_order` | E2E-42 |

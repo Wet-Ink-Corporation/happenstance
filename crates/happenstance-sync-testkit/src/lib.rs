@@ -53,8 +53,8 @@
 //! — where the rule is shown to fail it. A rule no peer can fail is
 //! decorative.
 //!
-//! **No rule decodes a payload** (SY-35), and **no rule in [`rules`] holds two
-//! peers** (SY-8). [`rules`] says how the rules keep both. The model family
+//! **No peer or ingest rule decodes a payload** (SY-35), and **no rule in
+//! [`rules`] holds two peers** (SY-8). [`rules`] says how the rules keep both. The model family
 //! below is the one exception to the second, and its module says why.
 //!
 //! # The model family
@@ -155,6 +155,30 @@
 //! fixture whose declension is this crate's default
 //! ([`ingest_declensions_are_stated`]).
 //!
+//! # The convergence family
+//!
+//! Not an adapter's bar but a projection's: a fold that declares itself
+//! convergent, by implementing
+//! [`ConvergentProjection`](happenstance::ConvergentProjection), is run under
+//! two interleavings of one set of events from two origins, and its read
+//! models must be byte-identical. The rule is called directly over a
+//! [`ConvergenceFixture`]; there is no mounting macro, because there is no
+//! adapter to mount it beside and no capability to decline.
+//!
+//! | Rule | Clause | What it rejects |
+//! |---|---|---|
+//! | [`convergent_projection_is_interleaving_independent`](convergence_rules::convergent_projection_is_interleaving_independent) | SY-20 | `unit-ledger`, and any declared fold whose answer depends on arrival order |
+//! | [`non_convergent_projections_are_excluded_not_failed`](convergence_rules::non_convergent_projections_are_excluded_not_failed) | SY-22 | a check with no exclusion, which fails FIFO cost layers, and a check that does not really reorder |
+//!
+//! A payload is decoded here, and only by the projection under test: a fold
+//! reads its events, which is what makes it a fold. The check itself reads no
+//! event at all: it compares the bytes of two read models. What the runner
+//! reads to select and route events is their type and the projection's scope
+//! tags, which is what SY-35 requires. The wrong projections live in
+//! `tests/wrong_projections.rs`.
+//! [`StockOnHandFixture`] and [`CostLayersFixture`] are the reference cases:
+//! one domain, a sum that converges and a FIFO queue that cannot.
+//!
 //! # Harnesses
 //!
 //! The emitter is a parameter, as in the event-store family, so the suite never
@@ -224,6 +248,18 @@ pub use ingest_suite::{
     NO_PER_EVENT_LIMITS, NO_PER_EVENT_LIMITS_REASON, NO_TAGS_PER_BATCH_LIMIT,
     NO_TAGS_PER_BATCH_LIMIT_REASON, ingest_rules,
 };
+
+// The convergence family (#141), declared after the others so their lines do
+// not move. `convergence_suite.rs` and not `convergence.rs`: `happenstance`
+// has a `src/convergence.rs` and a `tests/convergence.rs`, and
+// `cargo xtask spec-trace` refuses a bare name two files answer to.
+mod convergence_fixture;
+mod convergence_suite;
+pub use convergence_fixture::{
+    ConvergenceFixture, CostLayers, CostLayersFixture, EventOf, Stock, StockOnHand,
+    StockOnHandFixture, StoreOf,
+};
+pub use convergence_suite::convergence_rules;
 
 /// Generates the ingest conformance suite for a store adapter.
 ///

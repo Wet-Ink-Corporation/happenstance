@@ -791,7 +791,7 @@ fn check_citations(root: &Path, atom: &Atom, problems: &mut Vec<String>) {
 /// [`crate::spec_trace`] keeps `const ANCHOR_SLACK: usize = 12` over
 /// `SPECIFICATION.md`. The two numbers differed silently for as long as both
 /// existed; they differ *stated* now, and this is one half of the statement —
-/// `spec_trace.rs:378 (Why this window survives)` is the other.
+/// `spec_trace.rs:380 (Why this window survives)` is the other.
 ///
 /// The difference is not a disagreement about strictness. **Here the anchor is
 /// written and there it is derived.** An atom quotes its anchor beside the line
