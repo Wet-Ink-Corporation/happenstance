@@ -1017,6 +1017,7 @@ dependencies = [
 name = "happenstance-sync-testkit"
 version = "0.5.1"
 dependencies = [
+ "happenstance",
  "happenstance-core",
  "happenstance-sync",
  "happenstance-testkit",

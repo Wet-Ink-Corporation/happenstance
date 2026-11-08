@@ -35,6 +35,31 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- `happenstance-sync-testkit`: the convergence family (#141), and with it a
+  dependency on `happenstance`, the typed layer, with its `postcard` codec.
+  `convergence_rules::convergent_projection_is_interleaving_independent`
+  (SY-20) runs a projection declared `happenstance::ConvergentProjection`
+  under two interleavings of one set of events from two origins — origin
+  one's first, then origin two's — and fails it when the two read models are
+  not byte-identical. The defect it detects is a declared fold whose answer
+  depends on arrival order: `unit-ledger`, which keeps whatever arrived last
+  per serial, a first-arrival-wins fold, an arrival rank kept as an order,
+  and FIFO cost layers declared convergent, each failed in
+  `tests/wrong_projections.rs` beside a control ordered by `EventId`. It also
+  refuses, rather than passes, a case with one origin empty and a run that
+  applied fewer events than it was handed, because either makes the two
+  interleavings one log.
+  `convergence_rules::non_convergent_projections_are_excluded_not_failed`
+  (SY-22) is the cost-layers test: FIFO cost layers, which does not declare
+  convergence, must commit two read models under those interleavings where
+  stock-on-hand over the same events commits one, and handing it to the
+  SY-20 rule is a `compile_fail` fence beside a compiling control. The defect
+  it detects is a convergence check with no exclusion, which fails an honest
+  projection, and a check that replays one interleaving twice, which passes
+  every projection. A projection author writes a `ConvergenceFixture` (the
+  projection, its store, the two origins' events, and its read model as
+  bytes); `StockOnHandFixture` and `CostLayersFixture` are the reference
+  cases. SY-20 and SY-22 stay `[PROVISIONAL]`.
 - `happenstance-sync`: the `runner` module, the first half of the runner
   (#244). `runner::Edge` drives one edge — a local store that is both
   `EventStore` and `IngestStore`, against one `SyncPeer` — one caller-driven

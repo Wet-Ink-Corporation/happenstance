@@ -261,7 +261,7 @@ use crate::spec_trace::{clause_ids, workspace_root};
 ///
 /// `pub(crate)` for one reason: [`crate::lint_pages`] reads the same tree, and
 /// the *one* thing it must not do is declare a second constant naming it. That
-/// is the "three lists that must agree" defect `xtask/src/spec_trace.rs:122-160`
+/// is the "three lists that must agree" defect `xtask/src/spec_trace.rs:124-162`
 /// records, and here the second copy would drift silently on the day the tree
 /// moves. Two scanners agreeing on where one tree is stays inside RS-81-3
 /// (`standards/rust/81-checks-that-cannot-be-types.md:209`), which forbids one
@@ -1024,7 +1024,7 @@ struct Clauses {
     ///
     /// **Derived from the set, never listed.** A literal list of the six
     /// families here would be the fourth, and `SECTIONS`' own doc comment
-    /// (`xtask/src/spec_trace.rs:107-120`) already says why the fourth is the
+    /// (`xtask/src/spec_trace.rs:109-122`) already says why the fourth is the
     /// one that can half-land: a seventh family added in that one place would
     /// have every id of it reported here as an undeclared family while
     /// `spec-trace` counted it happily.
@@ -1374,7 +1374,7 @@ struct DocumentationMust {
 /// re-derivation is written down in
 /// `.bklg/docs-that-teach/checked-documentation-surface/frozen-documentation-must-pin/`.
 /// No count is written anywhere here: `UNCLAIMED_PENDING_ADR` already refused
-/// that trade (`xtask/src/spec_trace.rs:2999-3001`), because a comment naming a
+/// that trade (`xtask/src/spec_trace.rs:2996-2998`), because a comment naming a
 /// total above an array holding a different one is the defect this pin exists
 /// to prevent, one level up. The count is the array's length and nothing
 /// restates it.
@@ -4126,7 +4126,7 @@ One writer at a time.
     }
 
     /// The trade `UNCLAIMED_PENDING_ADR` already made
-    /// (`xtask/src/spec_trace.rs:2999-3001`): a count written into a comment can
+    /// (`xtask/src/spec_trace.rs:2996-2998`): a count written into a comment can
     /// come to disagree with the array beneath it, which is the defect BR-10
     /// exists to prevent, one level up.
     #[test]

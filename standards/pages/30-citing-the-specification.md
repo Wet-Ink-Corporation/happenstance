@@ -64,7 +64,7 @@ clause it cites. Every word is true, the id resolves, the gate is green — and 
 first amendment to that clause leaves a page that contradicts the specification
 while still citing it, which is worse than a page that never cited anything.
 
-**Evidence.** `xtask/src/spec_trace.rs:107-121` (the traceability machinery a
+**Evidence.** `xtask/src/spec_trace.rs:109-123` (the traceability machinery a
 citation joins) · `standards/rust/README.md:99-107` (the atom shape, and its own
 `Evidence.` ordering rule)
 
