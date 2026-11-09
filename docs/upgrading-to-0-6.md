@@ -128,7 +128,7 @@ shipped `StoreSyncPeer` does, so the runner can see a restore. If you put
 moves to 0.6 together:
 
 ```rust
-use happenstance::{Codec, Json, StoreId};
+use happenstance::{Codec, CodecError, Json, StoreId};
 use happenstance_sync::{Ack, Pulled, PushBatch};
 
 fn main() -> Result<(), Box<dyn core::error::Error>> {
@@ -149,7 +149,10 @@ fn main() -> Result<(), Box<dyn core::error::Error>> {
 
     // ...and a body without it, the shape 0.5 wrote, is refused.
     let from_0_5 = json.replace(r#","responder":null"#, "");
-    assert!(Json.decode::<Ack>(from_0_5.as_bytes()).is_err());
+    let Err(CodecError::Decode(missing)) = Json.decode::<Ack>(from_0_5.as_bytes()) else {
+        return Err("a body without `responder` decoded".into());
+    };
+    assert!(missing.to_string().contains("missing field `responder`"));
     Ok(())
 }
 ```
@@ -223,6 +226,8 @@ use happenstance_neon::migration::{self, MIGRATION_1, MIGRATION_3};
 
 transport.round_trip(migration::request(MIGRATION_1, &config)).await?;
 transport.round_trip(migration::request(MIGRATION_3, &config)).await?;
+// `round_trip` returns the HTTP response: check each one's status as you
+// check migration 1's, or a migration the endpoint rejects reads as done.
 ```
 
 If your own tooling renders the Neon templates instead of
