@@ -4959,6 +4959,9 @@ pub mod rules {
             if let Some(ceiling) = F::MAX_METADATA_LEN {
                 metadata_ceiling_is_honoured(&fixture, &store, ceiling).await?;
             }
+            if let (Some(data), Some(metadata)) = (F::MAX_EVENT_DATA_LEN, F::MAX_METADATA_LEN) {
+                byte_ceilings_hold_at_once(&store, data, metadata).await;
+            }
             // Last, because it is the largest write.
             if let Some((ceiling, per_event)) = tags_spread {
                 tags_per_batch_ceiling_is_honoured(&fixture, &store, ceiling, per_event).await?;
@@ -5198,6 +5201,42 @@ pub mod rules {
             positions_of(&leftovers)
         );
         Ok(())
+    }
+
+    /// CF-40's budget unit (#143): the two byte ceilings are one per field, so
+    /// an event whose `data` is at its stated ceiling and whose metadata is at
+    /// its own is accepted.
+    ///
+    /// The question phase 13 settled was whether a store's unit is the field
+    /// or `payload_len`, data plus metadata, the sum `happenstance-sync` checks
+    /// against a peer's `max_event_bytes`. It is the field: a fixture that
+    /// states both ceilings promises both at once, and `payload_len` is the
+    /// replication port's unit, held to a store's two field ceilings by SY-18.
+    /// A store whose real limit is the sum states each field's share of it, as
+    /// `happenstance-cloudflare` carves one row into ceilings that fit together
+    /// (ADR-0093).
+    ///
+    /// Rejects `SharedPayloadBudgetStore`, which states both and holds their
+    /// sum to the payload's: each field at its ceiling alone fits, so no other
+    /// branch sees it. Nothing is refused here, so there is no leftover to read
+    /// and no frontier to settle.
+    async fn byte_ceilings_hold_at_once<S: EventStore>(
+        store: &S,
+        data_ceiling: usize,
+        metadata_ceiling: usize,
+    ) {
+        let both = event_with_owned_payload("BothByteCeilings", patterned(data_ceiling))
+            .with_tags(tags(&[("edge", "both-at")]))
+            .with_metadata(patterned(metadata_ceiling));
+        let accepted = store.append(core::slice::from_ref(&both), None).await;
+        assert!(
+            accepted.is_ok(),
+            "CF-40: this fixture states a payload ceiling of {data_ceiling} bytes \
+             and a metadata ceiling of {metadata_ceiling}, and each bounds its own \
+             field, so one event at both must be accepted. A store whose unit is \
+             data plus metadata states each field's share of that budget, not the \
+             whole budget for each. Got {accepted:?}"
+        );
     }
 
     /// How many tags each event of the tags-per-batch branch carries, after

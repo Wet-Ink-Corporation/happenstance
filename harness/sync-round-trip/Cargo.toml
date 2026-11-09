@@ -1,0 +1,59 @@
+[package]
+name = "happenstance-sync-round-trip-harness"
+description = "Replicates a native SQLite store through the Neon and Postgres sync peers, byte for byte."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+# An instrument, never published: neither "unfinished" nor "held out of this
+# release". The crate root says so too, because the two other meanings of this
+# key look identical in a manifest.
+#
+# It exists because the round trip needs two adapters in one build, a native
+# SQLite store at the near end and the Neon or Postgres store at the far end,
+# and no adapter may depend on another (SPECIFICATION §1.5). An instrument
+# crate is not an adapter, so the rule is untouched; `harness/workerd` is the
+# precedent, for the Durable Object's round trip (#130).
+publish = false
+
+# Nothing but dev-dependencies: the crate is its test binary. Host-only, so no
+# wasm32 step and no `--no-dev-deps` step ever sees any of it. Every crate here
+# is already a node in `Cargo.lock`, so this adds edges and no node.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+happenstance-core = { workspace = true, features = ["std"] }
+happenstance-sync.workspace = true
+# The near end: `sync` for its `IngestStore` and `WriteGroupStore`.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite", features = ["sync"] }
+# The far ends, each behind its `sync` feature: `NeonSyncPeer`, and the
+# Postgres store `StoreSyncPeer` runs over.
+happenstance-neon = { path = "../../crates/happenstance-neon", features = ["sync"] }
+happenstance-postgres = { path = "../../crates/happenstance-postgres", features = ["sync"] }
+# The Postgres pool and the shared conformance container, as
+# `happenstance-postgres`'s own live tests reach them.
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio"] }
+testcontainers.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "time"] }
+# The Neon HTTPS client: `happenstance-neon`'s live transport, restated, with
+# the same features for the same reasons (that manifest's LICENCE VERDICT),
+# never `webpki-roots`.
+hyper = { version = "1.11", default-features = false, features = ["client", "http1", "http2"] }
+hyper-util = { version = "0.1", default-features = false, features = [
+  "client",
+  "client-legacy",
+  "http1",
+  "http2",
+  "tokio",
+] }
+hyper-rustls = { version = "0.27", default-features = false, features = [
+  "http1",
+  "http2",
+  "native-tokio",
+  "ring",
+  "tls12",
+] }
+http-body-util = "0.1"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+
+[lints]
+workspace = true

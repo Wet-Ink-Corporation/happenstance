@@ -963,6 +963,30 @@ projection suite. It supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0103 | [`kb-decision-0103`](../decisions/0103-projection-store-async-flavour-risk-accepted.md) | The ProjectionStore freeze accepts the Async flavour axis with no !Send adapter at its far end | accepted | 13 | — |
 
+## 2026-11-08: every answer names its responder, wire format 3 (#244), accepted
+
+ADR-0104 is written straight here with no intake step. The owner chose the mechanism on the
+2026-11-08 project-thread card, and accepted the record on another card the same day. `Pulled` and `Ack`
+gain a last `responder: Option<StoreId>`, `StoreSyncPeer` stamps its store's identity on every
+answer, and `wire::FORMAT_VERSION` goes from 2 to 3. It amends ADR-0097's message set and supersedes
+nothing. ADR-0103 is taken on another branch.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0104 | [`kb-decision-0104`](../decisions/0104-every-pull-and-ack-names-its-responder.md) | Every pulled and ack message names the store that answered, and the wire format is version 3 | accepted | 13 | — |
+
+## 2026-11-08: write groups are recorded per row (#420), proposed
+
+ADR-0105 is written straight here with no intake step, and is **proposed**: the owner approved
+the shape (option A) on 2026-11-08, and the SQLite marker and the Postgres rollout questions are
+still open on #420. Every row records the lowest position its write put in and an ingested
+group's guard; `WriteGroupStore` reads them back, and SY-39 is minted provisional. It
+supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0105 | [`kb-decision-0105`](../decisions/0105-write-groups-are-recorded-per-row.md) | A store records each write's group on its rows, and a peer reads and pushes in those groups | proposed | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

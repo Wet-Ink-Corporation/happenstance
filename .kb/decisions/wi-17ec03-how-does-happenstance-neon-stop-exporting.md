@@ -34,7 +34,7 @@ How does happenstance-neon stop exporting ProbeThenWriteStore (#78): hide with d
 
 A deliberately lost-update EventStore is pub and re-exported at the crate root of a published adapter.
 
-Raised by an agent (sweep) as a question and captured by Weigh-In as `wi-17ec03`. Anchor: `crates/happenstance-neon/src/lib.rs:186`.
+Raised by an agent (sweep) as a question and captured by Weigh-In as `wi-17ec03`. Anchor: `crates/happenstance-neon/src/lib.rs:220`.
 
 ## Considered options
 
@@ -68,8 +68,8 @@ relocate to happenstance-testkit's mutants
 
 ## Evidence
 
-- `crates/happenstance-neon/src/lib.rs:186`: pub use event_store::{NeonEventStore, NeonReadStream, ProbeThenWriteStore};
-- `crates/happenstance-neon/src/event_store.rs:1678-1686`: only callers are two in-crate compile-shape unit tests
+- `crates/happenstance-neon/src/lib.rs:220`: pub use event_store::{NeonEventStore, NeonReadStream, ProbeThenWriteStore};
+- `crates/happenstance-neon/src/event_store.rs:1722-1730`: only callers are two in-crate compile-shape unit tests
 
 ## Decision outcome
 

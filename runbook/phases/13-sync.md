@@ -64,7 +64,7 @@ provides the atomicity and the identity that makes it idempotent.
       are among the nine crates 1.0 promises (ADR-0066), so this is the first
       thing the phase does rather than the last. **Done 2026-10-14:** the owner
       published both `0.0.0` placeholders from `cargo xtask reserve` at `a69ded4`.
-- [ ] #104 · **The Postgres and Neon `StoreId` has no restore detection**
+- [x] #104 · **The Postgres and Neon `StoreId` has no restore detection**
       (`.kb/open-questions/postgres-neon-store-id-has-no-restore-detection.md`,
       VT-6). Both mint once, in a migration —
       `crates/happenstance-postgres/migrations/0001_event_log.sql:111-118` and
@@ -81,7 +81,13 @@ provides the atomicity and the identity that makes it idempotent.
       procedure are additive too. Mint-per-open is a behaviour change, and phase
       17's window closes before this phase opens, so phase 17 decides it; if
       phase 17 declined it, the remedy here is one of the additive arms, and
-      mint-per-open would be a post-1.0 major.
+      mint-per-open would be a post-1.0 major. **Done 2026-11-08:** phase 17
+      declined mint-per-open (ADR-0086), and this item built the documented
+      re-mint arm: `remint_identity` on both stores,
+      `happenstance_neon::migration::remint_statement` for branch tooling,
+      Postgres stamping from the row inside each append's transaction with the
+      cache gone, Neon refusing an append with no identity row, and the
+      procedure in both crate roots and READMEs.
 
 - [x] #105 · ADR-0026. Record the ingest boundary SY-1 – SY-7 already fix, and settle
       what makes re-delivery harmless and what the port may assume about a transport it cannot see. The two real peers are a
@@ -216,7 +222,7 @@ provides the atomicity and the identity that makes it idempotent.
       WF-1 and WF-11 are renewed past 1.0, not frozen here; this phase records
       WF-1's renewal in ADR-0026 and confirms which encoding the sync transport
       forwards WF-11's payload through.
-- [ ] #125 · **CF-25's bar for the peer-port freeze**
+- [x] #125 · **CF-25's bar for the peer-port freeze**
       (`.kb/open-questions/cf-25-cf-26-portfolio-check-does-not-exist.md`).
       CF-25 is `[FROZEN]` and gates every port freeze on `cargo xtask spec-trace`
       reading §6.5's instrument-portfolio table, and `xtask/src/spec_trace.rs`
@@ -298,6 +304,21 @@ of E2E-07 (ES-24).
   port's `# Errors` names the lost-commit exception. Owed by the owner before the
   first tag: the release.yml diff, the CLAUDE.md counts, and trusted publishers
   for both sync crates.
+- **2026-11-08** — #104: the Postgres and Neon re-mint (ADR-0086's additive
+  arms). `PostgresEventStore::remint_identity` and `NeonEventStore::remint_identity`,
+  and `migration::remint_statement` on Neon for branch tooling. Postgres drops
+  its per-handle `OnceLock` identity cache and reads `store_meta` inside every
+  append's and every ingest's transaction, so a re-mint needs no restart; Neon
+  inserts nothing and refuses with `MissingIdentity` when the row is gone, an
+  ingest included (its compensation is gated on the row and its refusal
+  statement raises `HS086`). A deviation from ADR-0086 §7.2, which proposed a
+  join in `local_origin`: Neon guards each writer with an `EXISTS` on the meta
+  row instead, because `local_origin` also stamps ingest compensation, where a
+  join would silently drop the compensation and commit its losing event. No
+  migration. `tests/remint.rs` in each crate holds it with a no-re-mint
+  negative control; CI's live jobs run both. Verified against a live Postgres
+  17.10; the Neon target is compiled locally and runs in `live-neon`.
+  `restored_peer_does_not_reissue_identities` stays #133's.
 - **2026-11-08** — #125: CF-25's portfolio check is built, on the owner's route (build it, do
   not repair the `Rule:` line). `cargo xtask spec-trace` walks every port that carries a
   `[FROZEN]` clause, or that §1.6 declares frozen, against §6.5's portfolio and its new *freeze
@@ -309,3 +330,11 @@ of E2E-07 (ES-24).
   durability, which #422's reopen rule discharges, and `SyncPeer` on async flavour, durability and
   position allocation, which the network peers #130 and #131 discharge. This branch merges after
   them, so #125 stays open.
+- **2026-11-09** — #125, finished: `phase-13` merged in, and the four undischarged rows now name
+  their far end. `ProjectionStore` × durability: #422's `committed_rows_and_checkpoint_survive_a_reopen`.
+  `SyncPeer` × position allocation: the Postgres peer (`live-postgres`). × async flavour: the Durable
+  Object under `workerd` (#130). × durability: `ack_never_confirms_a_non_durable_event` against the
+  Neon, Postgres and Durable Object peers, a reconnect rather than a reopen until `SyncFixture`
+  gains a reopen capability. × transport moved from SY-14 to `NeonSyncPeer` (#131). §6.5's
+  position-allocation and async-flavour verdicts open *adapter yes*, as their cells' bodies already
+  said. `cargo xtask spec-trace` is green: 15 rows, 10 at the far end, 3 accepted, 2 carried.

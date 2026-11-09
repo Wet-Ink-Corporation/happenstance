@@ -8,10 +8,12 @@
 //! type checker is the instrument there, not the runtime.
 //!
 //! Published since #108 part E, so that a store adapter can implement
-//! [`IngestStore`] behind its own `sync` feature. **Unfinished**: there is no
-//! runner (#244) and no network peer. A `[FROZEN]` `SY` clause binds this
+//! [`IngestStore`] behind its own `sync` feature. **Unfinished**: the [`runner`]
+//! drives one edge (#244), by step or by a caller-owned backoff loop, and stops it on a
+//! new far-side incarnation, but holds no peer set; its watermark goes through the projection
+//! port in the caller's batch (SY-31, [`runner::Watermark`]); no [`Exchange`] runs over a real network for [`RemoteSyncPeer`]. A `[FROZEN]` `SY` clause binds this
 //! crate's semver as an `ES` clause binds `happenstance-core`'s. SY-7, SY-10,
-//! SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-38 are `[PROVISIONAL]`, binding
+//! SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-39 are `[PROVISIONAL]`, binding
 //! until the falsifier each names, and SY-14, SY-18 and SY-32 `[DEFERRED]`.
 //!
 //! # This is a port, not a protocol
@@ -52,18 +54,18 @@
 //! # The target topologies — plural
 //!
 //! **Peer-to-peer.** A local-first application holds its own event store on the
-//! device and syncs with a shared instance — the motivating deployment being
-//! SQLite inside a Cloudflare Durable Object, reached through a Rust Worker.
-//! Both peers are happenstance instances; neither is privileged in the protocol,
-//! though a deployment may well designate one as authoritative.
+//! device and syncs with a shared instance, such as SQLite inside a Durable
+//! Object. Both are happenstance instances, neither is privileged in the
+//! protocol, and each direction of their edge takes what it is sent, judged by
+//! nobody unless one of them is the family's assigned adjudicator (SY-7).
 //!
 //! **Hub and spoke.** Many devices sync to one authoritative store, and never to
 //! each other. This is at least as common as the symmetric case and it is not a
 //! special case of it: the hub sees every log, the spokes see one each, and the
-//! merge rule a spoke needs is not the merge rule the hub needs. Both must be
-//! expressible, which is a constraint on the port's shape and not merely on its
-//! documentation — and it is why
-//! [`Watermark`] is a version vector rather than a scalar.
+//! merge rule a spoke needs is not the merge rule the hub needs. The hub
+//! adjudicates what spokes push (SY-7); a spoke takes what the hub sends, unjudged,
+//! and keeps its own log when refused (SY-34). So a merge rule belongs to one
+//! *direction* of an edge (SY-10), never to a type (SY-9) or to the port.
 //!
 //! # Why this is a thin crate and not a hard one
 //!
@@ -184,3 +186,33 @@ pub mod memory_ingest;
 #[cfg(feature = "memory")]
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use memory_ingest::MemoryIngestStore;
+
+// The network peer's transport-free pieces (#117): a peer over a store, the
+// server half that answers envelope bytes through it, the transport trait, and
+// the client peer over that. After the rest, for the reason above. No feature:
+// the Durable Object mounts `serve_sync` on wasm32 with none.
+pub mod remote;
+pub mod serve;
+pub mod store_peer;
+pub use remote::{Exchange, RemoteError, RemoteSyncPeer, SendExchange};
+pub use serve::{ServeError, serve_sync};
+pub use store_peer::{ForeignToken, StorePeerError, StoreResume, StoreSyncPeer};
+
+// The runner above the port (#244). Last, for the reason `classify` is after
+// the rest: the lines above keep the numbers the specification cites. Its items
+// stay module-qualified, as `wire`'s do: `runner::Edge` and `runner::StepError`
+// say at the call site which layer they belong to.
+pub mod runner;
+
+// The write-group port (#420): a store's log read back in the writes that made
+// it, so a push and a pull never split one write or merge two. Last, for the
+// reason `runner` is: the lines above keep the numbers the specification cites.
+pub mod write_group;
+pub use write_group::{GroupPage, SendWriteGroupStore, WriteGroup, WriteGroupStore};
+
+// The `Send` flavour of the network peer's two halves (#421): a second type,
+// because coherence refuses a second impl on the first (RS-20-4). Last, for the
+// reason `write_group` is: the lines above keep the numbers the specification
+// cites.
+pub mod send_peer;
+pub use send_peer::SendPeer;

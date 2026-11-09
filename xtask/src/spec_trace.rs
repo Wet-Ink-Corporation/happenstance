@@ -85,18 +85,20 @@ const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 /// from this array reproduces that defect one family later, which is why
 /// `projection.rs` joins it in the same change that creates it.
 ///
-/// It lives here rather than in `lints` because [`collect_rules`] does, and a
-/// list of files kept next to the function that parses them cannot drift from it.
-pub(crate) const RULE_FILES: [&str; 7] = [
+/// It lives next to [`collect_rules`], not in `lints`, so it cannot drift from its parser.
+pub(crate) const RULE_FILES: [&str; 11] = [
     SUITE,
     "crates/happenstance-testkit/src/model.rs",
     "crates/happenstance-testkit/src/concurrency.rs",
     "crates/happenstance-testkit/src/projection.rs",
-    // The sync families (#111, #246), each joined in the change that creates it.
+    // The sync-testkit families (#111, #246, #108, #420, #141, #133, #143), each joined in its change.
     "crates/happenstance-sync-testkit/src/sync_suite.rs",
     "crates/happenstance-sync-testkit/src/sync_model.rs",
-    // The ingest family (#108), joined in the change that creates it.
     "crates/happenstance-sync-testkit/src/ingest_suite.rs",
+    "crates/happenstance-sync-testkit/src/write_group_suite.rs",
+    "crates/happenstance-sync-testkit/src/convergence_suite.rs",
+    "crates/happenstance-sync-testkit/src/restore_suite.rs",
+    "crates/happenstance-sync-testkit/src/watermark_suite.rs",
 ];
 
 /// Every file a `wire::`-qualified name a clause cites may be defined in.
@@ -1026,18 +1028,13 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 69] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 67] = [
     // ---- VT: value types -------------------------------------------------
-    (
-        "VT-6",
-        "restored_peer_does_not_reissue_identities",
-        Unresolvable::Scheduled("the replication suite, with VT-5"),
-    ),
-    (
-        "VT-9",
-        "convergent_projection_is_interleaving_independent",
-        Unresolvable::Scheduled("the replication suite, with VT-5"),
-    ),
+    // VT-6's `restored_peer_does_not_reissue_identities` left this table at
+    // #133, in the change that wrote it as the restore family's rule: a name
+    // that starts resolving fails the gate as a stale entry, so its entry went
+    // with the change that made it resolve. Five lines, the entry's own, so
+    // the `spec_trace.rs:N` citations below this point keep their numbers.
     (
         "VT-10",
         "append_does_not_accept_a_foreign_identity",

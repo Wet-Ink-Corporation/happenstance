@@ -2496,6 +2496,25 @@ const REGISTRY: &[Declared] = &[
             "must not be in the log in any form",
         )],
     },
+    // --- CF-40's budget unit (#143) -------------------------------------
+    //
+    // Both byte ceilings stated and their sum enforced: each field at its
+    // ceiling alone fits, and only the event carrying both at once does not.
+    Declared {
+        name: "SharedPayloadBudgetStore",
+        kind: Kind::Mutant,
+        fails: &["append_reports_exceeded_store_limits"],
+        provenance: "an adapter that took `payload_len`, data plus metadata, as its own unit: one \
+             row-sized budget checked as `data.len() + metadata.len() > MAX_EVENT_DATA_LEN`, with \
+             a metadata ceiling stated beside it. Every over-ceiling value is refused under the \
+             right variant, so only an event sized to both stated ceilings at once, which it \
+             refuses, tells it from a store whose ceilings are per field.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "append_reports_exceeded_store_limits",
+            "limit: EventDataLen, len: 69632",
+        )],
+    },
     // --- CF-40's tags-per-batch ceiling (VT-36, ADR-0100) -------------
     //
     // One check, a total across the append, got right once and wrong seven
@@ -2865,6 +2884,7 @@ macro_rules! for_each_mutant {
             crate::mutants::MutantFixture<
                 crate::mutants::tags_per_batch_floor::TagsPerBatchBelowTheFloorStore,
             >,
+            crate::mutants::MutantFixture<crate::mutants::payload_budget::SharedPayloadBudgetStore>,
             crate::mutants::MutantFixture<crate::mutants::NormalisingTagStore>,
             crate::mutants::MutantFixture<crate::mutants::KeyedTagMapStore>,
             crate::mutants::MutantFixture<crate::mutants::TrimmingIdentifierStore>,
@@ -3094,9 +3114,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Sixty-one rows below are marked [`ModelOutcome::Agreed`] at this commit;
+/// Sixty-two rows below are marked [`ModelOutcome::Agreed`] at this commit;
 /// four of them are the conformant controls and *must* be, which leaves
-/// **fifty-seven misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// **fifty-eight misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -3183,6 +3203,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// * `TagRowParameterCeilingStore`, `TagRowClampingStore`,
 ///   `TagsPerBatchBelowTheFloorStore` — VT-36's floor, at the same boundary of
 ///   8,192 tags in one append, approached from below.
+/// * `SharedPayloadBudgetStore` — CF-40's budget unit: its boundary is 65,536
+///   bytes of data and 4,096 of metadata in one event, which the generator's
+///   small payloads and nine bytes of metadata never reach together.
 ///
 /// That is the shape of the argument for the concurrency family, arriving from
 /// the other direction: three of the window-shaped six are exactly what a
@@ -3316,6 +3339,9 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("TagRowParameterCeilingStore", ModelOutcome::Agreed),
     ("TagRowClampingStore", ModelOutcome::Agreed),
     ("TagsPerBatchBelowTheFloorStore", ModelOutcome::Agreed),
+    // CF-40's budget unit: both byte ceilings at once is a boundary the
+    // generator never reaches.
+    ("SharedPayloadBudgetStore", ModelOutcome::Agreed),
     ("NormalisingTagStore", ModelOutcome::Agreed),
     ("KeyedTagMapStore", ModelOutcome::Agreed),
     ("TrimmingIdentifierStore", ModelOutcome::Agreed),
@@ -4093,15 +4119,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 61,
-            "`MODEL_COVERAGE`'s heading says sixty-one rows are `Agreed` and the \
+            agreed, 62,
+            "`MODEL_COVERAGE`'s heading says sixty-two rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            57,
-            "`MODEL_COVERAGE`'s heading says fifty-seven misses and the table \
+            58,
+            "`MODEL_COVERAGE`'s heading says fifty-eight misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls
@@ -5247,6 +5273,7 @@ mod mutation_coverage {
         "commit_advances_the_checkpoint",
         "commit_is_atomic_with_the_read_model",
         "failed_commit_leaves_both_unchanged",
+        "committed_rows_and_checkpoint_survive_a_reopen",
         "rollback_leaves_both_unchanged",
         "dropped_batch_leaves_store_usable",
         "commit_accepts_a_position_the_batch_did_not_write",
@@ -5318,7 +5345,8 @@ mod mutation_coverage {
                 assert!(
                     *reason == DecliningProjectionFixture::SECOND_HANDLE_REASON
                         || *reason == DecliningProjectionFixture::RESET_REFUSAL_REASON
-                        || *reason == DecliningProjectionFixture::COMMIT_FAULT_REASON,
+                        || *reason == DecliningProjectionFixture::COMMIT_FAULT_REASON
+                        || *reason == DecliningProjectionFixture::REOPEN_REASON,
                     "`{rule}` skipped with a reason the fixture never gave: \
                      {reason:?}. The reason is the only record of the trade, so \
                      it has to be the adapter's own words"
@@ -5437,13 +5465,15 @@ mod mutation_coverage {
             capable.skipped(),
             vec![
                 "failed_commit_leaves_both_unchanged",
+                "committed_rows_and_checkpoint_survive_a_reopen",
                 "refused_reset_changes_nothing",
             ],
             "`{}` supports every capability the registered rules ask for except \
              `COMMIT_FAULT`, which the reference store cannot offer — it applies \
-             both halves of a commit under one write lock — and `RESET_REFUSAL`, \
-             which it cannot offer either, because it holds no protection policy. \
-             So exactly two rules may skip against it, in enumeration order. A \
+             both halves of a commit under one write lock — `RESET_REFUSAL`, \
+             which it cannot offer either, because it holds no protection policy, \
+             and `REOPEN`, because it has no medium outside the process. So \
+             exactly three rules may skip against it, in enumeration order. A \
              rule that joined this set means a gate reads the wrong const or a \
              capability was declined to turn a red build green; a rule that left \
              it means the gate went away",
@@ -5459,6 +5489,13 @@ mod mutation_coverage {
                 <MemoryProjectionFixture as happenstance_testkit::ProjectionFixture>::COMMIT_FAULT
                     .reason()
                     .expect("the reference fixture declines COMMIT_FAULT"),
+            ),
+            (
+                "committed_rows_and_checkpoint_survive_a_reopen",
+                "REOPEN",
+                <MemoryProjectionFixture as happenstance_testkit::ProjectionFixture>::REOPEN
+                    .reason()
+                    .expect("the reference fixture declines REOPEN"),
             ),
             (
                 "refused_reset_changes_nothing",
@@ -5551,9 +5588,10 @@ mod mutation_coverage {
                     "COMMIT_FAULT",
                     DecliningProjectionFixture::COMMIT_FAULT_REASON
                 ),
+                ("REOPEN", DecliningProjectionFixture::REOPEN_REASON),
             ],
             "the declining instrument's reported declensions must be its own \
-             three constants, in the order `projection_declines` lists them"
+             four constants, in the order `projection_declines` lists them"
         );
 
         // The reference fixture declines exactly two things and supports the
@@ -5568,12 +5606,13 @@ mod mutation_coverage {
             .collect();
         assert_eq!(
             names,
-            ["RESET_REFUSAL", "COMMIT_FAULT"],
+            ["RESET_REFUSAL", "COMMIT_FAULT", "REOPEN"],
             "`MemoryProjectionFixture` must support `SECOND_HANDLE` — it is a \
              MUST — and decline `RESET_REFUSAL`, because the store under it has \
-             no protection policy and cannot honestly claim one, and \
+             no protection policy and cannot honestly claim one, \
              `COMMIT_FAULT`, because that store applies both halves of a commit \
-             under one write lock and has no write that can be made to fail"
+             under one write lock and has no write that can be made to fail, and \
+             `REOPEN`, because that store has no medium outside the process"
         );
     }
 

@@ -252,6 +252,37 @@ async fn a_compensation_that_fails_in_the_transaction_takes_the_losing_event_wit
     assert_eq!(rows(&store).await, 0);
 }
 
+/// An ingest on a store whose identity row is gone refuses as
+/// `MissingIdentity` and writes nothing, even after the same handle has read
+/// the identity (#104, ADR-0086).
+///
+/// Rejects an identity held on the handle, which would go on stamping the
+/// compensation with the row it read first, and judging claims against it.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container, or set HAPPENSTANCE_POSTGRES_URL)"]
+async fn ingest_refuses_without_an_identity_row() {
+    let store = live_store().await;
+    own(&store).await;
+    sqlx::query("DELETE FROM store_meta WHERE k = 'store_id'")
+        .execute(store.pool())
+        .await
+        .expect("the identity row deletes");
+    let losing = [shipped(id(peer(0xB1), 1), 1, event("Reserved", "seat"))];
+    let compensation = [event("Compensated", "seat")];
+
+    let refused = ingest(&store, &[IngestGroup::new(&losing, &compensation)])
+        .await
+        .expect_err("an ingest with no identity row cannot stamp its compensation");
+    assert!(
+        matches!(
+            refused,
+            IngestError::Store(PostgresEventStoreError::MissingIdentity)
+        ),
+        "{refused:?}"
+    );
+    assert_eq!(rows(&store).await, 0, "a refused ingest writes nothing");
+}
+
 /// A local append after an ingest leaves the foreign identities as they came,
 /// and stamps its own rows with this store's identity at their own position.
 ///

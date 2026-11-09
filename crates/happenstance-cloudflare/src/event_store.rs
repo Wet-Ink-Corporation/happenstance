@@ -67,6 +67,23 @@
 //!   stays [`SqlStorage`] — reaching the Durable Object's KV would be a second
 //!   handle every fixture and every host then has to supply.
 //!
+//! **Two more columns record write groups** (#420, SY-39), added after the
+//! block above by `ALTER TABLE`, each only if the table lacks it:
+//!
+//! ```sql
+//! ALTER TABLE event ADD COLUMN write_group INTEGER;  -- first position of the write
+//! ALTER TABLE event ADD COLUMN group_guard BLOB;     -- on that first row only
+//! ```
+//!
+//! Every row one `append` or one ingested group wrote carries the position of
+//! the write's first row in `write_group`, and that first row carries an
+//! ingested group's guard in `group_guard`. A row written before them has
+//! `NULL` in both and reads back as a group of its own; there is no backfill,
+//! because nothing recorded which rows one call wrote. There is no schema
+//! marker either, so an older build keeps opening the object and writes rows
+//! that read as groups of one. Deploy this build to every writer and peer of
+//! an object before it serves replication.
+//!
 //! [`contains_event_id`]: EventStore::contains_event_id
 //!
 //! # Why the whole object is one consistency boundary
@@ -552,10 +569,10 @@ impl CloudflareEventStore {
     /// if it has none.
     ///
     /// Idempotent, and called once per instance by a fixture and once at startup
-    /// by a host. There is no schema-version table and none is proposed: no
-    /// store has ever written a row with this crate, so there is no deployed
-    /// shape to be compatible with, and inventing a migration story for a store
-    /// with no users is a decision for a later phase.
+    /// by a host. A log from before write groups (#420) gains `write_group` and
+    /// `group_guard` here, each only when `PRAGMA table_info` lacks it, and with
+    /// no schema marker (D-1): an older build ignores the columns and its rows
+    /// read as groups of one, and a half-applied run is finished by the next.
     ///
     /// Stays a non-`async` inherent method, because [`SqlStorage::exec`] is
     /// synchronous and there is nothing to await.
@@ -563,13 +580,15 @@ impl CloudflareEventStore {
     /// # Errors
     ///
     /// Returns [`CloudflareEventStoreError::Sql`] if any statement fails, and
-    /// reports rather than mints if the incarnation row cannot be read back —
-    /// a store whose identity is guessed answers `contains_event_id` wrongly
-    /// about its own past.
+    /// [`CloudflareEventStoreError::ColumnType`] if the column probe's answer is
+    /// malformed. Reports rather than mints if the incarnation row cannot be read
+    /// back — a store whose identity is guessed answers `contains_event_id` wrongly.
     pub fn migrate(&self) -> Result<(), CloudflareEventStoreError> {
         for statement in migration(&self.tables) {
             self.sql.exec(&statement, &[])?;
         }
+        // The write-group columns (#420), added to a table that lacks them.
+        write_group::add_columns(&self.sql, &self.tables)?;
         // `randomblob` is SQLite's own CSPRNG. Sixteen bytes of entropy from the
         // engine already under the object, weighed against adding a crate for
         // them: `happenstance-core` mints nothing because it is `no_std`-capable
@@ -846,7 +865,7 @@ impl CloudflareEventStore {
         // needs the positions of a batch that did **not** finish — which is the
         // one case a return value cannot carry.
         let mut positions = Vec::with_capacity(events.len());
-        let outcome = self.write_rows(store_id, events, recorded_at, &mut positions);
+        let outcome = self.write_rows(store_id, events, recorded_at, None, &mut positions);
 
         let Err(cause) = outcome else {
             return outcome;
@@ -874,11 +893,16 @@ impl CloudflareEventStore {
     /// Split out of `write_batch` so that the positions of a *failed* batch
     /// survive the failure: they are what the compensating discard is aimed at,
     /// and a function that returned them only on success could not report them.
+    ///
+    /// `group` is the write group the rows join (#420): `None` for an append,
+    /// which is a group of its own named by its first row, and an ingested
+    /// group's first landed row for its compensation.
     fn write_rows(
         &self,
         store_id: StoreId,
         events: &[Event],
         recorded_at: RecordedAt,
+        group: Option<SequencePosition>,
         positions: &mut Vec<SequencePosition>,
     ) -> Result<SequencePosition, CloudflareEventStoreError> {
         let insert = insert_statement(&self.tables);
@@ -900,15 +924,21 @@ impl CloudflareEventStore {
         // replaced by it: a future replication ingest writes rows carrying
         // *another* store's origin, and one landing inside this range must not
         // be restamped under this incarnation.
+        //
+        // The write group rides in the same statement (#420), so the rows
+        // become events and one group at once: a second `UPDATE` after this one
+        // could throw with the batch already events, which is the shape ES-18
+        // made this crate repent of, and would bill every row written twice.
         if let Some(first) = positions.first() {
             self.sql.exec(
                 &format!(
-                    "UPDATE {} SET origin_store = ?, origin_position = position \
-                     WHERE position >= ? AND origin_position IS NULL",
+                    "UPDATE {} SET origin_store = ?, origin_position = position, \
+                     write_group = ? WHERE position >= ? AND origin_position IS NULL",
                     self.tables.event
                 ),
                 &[
                     SqlValue::Blob(store_id.to_bytes().to_vec()),
+                    SqlValue::Integer(position_as_i64(group.unwrap_or(*first))),
                     SqlValue::Integer(position_as_i64(*first)),
                 ],
             )?;
@@ -1262,6 +1292,33 @@ pub enum CloudflareEventStoreError {
         /// The recorded time the peer sent.
         recorded_at: RecordedAt,
     },
+
+    /// A write group's guard could not be put into, or read back out of,
+    /// `group_guard` in `happenstance-sync`'s stored form (#420).
+    ///
+    /// On a read it means the column holds bytes no build of that codec wrote,
+    /// a format from a newer build or a damaged object, and the read stops
+    /// rather than forward the group without the guard it arrived under.
+    /// Behind `sync`, with the codec.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the guard of write group {first} could not be stored or read back")]
+    StoredGuard {
+        /// The write group the guard belongs to; on a write, the first candidate's staged row, which may never land.
+        first: SequencePosition,
+        /// Why the codec refused it.
+        #[source]
+        source: happenstance_sync::write_group::GuardCodecError,
+    },
+
+    /// A row's `write_group` names a group the read had already passed, so the
+    /// log cannot be paged in whole groups. This store writes every group's
+    /// rows contiguously and names each by its first, so only a damaged or
+    /// hand-edited object holds one. Behind `sync`, with the group read.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the stored write groups are out of order")]
+    GroupOrder(#[from] happenstance_sync::write_group::GroupOrderError),
 }
 
 impl EventStore for CloudflareEventStore {
@@ -2065,7 +2122,12 @@ fn render_chunk(
 /// * **`recorded_at` is returned as stored.** A read that stamps `now()` is a
 ///   store that loses the time it accepted the event at.
 fn decode_row(row: &SqlRow) -> Result<SequencedEvent, CloudflareEventStoreError> {
-    let values = row.values();
+    decode_values(row.values())
+}
+
+/// [`decode_row`] over the row's values, [`READ_COLUMNS`] in order: the
+/// write-group read selects two more after them and decodes these eight here.
+fn decode_values(values: &[SqlValue]) -> Result<SequencedEvent, CloudflareEventStoreError> {
     let [
         position,
         event_type,
@@ -2557,6 +2619,11 @@ mod write_path_tests {
                 CloudflareEventStoreError::OriginPositionOutOfRange { .. } => "origin position",
                 #[cfg(feature = "sync")]
                 CloudflareEventStoreError::RecordedAtOutOfRange { .. } => "recorded at",
+                // The write-group read's two (#420), behind `sync` likewise.
+                #[cfg(feature = "sync")]
+                CloudflareEventStoreError::StoredGuard { .. } => "stored guard",
+                #[cfg(feature = "sync")]
+                CloudflareEventStoreError::GroupOrder(_) => "group order",
             }
         }
 
@@ -5164,3 +5231,7 @@ mod ingest;
 #[cfg(feature = "sync")]
 #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 pub use ingest::CloudflareIngestStore;
+
+// Write groups (#420): the two columns `migrate` adds, and the group read. A
+// child for `ingest`'s reason, and declared below it for the same one.
+mod write_group;

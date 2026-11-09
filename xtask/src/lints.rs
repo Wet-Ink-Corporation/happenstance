@@ -2369,7 +2369,31 @@ struct Enumeration {
 /// `spec-trace`, `lints`, `lint-changelog`, clippy and the testkit's own tests.
 /// Including it is a decision recorded here; leaving it out silently is the
 /// shape RS-80-2 forbids.
-const ENUMERATIONS: [Enumeration; 8] = [
+const ENUMERATIONS: [Enumeration; 12] = [
+    Enumeration {
+        // The restore family (#133), joined in the change that creates it.
+        file: "crates/happenstance-sync-testkit/src/restore_suite.rs",
+        macro_name: "for_each_restore_rule",
+        macro_file: "crates/happenstance-sync-testkit/src/restore_suite.rs",
+    },
+    Enumeration {
+        // The write-group family (#420), joined in the change that creates it.
+        file: "crates/happenstance-sync-testkit/src/write_group_suite.rs",
+        macro_name: "for_each_write_group_rule",
+        macro_file: "crates/happenstance-sync-testkit/src/write_group_suite.rs",
+    },
+    Enumeration {
+        // The convergence (#141) and watermark (#143) families, each joined in
+        // the change that creates it.
+        file: "crates/happenstance-sync-testkit/src/convergence_suite.rs",
+        macro_name: "for_each_convergence_rule",
+        macro_file: "crates/happenstance-sync-testkit/src/convergence_suite.rs",
+    },
+    Enumeration {
+        file: "crates/happenstance-sync-testkit/src/watermark_suite.rs",
+        macro_name: "for_each_watermark_rule",
+        macro_file: "crates/happenstance-sync-testkit/src/watermark_suite.rs",
+    },
     Enumeration {
         // The sync family (#111): the first rule file outside
         // `happenstance-testkit`, joined in the change that creates it.

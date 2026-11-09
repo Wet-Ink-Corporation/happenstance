@@ -118,7 +118,7 @@ The marker is staler than this atom recorded: it still calls the Postgres adapte
 ADR-0054's `after_every_guard` has not landed — `after` and `after_opt` carry no `#[deprecated]`
 (`crates/happenstance-core/src/append.rs:187`, `:201` at `d1100f8`) — so adding the alias is additive and
 retiring the old names is a break only phase 17 can take. The ledger row naming phase 4
-(`runbook/ledgers.md:172`) is outranked by the disposition row (`runbook/ledgers.md:290`), which
+(`runbook/ledgers.md:172`) is outranked by the disposition row (`runbook/ledgers.md:291`), which
 names phase 17. Sub-questions 1 and 2 go with the freeze; 3 is answered by the Postgres adapter
 existing. **Owner now: phase 17.**
 
@@ -134,7 +134,7 @@ on the owner's call `wi-378078`, freezes VT-30 and answers the sub-questions.
 3. **The Postgres append path.** It issues one statement per guard, as `happenstance-sqlite`
    does. Limb 1 is answered by `happenstance-neon` instead, which pushes every guard into one
    conditional insert with no self-join per guard
-   (`crates/happenstance-neon/src/event_store.rs:530-549`).
+   (`crates/happenstance-neon/src/event_store.rs:550-570`).
 
 `after_every_guard` and `after_every_guard_opt` have landed, and `after` and `after_opt` carry
 `#[deprecated]` and are kept through 1.x.

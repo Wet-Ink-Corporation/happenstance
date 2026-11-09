@@ -696,8 +696,9 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   **Resolved 2026-11-08** by building the check (#125): `spec-trace` walks every port carrying a
   `[FROZEN]` clause against the portfolio and §6.5's new freeze ledger. Sub-question 1 is answered by
   a ledger table rather than a column, and sub-question 2 by landing CF-26 with CF-25 and printing
-  what the walk does not read. ADR-0103 accepts `ProjectionStore`'s async-flavour row. Four rows
-  stay undischarged, waiting on #422 and on the network peers #130 and #131.
+  what the walk does not read. ADR-0103 accepts `ProjectionStore`'s async-flavour row. Since the
+  merge of 2026-11-09, #422 and the network peers #130 and #131 discharge the four rows that were
+  undischarged, and the check passes.
 - **Superseded** — [`vt-30-provisional-marker-is-stale-and-unscheduled.md`](../open-questions/vt-30-provisional-marker-is-stale-and-unscheduled.md)
   (`kb-open-question-vt-30-marker-stale-unscheduled-001`) — split off from ADR-0054, which discharges
   only `after_opt`'s naming/pinning half; VT-30's `[PROVISIONAL]` marker is stale as written now that

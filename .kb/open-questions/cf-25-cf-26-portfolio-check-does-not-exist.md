@@ -23,8 +23,8 @@ summary: >-
   the axis and the port, nor by an open clause of the port. Sub-question 1: a ledger table, not a
   column. Sub-question 2: CF-26 lands with CF-25, not alone, and the summary line names what the
   walk does not read. Sub-question 3 stays moot. ADR-0103 accepts ProjectionStore's async-flavour row. The check
-  does not pass yet: four rows have no honest discharge and are recorded as undischarged, one
-  waiting on #422 and three on the network peers #130 and #131.
+  passes since the merge of 2026-11-09: #422's projection reopen rule and the network peers #130
+  and #131 put an adapter at the far end of the four rows that had none.
 depends_on:
   - kb-decision-0039
 related:
@@ -151,7 +151,7 @@ port.
 on the verdict as written. Because the check does not read the near end, the stale *near end
 no* in that cell does not decide anything. ADR-0062 built that end.
 
-**What the check finds today: four gaps, recorded rather than hidden.** `EventStore`'s six rows
+**What the check found on 2026-11-08: four gaps, recorded rather than hidden.** `EventStore`'s six rows
 discharge: an adapter at the far end of transport, handle multiplicity and durability; ADR-0013 for
 position allocation and async flavour; ES-40's `[PROVISIONAL]` marker for completeness.
 `ProjectionStore`'s transport and batch-shape rows have an adapter at the far end, and its
@@ -161,3 +161,17 @@ accepting record and no open clause, and are written `undischarged`, so `spec-tr
 exactly them. `ProjectionStore` on durability waits on #422, a projection-suite reopen rule.
 `SyncPeer` on async flavour, durability and position allocation waits on the network peers, #130
 and #131, which this branch merges after.
+
+**What it finds since 2026-11-09: none.** The branch merged `phase-13` and each of the four rows
+now names its far end. `ProjectionStore` on durability: `committed_rows_and_checkpoint_survive_a_reopen`
+(#422), passed by the SQLite, Postgres and Neon projection stores. `SyncPeer` on position
+allocation: the Postgres peer ingests at `nextval()` positions and passes the sync suite in
+`live-postgres`. On async flavour: the Durable Object, a `!Send` `RemoteSyncPeer`, passes it under
+`workerd`. On durability: `ack_never_confirms_a_non_durable_event` passes against the Neon, Postgres
+and Durable Object peers. That rule reconnects rather than reopens, because `SyncFixture` has no
+reopen capability yet, and the ledger row says so. `SyncPeer`'s transport row moved from SY-14 to
+`NeonSyncPeer` at the far end. The position-allocation and async-flavour verdicts now open
+*adapter yes*, which their cells had said in their bodies since phases 10b and 9. One limit is
+now visible: an *adapter yes* verdict does not say which port the adapter implements, so
+`ProjectionStore`'s async-flavour row would pass as `far end` though nothing `!Send` implements
+that port. It stays on ADR-0103, and its Why cell says why.

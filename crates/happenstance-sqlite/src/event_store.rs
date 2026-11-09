@@ -36,8 +36,8 @@
 //!
 //! # Intended schema
 //!
-//! Migration 1, exactly as [`SqliteEventStore::open`] applies it on every
-//! connect — through a private `migrate`, which is why this block and not a
+//! Migrations 1 and 2, exactly as [`SqliteEventStore::open`] applies them on
+//! every connect — through a private `migrate`, which is why this block and not a
 //! rustdoc link is what a reader has. It is compared object-by-object against
 //! `sqlite_master` by
 //! `tests/migration.rs::module_doc_schema_matches_sqlite_master`, because a
@@ -75,6 +75,10 @@
 //!     k TEXT PRIMARY KEY,
 //!     v BLOB NOT NULL
 //! ) WITHOUT ROWID;
+//!
+//! -- Migration 2 (#420), once, on a file whose marker reads 1.
+//! ALTER TABLE event ADD COLUMN write_group INTEGER;  -- first position of the write
+//! ALTER TABLE event ADD COLUMN group_guard BLOB;     -- on that first row only
 //! ```
 //!
 //! Every line of it is load-bearing, and the two amendments in the middle are
@@ -121,6 +125,14 @@
 //! creation and read back on every open, beside the schema-version marker that
 //! gives migration 2 something to test against. See
 //! [`SqliteEventStore::remint_identity`] for what that mint-once choice costs.
+//!
+//! **Migration 2 records write groups** (SY-39): every row one `append` or one
+//! ingested group wrote carries the position of the write's first row in
+//! `write_group`, and that first row carries an ingested group's guard in
+//! `group_guard`. It raises the marker to 2, so a build that predates it
+//! refuses the file rather than relay its groups torn. A row written before it
+//! has `NULL` in both and reads back as a group of its own; there is no
+//! backfill, because nothing recorded which rows one call wrote.
 //!
 //! # Cancellation
 //!
@@ -274,7 +286,10 @@ pub struct SqliteEventStore {
 ///
 /// Persisted in `store_meta` so that migration 2 has something to test against:
 /// a schema with no version marker cannot be migrated later without guessing.
-pub const SCHEMA_VERSION: u32 = 1;
+///
+/// 2 since #420: migration 2 adds the write-group columns, and a file it has
+/// run on is refused by a build that predates it.
+pub const SCHEMA_VERSION: u32 = 2;
 
 /// Migration 1, verbatim. Mirrored in the [module documentation](self), which
 /// `tests/migration.rs` compares against `sqlite_master`.
@@ -485,8 +500,8 @@ impl SqliteEventStore {
     /// The connection is used as it is given. It is **not** reconfigured, so a
     /// caller reaching this constructor directly should have opened it through
     /// [`crate::connection::open_configured`], or configured it deliberately.
-    /// A caller that keeps its own configuration and may meet a file with no
-    /// store yet wants [`open_on`](Self::open_on).
+    /// A caller that may meet a file with no store yet, or one a build before
+    /// schema 2 wrote, wants [`open_on`](Self::open_on), which migrates it.
     ///
     /// # Errors
     ///
@@ -498,6 +513,9 @@ impl SqliteEventStore {
     ///   sixteen bytes a [`StoreId`] is.
     /// * [`SqliteEventStoreError::UnsupportedSchemaVersion`] if the file was
     ///   written by a newer build.
+    /// * [`SqliteEventStoreError::SchemaNeedsMigration`] if the file is at an
+    ///   older schema version — one a build before schema 2 wrote — which
+    ///   `new` does not migrate.
     pub fn new(connection: Connection) -> Result<Self, SqliteEventStoreError> {
         let store_id = read_identity(&connection)?;
         Ok(Self::with_store_id(connection, store_id))
@@ -837,8 +855,13 @@ impl SqliteEventStore {
                 origin: Origin::Local { recorded_at },
             })
             .collect();
-        let Written { last, .. } =
+        let Written { first, last, .. } =
             write_batch(&transaction, store_id, &rows).map_err(store_error)?;
+        // One append is one write group, carrying no guard: a local condition
+        // is position-relative, which SY-6 makes unreplicable.
+        if let Some(first) = first {
+            write_group::stamp(&transaction, first, None).map_err(store_error)?;
+        }
         // Every row of an append is local and none is ever skipped, so `None`
         // means the batch was empty — which step 1 of `append` has already
         // refused. Spelled as the decode of position zero because that is what
@@ -949,6 +972,13 @@ impl SqliteEventStore {
                     })
                     .collect();
                 ingested.compensated += write(&compensation)?.inserted;
+            }
+            // The group's landed rows and its compensation are one write group
+            // under the guard it arrived with (SY-39). A group none of whose
+            // rows landed wrote nothing, so there is nothing to stamp.
+            if let Some(first) = written.first {
+                write_group::stamp_ingested(&transaction, first, group.guard)
+                    .map_err(IngestError::Store)?;
             }
         }
 
@@ -1086,8 +1116,9 @@ impl SqliteEventStore {
         transaction.execute_batch(MIGRATION_1)?;
         transaction.execute(
             "INSERT OR IGNORE INTO store_meta (k, v) VALUES (?, ?)",
-            rusqlite::params![SCHEMA_VERSION_KEY, SCHEMA_VERSION],
+            rusqlite::params![SCHEMA_VERSION_KEY, write_group::BASELINE_SCHEMA_VERSION],
         )?;
+        write_group::migrate_to_2(&transaction)?;
         // `randomblob` is SQLite's own CSPRNG. Sixteen bytes of entropy from the
         // driver already in the tree, weighed against adding a crate for them
         // and chosen deliberately — `happenstance-core` mints nothing because it
@@ -1495,6 +1526,9 @@ enum Origin {
 /// writer alone can see, and the fields only an ingest reads are behind
 /// `sync` with the rest of the ingest path.
 struct Written {
+    /// The stored position of the first row that went in, if any did: the
+    /// write group's name, which the caller stamps once its group is whole.
+    first: Option<i64>,
     /// The position of the last row that went in, if any did.
     last: Option<SequencePosition>,
     /// How many rows went in. A skipped re-delivery is not counted.
@@ -1697,6 +1731,7 @@ fn write_batch(
         .map(|&(_, position)| position_from_row(position))
         .transpose()?;
     Ok(Written {
+        first: written.first().map(|&(_, position)| position),
         last,
         #[cfg(feature = "sync")]
         inserted: written.len(),
@@ -1767,21 +1802,35 @@ fn bump_cardinality(connection: &Connection, written: &[(&Event, i64)]) -> rusql
 
 /// Reads the schema version and the incarnation back out of `store_meta`.
 ///
-/// Refuses a file a newer build wrote, and refuses to invent an incarnation for
-/// a migrated file that has lost one — silently minting a replacement re-issues
-/// [`EventId`]s under a new origin for events that already exist, which is the
-/// failure mode with no error path and no observable symptom.
+/// Refuses a file a newer build wrote and one an older build left unmigrated,
+/// and refuses to invent an incarnation for a migrated file that has lost one —
+/// silently minting a replacement re-issues [`EventId`]s under a new origin for
+/// events that already exist, which is the failure mode with no error path and
+/// no observable symptom.
+///
+/// Every caller but [`SqliteEventStore::new`] runs it after `migrate`, where
+/// the version is [`SCHEMA_VERSION`] by construction; `new` is the one that can
+/// meet an older file, because it never migrates.
 fn read_identity(connection: &Connection) -> Result<StoreId, SqliteEventStoreError> {
     let version: u32 = connection.query_row(
         "SELECT CAST(v AS INTEGER) FROM store_meta WHERE k = ?",
         [SCHEMA_VERSION_KEY],
         |row| row.get(0),
     )?;
-    if version > SCHEMA_VERSION {
-        return Err(SqliteEventStoreError::UnsupportedSchemaVersion {
-            found: version,
-            supported: SCHEMA_VERSION,
-        });
+    match version.cmp(&SCHEMA_VERSION) {
+        core::cmp::Ordering::Greater => {
+            return Err(SqliteEventStoreError::UnsupportedSchemaVersion {
+                found: version,
+                supported: SCHEMA_VERSION,
+            });
+        }
+        core::cmp::Ordering::Less => {
+            return Err(SqliteEventStoreError::SchemaNeedsMigration {
+                found: version,
+                required: SCHEMA_VERSION,
+            });
+        }
+        core::cmp::Ordering::Equal => {}
     }
 
     let raw: Vec<u8> = connection
@@ -1874,6 +1923,25 @@ pub enum SqliteEventStoreError {
         supported: u32,
     },
 
+    /// The file is at an older schema version than this build writes, and
+    /// [`SqliteEventStore::new`], which never migrates, was asked to wrap it.
+    ///
+    /// Refused here rather than at the first append, which would otherwise
+    /// fail with an untyped driver error naming a column the older schema
+    /// lacks. Open the file with [`SqliteEventStore::open_on`] or
+    /// [`SqliteEventStore::open`], which apply the missing migrations, and
+    /// wrap it with `new` afterwards if that is still wanted.
+    #[error(
+        "the database is at schema version {found} and this build requires \
+         {required}; open it with `open` or `open_on`, which migrate it"
+    )]
+    SchemaNeedsMigration {
+        /// The version the file carries.
+        found: u32,
+        /// The version this build writes.
+        required: u32,
+    },
+
     /// The schema is present and its incarnation row is not.
     ///
     /// A **distinct** variant rather than a driver error, because the honest
@@ -1957,6 +2025,33 @@ pub enum SqliteEventStoreError {
         /// The position the origin assigned.
         position: SequencePosition,
     },
+
+    /// A write group's guard could not be put into, or read back out of,
+    /// `group_guard` in `happenstance-sync`'s stored form (#420).
+    ///
+    /// On a read it means the column holds bytes no build of that codec
+    /// wrote, a format from a newer build or a damaged file, and the read
+    /// stops rather than forward the group without the guard it arrived
+    /// under. Behind `sync`, with the codec.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the guard of write group {first} could not be stored or read back")]
+    StoredGuard {
+        /// The write group the guard belongs to.
+        first: SequencePosition,
+        /// Why the codec refused it.
+        #[source]
+        source: happenstance_sync::write_group::GuardCodecError,
+    },
+
+    /// A row's `write_group` names a group the read had already passed, so the
+    /// log cannot be paged in whole groups. This store writes every group's
+    /// rows contiguously and names each by its first, so only a damaged or
+    /// hand-edited file holds one.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the stored write groups are out of order")]
+    GroupOrder(#[from] happenstance_sync::write_group::GroupOrderError),
 }
 
 impl SendEventStore for SqliteEventStore {
@@ -3831,3 +3926,6 @@ mod busy_conformance {
         drop(store);
     }
 }
+
+// Write groups (#420): migration 2, the stamp, and the group read.
+mod write_group;

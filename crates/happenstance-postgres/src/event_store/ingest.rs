@@ -32,18 +32,20 @@
 //!
 //! The port is implemented on `PostgresEventStore` itself, with no wrapper,
 //! because the port's [`store_id`](SendIngestStore::store_id) is `async` and
-//! fallible: it is the store's own read of `store_meta`, made on a handle's
-//! first use and cached on it, the one `append` stamps from. An ingest asks
-//! for it after every refusal that needs none, so a call over a ceiling, or
-//! with an origin position past a `bigint`, still never reaches the wire; on a
-//! handle that has not read it yet, it is one round trip more, and a failed
-//! read is [`IngestError::Store`].
+//! fallible: it reads `store_meta` on every call. Nothing is cached, on the
+//! handle or anywhere else (ADR-0086 §7.1), so a re-mint is answered by the
+//! next call on any handle.
 //!
-//! The tests that need no server reach the cache directly: it is a private
-//! field, and they are descendants of `event_store`. `unreachable_store`
-//! seeds a fixed `StoreId` into a store whose pool points nowhere, so a
-//! refusal that must come before the wire is shown not to reach it, and
-//! nothing is added to `event_store.rs` for them.
+//! An ingest reads the identity inside its own transaction, as `append` does,
+//! in the same first statement that takes the begin snapshot. So every
+//! refusal that needs no identity comes before the wire, a call over a ceiling
+//! or with an origin position past a `bigint` never reaches it, the
+//! compensation is stamped with the row as it stands when the call runs, and
+//! a missing row refuses the call with nothing written. A failed read is
+//! [`IngestError::Store`].
+//!
+//! The tests that need no server use a store whose pool points nowhere, so a
+//! refusal that must come before the wire is shown not to reach it.
 //!
 //! # Positions
 //!
@@ -77,26 +79,27 @@
 //!
 //! **Here**, as a child of `event_store`, because privacy is per module and a
 //! module's private items are visible to its descendants: this reaches the
-//! writer, the pool, the cached identity and `on_runtime` without any of them
+//! writer, the pool, the identity read and `on_runtime` without any of them
 //! being widened. Coherence allows the impl: a foreign trait on a local type.
 //!
 //! **Behind `sync`**, off by default, so a consumer who never replicates
 //! compiles none of it. It was `cfg(test)` while `happenstance-sync` was
 //! unpublished; #108 part E turned the gate into the feature. The tests stay
-//! unit tests under this module, because they seed the private cache, and
+//! unit tests under this module, because they reach the private writer, and
 //! `tests/ingest_port.rs` holds the published impl to the port from outside.
 
 use std::collections::HashSet;
 
-use happenstance_core::{Event, EventId, RecordedAt, StoreId};
+use happenstance_core::{AppendCondition, Event, EventId, RecordedAt, StoreId};
 use happenstance_sync::{
     Classify, FailureClass, IngestError, IngestGroup, Ingested, SendIngestStore, Watermark,
 };
 use sqlx::{PgPool, Postgres, Transaction};
 
 use super::{
-    NewRow, Origin, PostgresEventStore, StoredOrigin, allocate_positions, exceeded,
-    insert_statement, now, position_from_row,
+    IDENTITY_SQL, NewRow, Origin, PostgresEventStore, ROW_PARAMETERS, StoredOrigin,
+    allocate_positions, exceeded, identity_from_row, insert_statement, now, position_from_row,
+    stored_store_id, write_group,
 };
 use crate::error::PostgresEventStoreError;
 
@@ -105,14 +108,25 @@ use crate::error::PostgresEventStoreError;
 /// The `WHERE` repeats the partial index's predicate, without which Postgres
 /// cannot infer `event_origin_idx` and refuses the statement. A conflict on any
 /// other constraint still raises. `RETURNING` names the rows that landed, so
-/// the rows that did not are the skips.
+/// the rows that did not are the skips, and the positions they landed at, so
+/// the group can be named by the lowest of them (#420, I-2).
 const CONFLICT_CLAUSE: &str = " ON CONFLICT (origin_store, origin_position) \
      WHERE origin_store IS NOT NULL AND origin_position IS NOT NULL DO NOTHING \
-     RETURNING origin_store, origin_position";
+     RETURNING origin_store, origin_position, position";
 
-/// The transaction's begin snapshot, taken as its first statement when the
-/// call carries a claim on this store's identity.
-const BEGIN_SNAPSHOT_SQL: &str = "SELECT pg_current_snapshot()::text";
+/// The transaction's first statement: this store's identity, and the begin
+/// snapshot a claim on that identity is judged against.
+///
+/// One statement, so the snapshot is still the transaction's first and the
+/// identity read costs no round trip of its own. The snapshot is taken on
+/// every call, though only a call that carries a claim reads it: in the same
+/// statement it is free.
+///
+/// Always exactly one row: the identity is a scalar subquery, NULL when the
+/// meta row is gone, so it decodes through the one decoder an append and the
+/// port's `store_id` use.
+const IDENTITY_AND_SNAPSHOT_SQL: &str = "SELECT (SELECT v FROM store_meta WHERE k = 'store_id'), \
+     pg_current_snapshot()::text";
 
 /// Of the claimed own positions the insert skipped, those whose row the begin
 /// snapshot could not see: written by this call, or committed by another
@@ -132,9 +146,6 @@ const HIDDEN_CLAIMS_SQL: &str = "SELECT origin_position FROM event \
 const WATERMARK_SQL: &str = "SELECT origin_store, max(origin_position) FROM event \
      WHERE origin_store IS NOT NULL AND origin_position IS NOT NULL GROUP BY origin_store";
 
-/// Binds per row in `insert_statement`.
-const ROW_PARAMETERS: usize = 8;
-
 /// The extended query protocol's parameter count is an `int16`.
 const MAX_BIND_PARAMETERS: usize = 65_535;
 
@@ -145,10 +156,9 @@ const _: () =
     assert!(PostgresEventStore::MAX_EVENTS_PER_BATCH * ROW_PARAMETERS <= MAX_BIND_PARAMETERS);
 
 impl PostgresEventStore {
-    /// The ceilings, the origin check, this store's identity, then one
-    /// transaction on the store's runtime. Every refusal comes before the
-    /// wire, and the identity is a round trip only on a handle that has not
-    /// read it yet.
+    /// The ceilings and the origin check, then one transaction on the store's
+    /// runtime, which reads this store's identity first. Every refusal that
+    /// needs no identity comes before the wire.
     async fn ingest_groups(
         &self,
         groups: &[IngestGroup<'_>],
@@ -187,14 +197,10 @@ impl PostgresEventStore {
             .map(OwnedGroup::try_from_group)
             .collect::<Result<Vec<_>, _>>()
             .map_err(IngestError::Store)?;
-        // The inherent read, cached per handle, which `append` stamps from.
-        // `Self::store_id` names it rather than the port's method of the same
-        // name, because an inherent associated function wins the lookup.
-        let own = Self::store_id(self).await.map_err(IngestError::Store)?;
         let recorded_at = now();
         let pool = self.pool.clone();
         let outcome = self
-            .on_runtime(ingest_in_transaction(pool, own, owned, recorded_at))
+            .on_runtime(ingest_in_transaction(pool, owned, recorded_at))
             .await
             .map_err(IngestError::Store)?;
         match outcome {
@@ -232,12 +238,20 @@ impl SendIngestStore for PostgresEventStore {
     // `IngestError` carries capacity and the unheld identity in arms of its own.
     type Error = PostgresEventStoreError;
 
-    /// The identity `store_meta` holds, read on this handle's first use and
-    /// cached, by the same read `append` stamps from. A re-mint is seen by a
-    /// new handle; a clone shares the cache.
+    /// The identity `store_meta` holds, read on every call. Nothing is
+    /// cached (ADR-0086), so a re-mint is answered by the next call on any
+    /// handle, clones included.
     async fn store_id(&self) -> Result<StoreId, Self::Error> {
-        // The inherent method, not this one: inherent wins path resolution.
-        Self::store_id(self).await
+        let pool = self.pool.clone();
+        let stored: Option<Vec<u8>> = self
+            .on_runtime(async move {
+                sqlx::query_scalar(IDENTITY_SQL)
+                    .fetch_optional(&pool)
+                    .await
+                    .map_err(PostgresEventStoreError::from)
+            })
+            .await?;
+        identity_from_row(stored)
     }
 
     async fn ingest(
@@ -279,7 +293,11 @@ impl Classify for PostgresEventStoreError {
             | Self::MalformedIdentity { .. }
             | Self::UnstampedEvent { .. }
             | Self::NoRuntime
-            | Self::UnreadableTransactionId => FailureClass::Stop,
+            | Self::UnreadableTransactionId
+            // A guard the codec refuses, or stored write groups the page
+            // builder refuses: the same read or write fails the same way.
+            | Self::StoredGuard { .. }
+            | Self::GroupOrder(_) => FailureClass::Stop,
         }
     }
 }
@@ -312,6 +330,9 @@ fn transient_sqlstate(code: &str) -> bool {
 struct OwnedGroup {
     events: Vec<ForeignEvent>,
     compensation: Vec<Event>,
+    /// The origin's condition, stored with the group (#420) and never
+    /// evaluated (SY-1).
+    guard: Option<AppendCondition>,
 }
 
 impl OwnedGroup {
@@ -337,6 +358,10 @@ impl OwnedGroup {
         Ok(Self {
             events,
             compensation: group.compensation.to_vec(),
+            // Cloned out of the borrowed group for the reason the events are:
+            // the work crosses onto the runtime and must be `'static`, and the
+            // store keeps it.
+            guard: group.guard.cloned(),
         })
     }
 }
@@ -371,34 +396,33 @@ enum Outcome {
 /// One ingest: every group, in order, in one transaction.
 async fn ingest_in_transaction(
     pool: PgPool,
-    own: StoreId,
     groups: Vec<OwnedGroup>,
     recorded_at: RecordedAt,
 ) -> Result<Outcome, PostgresEventStoreError> {
     let mut transaction = pool.begin().await?;
 
-    // Only a call that carries a claim takes a snapshot, and the claim check
-    // runs only with one, so no claim is ever judged without it.
+    // First, so the snapshot is the call's begin snapshot, and so a store with
+    // no identity refuses before anything is written. The transaction is
+    // dropped uncommitted on that `?`.
+    let (stored, snapshot): (Option<Vec<u8>>, String) = sqlx::query_as(IDENTITY_AND_SNAPSHOT_SQL)
+        .fetch_one(&mut *transaction)
+        .await?;
+    let own = identity_from_row(stored)?;
+
+    // Only a call that carries a claim runs the claim check, and it is never
+    // run without the begin snapshot.
     let claims = groups
         .iter()
         .flat_map(|group| &group.events)
         .any(|foreign| foreign.id.store() == own);
-    let began: Option<String> = if claims {
-        Some(
-            sqlx::query_scalar(BEGIN_SNAPSHOT_SQL)
-                .fetch_one(&mut *transaction)
-                .await?,
-        )
-    } else {
-        None
-    };
+    let began = claims.then_some(snapshot);
 
     let mut ingested = Ingested::default();
     for group in &groups {
         let landed = insert_foreign(&mut transaction, own, &group.events).await?;
         if let Some(began) = &began
             && let Some(id) =
-                unheld_claim(&mut transaction, own, &group.events, &landed, began).await?
+                unheld_claim(&mut transaction, own, &group.events, &landed.ids, began).await?
         {
             // Explicitly, not by drop. Dropping only queues the `ROLLBACK`,
             // and until the pool flushes it this transaction's id holds the
@@ -406,14 +430,31 @@ async fn ingest_in_transaction(
             transaction.rollback().await?;
             return Ok(Outcome::UnheldOwnIdentity(id));
         }
-        ingested.appended += landed.len();
+        ingested.appended += landed.ids.len();
         // A duplicate inside one call lands once and counts as a skip.
-        ingested.skipped += group.events.len().saturating_sub(landed.len());
+        ingested.skipped += group.events.len().saturating_sub(landed.ids.len());
 
         // Only for a group that landed something (SY-11): the first delivery
-        // of a re-delivered group already wrote its compensation.
-        if !landed.is_empty() {
-            insert_compensation(&mut transaction, own, &group.compensation, recorded_at).await?;
+        // of a re-delivered group already wrote its compensation, and its
+        // write group.
+        if let Some(first) = landed.positions.iter().copied().min() {
+            // Named by the lowest row it wrote, not the lowest position it
+            // drew: a skipped row burned its position (#420, I-2).
+            write_group::stamp(
+                &mut transaction,
+                first,
+                &landed.positions,
+                group.guard.as_ref(),
+            )
+            .await?;
+            insert_compensation(
+                &mut transaction,
+                own,
+                &group.compensation,
+                recorded_at,
+                first,
+            )
+            .await?;
             ingested.compensated += group.compensation.len();
         }
     }
@@ -422,43 +463,63 @@ async fn ingest_in_transaction(
     Ok(Outcome::Ingested(ingested))
 }
 
-/// Inserts one group's foreign events under the conflict clause, returning the
-/// identities that landed.
+/// What one group's foreign insert wrote.
+#[derive(Debug, Default)]
+struct Landed {
+    /// The origin identities that landed; the rest were skips.
+    ids: HashSet<EventId>,
+    /// The local positions they landed at, which name and stamp the group.
+    positions: Vec<i64>,
+}
+
+/// Inserts one group's foreign events under the conflict clause, returning
+/// what landed.
+///
+/// The rows go in with no write group: which of them land is known only from
+/// the clause's `RETURNING`, and the group is named by the lowest that did,
+/// so [`write_group::stamp`] records it afterwards.
 async fn insert_foreign(
     transaction: &mut Transaction<'static, Postgres>,
     own: StoreId,
     events: &[ForeignEvent],
-) -> Result<HashSet<EventId>, PostgresEventStoreError> {
+) -> Result<Landed, PostgresEventStoreError> {
     // A `VALUES` list cannot be empty.
     if events.is_empty() {
-        return Ok(HashSet::new());
+        return Ok(Landed::default());
     }
     let positions = allocate_positions(transaction, events.len()).await?;
-    let returned: Vec<(Vec<u8>, i64)> = foreign_statement(own, events, &positions)
+    let returned: Vec<(Vec<u8>, i64, i64)> = foreign_statement(own, events, &positions)
         .build_query_as()
         .fetch_all(&mut **transaction)
         .await?;
-    returned
-        .into_iter()
-        .map(|(store, position)| {
-            Ok(EventId::new(
-                stored_store_id(&store)?,
-                position_from_row(position)?,
-            ))
-        })
-        .collect()
+    let mut landed = Landed {
+        ids: HashSet::with_capacity(returned.len()),
+        positions: Vec::with_capacity(returned.len()),
+    };
+    for (store, origin, position) in returned {
+        landed.ids.insert(EventId::new(
+            stored_store_id(&store)?,
+            position_from_row(origin)?,
+        ));
+        landed.positions.push(position);
+    }
+    Ok(landed)
 }
 
 /// Inserts one group's compensation as local rows, minted here and stamped
-/// `recorded_at`, after the group's foreign rows (SY-2).
+/// `recorded_at`, after the group's foreign rows (SY-2), in the group's write
+/// group `first`.
 ///
 /// No conflict clause: a collision here would mean an own identity already
-/// sits at a fresh sequence value, which must raise rather than skip.
+/// sits at a fresh sequence value, which must raise rather than skip. Its
+/// positions are drawn after the foreign rows', from the same sequence, so
+/// `first` stays the group's lowest.
 async fn insert_compensation(
     transaction: &mut Transaction<'static, Postgres>,
     own: StoreId,
     compensation: &[Event],
     recorded_at: RecordedAt,
+    first: i64,
 ) -> Result<(), PostgresEventStoreError> {
     // A `VALUES` list cannot be empty.
     if compensation.is_empty() {
@@ -470,7 +531,7 @@ async fn insert_compensation(
         origin: Origin::Local,
         recorded_at,
     });
-    insert_statement(own, rows, &positions)
+    insert_statement(own, rows, &positions, Some(first))
         .build()
         .execute(&mut **transaction)
         .await?;
@@ -478,13 +539,15 @@ async fn insert_compensation(
 }
 
 /// The statement [`insert_foreign`] sends: append's `INSERT`, over the foreign
-/// rows, with [`CONFLICT_CLAUSE`] appended and nothing else changed.
+/// rows, with [`CONFLICT_CLAUSE`] appended and nothing else changed. The rows
+/// bind no write group; see [`insert_foreign`].
 fn foreign_statement(
     own: StoreId,
     events: &[ForeignEvent],
     positions: &[i64],
 ) -> sqlx::QueryBuilder<'static, Postgres> {
-    let mut statement = insert_statement(own, events.iter().map(ForeignEvent::row), positions);
+    let mut statement =
+        insert_statement(own, events.iter().map(ForeignEvent::row), positions, None);
     statement.push(CONFLICT_CLAUSE);
     statement
 }
@@ -523,18 +586,6 @@ async fn unheld_claim(
         .filter(|foreign| foreign.id.store() == own)
         .find(|foreign| landed.contains(&foreign.id) || hidden.contains(&foreign.origin.position))
         .map(|foreign| foreign.id))
-}
-
-/// Decodes a stored `origin_store`.
-///
-/// # Errors
-///
-/// `MalformedIdentity` when it is not sixteen bytes.
-fn stored_store_id(stored: &[u8]) -> Result<StoreId, PostgresEventStoreError> {
-    let bytes: [u8; 16] = stored
-        .try_into()
-        .map_err(|_| PostgresEventStoreError::MalformedIdentity { len: stored.len() })?;
-    Ok(StoreId::from_bytes(bytes))
 }
 
 // The whole file is behind `sync`, through its declaration in

@@ -10,3 +10,6 @@
 /deployed-ingest.txt
 /vitest-*.json
 /vitest-*.log
+# The round trip's transcripts (round-trip.sh) and the local leg's wrangler log.
+/round-trip-*.txt
+/wrangler-dev.log

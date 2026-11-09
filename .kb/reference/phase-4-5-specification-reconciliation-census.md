@@ -116,7 +116,7 @@ The pass wrote no ADR. Seven findings needed one and were recorded rather than d
 
 One defect survived inside the repair itself: `xtask/src/spec_trace.rs`'s doc comment describes
 its `ANCHOR_SLACK` as "the same twelve `standards/rust`'s own citation lint uses." Verified by
-grep on 2026-08-10: `xtask/src/spec_trace.rs:391` sets `ANCHOR_SLACK = 12`;
+grep on 2026-08-10: `xtask/src/spec_trace.rs:393` sets `ANCHOR_SLACK = 12`;
 `xtask/src/lint_constitution.rs:111` sets it to `10`. (The intake draft that fed this atom cited
 line `:381`; the constant is at `:391`.) The values disagree and the comment says they do not —
 a one-line repair, not an ADR.

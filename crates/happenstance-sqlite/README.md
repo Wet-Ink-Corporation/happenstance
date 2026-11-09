@@ -91,10 +91,19 @@ port: the next edit it needs will come with a decision record and a major.
 implements `happenstance-sync`'s `SendIngestStore` for `SqliteEventStore`, so
 generic code bound on `IngestStore` accepts it, and re-exports the port as
 `happenstance_sqlite::happenstance_sync`. It turns on `event-store`, and
-`happenstance-core`'s `serde` feature through `happenstance-sync`. What it does
-not give you yet is replication: there is no runner (issue #244) and no network
-peer, and several of the `SY` clauses the port carries are still
-`[PROVISIONAL]`.
+`happenstance-core`'s `serde` feature through `happenstance-sync`. It also
+implements `SendWriteGroupStore`, which reads the log back in the writes that
+made it (#420). What it does not give you yet is replication: the runner is
+unfinished (issue #244), there is no network transport, and several of the
+`SY` clauses the port carries are still `[PROVISIONAL]`.
+
+**Schema version 2.** `open`, `open_on` and `open_in_memory` apply migration 2
+to a file that lacks it: two columns on `event` recording which rows one write
+put in, and the marker raised to 2. `new`, which wraps a connection without
+migrating it, refuses a file still at 1 with `SchemaNeedsMigration`; open it
+once through `open_on` first. A build older than this one refuses a file this
+one has opened, so upgrade every process that opens a store before any of them
+opens it. Rows written before the migration read back as groups of one.
 
 ## The shape it represents
 

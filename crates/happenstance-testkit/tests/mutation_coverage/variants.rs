@@ -928,6 +928,11 @@ impl DecliningProjectionFixture {
          halves of a commit under one lock, so it has no write that could be \
          made to fail in any case";
 
+    /// The reason this fixture gives for declining `REOPEN`.
+    pub(crate) const REOPEN_REASON: &'static str = "this instrument declines everything, and the store under it keeps its \
+         rows and checkpoints in process memory alone, so there is no medium a \
+         reopen could read them back from in any case";
+
     /// A fresh instrument over a completely correct projection store.
     pub(crate) fn new() -> Self {
         Self {
@@ -942,6 +947,7 @@ impl ProjectionFixture for DecliningProjectionFixture {
 
     const SECOND_HANDLE: Capability = Capability::declined(Self::SECOND_HANDLE_REASON);
     const RESET_REFUSAL: Capability = Capability::declined(Self::RESET_REFUSAL_REASON);
+    const REOPEN: Capability = Capability::declined(Self::REOPEN_REASON);
     const COMMIT_FAULT: Capability = Capability::declined(Self::COMMIT_FAULT_REASON);
 
     async fn connect(&self) -> Self::Store {

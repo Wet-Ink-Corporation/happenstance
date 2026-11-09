@@ -44,7 +44,7 @@ impl ProjectionFixture for OutsideFixture {
     // of them see each other's commits.
     const SECOND_HANDLE: Capability = Capability::SUPPORTED;
 
-    // The one capability this fixture declines, in the store's own words. The
+    // A capability this fixture declines, in the store's own words. The
     // reason is read off the store rather than typed here, so a test asserting
     // on the skip cannot quietly assert on a different sentence.
     const RESET_REFUSAL: Capability =
@@ -53,6 +53,15 @@ impl ProjectionFixture for OutsideFixture {
     // Declared, because this store *can* be made to fail a commit — and having
     // declared it, it owes the rule an `Err` and an unchanged read model.
     const COMMIT_FAULT: Capability = Capability::SUPPORTED;
+
+    // Declined, because a reopen would have nothing to read back: the backing
+    // state is a map behind an `Arc` in this process and nowhere else, and a
+    // fixture that claimed a reopen over it would be certifying memory.
+    const REOPEN: Capability = Capability::declined(
+        "this store is a process-local map behind an `Arc` and has no medium \
+         outside the process, so a reopen that discarded the process's state \
+         would discard every committed row and checkpoint with it",
+    );
 
     async fn arm_commit_fault(&self) {
         self.store.arm_commit_fault();
@@ -92,6 +101,11 @@ impl ProjectionFixture for CheckpointOnlyFixture {
 
     const COMMIT_FAULT: Capability =
         Capability::declined("this store cannot be made to report a failed commit");
+
+    const REOPEN: Capability = Capability::declined(
+        "this store is a process-local map and has no medium outside the process \
+         for a reopen to read back",
+    );
 
     async fn connect(&self) -> CheckpointOnlyStore {
         self.store.handle()

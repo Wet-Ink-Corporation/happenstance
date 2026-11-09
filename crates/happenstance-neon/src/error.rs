@@ -201,11 +201,70 @@ pub enum NeonError<E> {
     },
 
     /// The store's meta table holds no identity row, so there is no identity
-    /// to ingest under. Migration 1 inserts it; its absence is a schema that
-    /// was never migrated. Produced only by ingest, behind `sync`, and
-    /// additive for the reason the variant above gives.
-    #[cfg(feature = "sync")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    /// to stamp an event, ingest or re-mint under. Migration 1 inserts it; its
+    /// absence is a schema that was never migrated.
+    ///
+    /// An append and an ingest refuse with it, and write nothing, rather than
+    /// committing rows with a NULL origin that no read could turn back into
+    /// events ([`UnstampedEvent`](Self::UnstampedEvent)), and
+    /// `NeonEventStore::remint_identity` refuses with it rather than creating
+    /// the row. Not behind `sync`, because an append produces it in every
+    /// build.
     #[error("the store's meta table holds no store_id row; was migration 1 applied?")]
     MissingIdentity,
+
+    /// A stored write-group guard is not one this build's codec reads (#420):
+    /// the bytes in `group_guard` on the group's first row, which only a
+    /// damaged schema or a newer build's format holds. The group is not
+    /// forwarded without it. Behind `sync`, for the reason
+    /// [`OriginPositionOutOfRange`](Self::OriginPositionOutOfRange) is.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the stored guard of write group {first} could not be read back")]
+    StoredGuard {
+        /// The write group the guard belongs to.
+        first: happenstance_core::SequencePosition,
+        /// Why the codec refused it.
+        #[source]
+        source: happenstance_sync::write_group::GuardCodecError,
+    },
+
+    /// An ingested group's guard could not be encoded for storage (#420).
+    /// Refused before the request is built, so nothing in the call was sent;
+    /// the group has no position yet, so it is named by its index in the
+    /// call. Behind `sync`, for the reason
+    /// [`OriginPositionOutOfRange`](Self::OriginPositionOutOfRange) is.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the guard of ingested group {group} could not be encoded for storage")]
+    UnstorableGuard {
+        /// The group's index in the call.
+        group: usize,
+        /// Why the codec refused it.
+        #[source]
+        source: happenstance_sync::write_group::GuardCodecError,
+    },
+
+    /// The group read handed its page builder a row naming a write group it
+    /// had already passed, so the log cannot be paged in whole groups. The read
+    /// orders its rows by group, so no schema this adapter wrote produces one;
+    /// a hand-edited `write_group` can. Behind `sync`, for the reason
+    /// [`OriginPositionOutOfRange`](Self::OriginPositionOutOfRange) is.
+    #[cfg(feature = "sync")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+    #[error("the stored write groups are out of order")]
+    GroupOrder(#[from] happenstance_sync::write_group::GroupOrderError),
+
+    /// A batch answered with a different number of result sets than it sent
+    /// statements (#131). The endpoint answers one result set per statement,
+    /// so this is this crate and the endpoint disagreeing about the shape of
+    /// an answer, and the same request fails the same way again. Declared
+    /// last, so the lines above keep the numbers they are cited by.
+    #[error("the /sql batch answered {actual} result set(s) where this adapter sent {expected}")]
+    ResultSets {
+        /// How many statements the request carried.
+        expected: usize,
+        /// How many result sets came back.
+        actual: usize,
+    },
 }

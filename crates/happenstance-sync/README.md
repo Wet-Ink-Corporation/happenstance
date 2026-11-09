@@ -12,17 +12,26 @@ with programs you can run.
 > store adapter can implement `IngestStore` behind an optional `sync` feature,
 > and so that an outside adapter can be measured by
 > [`happenstance-sync-testkit`](https://docs.rs/happenstance-sync-testkit).
-> Two things a replicating application needs do not exist yet:
+> Two things a replicating application needs are not finished yet:
 >
-> - **a runner**, the loop that pulls from a peer, ingests, and acknowledges
->   (issue #244), and
-> - **a network peer**: the only `SyncPeer` is `MemorySyncPeer`, which lives in
->   one process.
+> - **the runner**, the loop that pulls from a peer, ingests, and acknowledges
+>   (issue #244): `runner::Edge` drives one edge, a step at a time or through
+>   `Edge::run`, a loop the caller drives on its own runtime with a seeded,
+>   jittered, capped backoff. It acts on each failure class, bounds what it
+>   holds in memory, and stops when the far side answers as a new store
+>   incarnation, never touching the local log. Its watermark is kept through
+>   the projection port in the caller's batch (`runner::Watermark`, SY-31,
+>   #143). Still to come: a peer set above the single edge, and
+> - **a network transport**: `StoreSyncPeer`, `serve_sync` and
+>   `RemoteSyncPeer` are a network peer's transport-free halves (#117), and
+>   no crate yet supplies an `Exchange` over a real network. Wrapped in
+>   `SendPeer`, either half over `Send + Sync` parts is a `SendSyncPeer`, so code
+>   that spawns from a generic function takes it (#421).
 >
 > A `[FROZEN]` `SY` clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > binds this crate's semver as an `ES` clause binds `happenstance-core`'s.
-> SY-7, SY-10, SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-38 are
+> SY-7, SY-10, SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-39 are
 > `[PROVISIONAL]`, binding until the falsifier each names, and SY-14, SY-18 and
 > SY-32 are `[DEFERRED]`. The version moves in lockstep with the rest of the
 > workspace.
@@ -41,6 +50,12 @@ off by default:
 
 Bind `IngestStore` in generic code, as you bind `EventStore`: it is the weaker
 requirement and accepts both flavours.
+
+A store the runner pushes from, or a `StoreSyncPeer` serves, also implements
+`WriteGroupStore`, which reads the log back in the writes that made it
+(SY-39, #420), so a push never tears one. `happenstance-sqlite` implements it
+behind `sync`, as `SendWriteGroupStore`, over its migration 2; the other three
+adapters follow in #420's later parts.
 
 ## Use
 

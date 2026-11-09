@@ -90,11 +90,12 @@ use crate::spec_trace::workspace_root;
 const REPORTING: &str = "writing the affected gate's report";
 
 /// The glob-free member roots, matching the workspace manifest's
-/// `members = ["crates/*", "examples/*", "harness/workerd", "xtask"]`.
+/// `members = ["crates/*", "examples/*", "harness/workerd", "harness/sync-round-trip", "xtask"]`.
 ///
 /// A directory here is scanned one level deep for a `Cargo.toml`; a manifest
 /// directly at the path is taken as a member itself. `harness` is scanned, so
-/// `harness/workerd` is found one level down like any crate under `crates`.
+/// `harness/workerd` and `harness/sync-round-trip` are found one level down
+/// like any crate under `crates`.
 ///
 /// Duplicating the manifest's list is the risk this constant carries: a fifth
 /// member root added to `Cargo.toml` and not here would leave that crate's

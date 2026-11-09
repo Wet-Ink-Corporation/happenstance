@@ -17,12 +17,13 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use happenstance_core::bytes::Bytes;
 use happenstance_core::futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, ConditionViolated, Event, EventId, Query, ReadOptions,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventType, Query, ReadOptions,
     RecordedAt, SendEventStore, SequencePosition, SequencedEvent, StoreId, StoreLimit,
 };
 use happenstance_sync::{
@@ -43,9 +44,26 @@ enum Mistake {
     /// own identity at the position it took, keeping the origin's only for
     /// dedupe and the watermark. Everything a runner counts still adds up.
     RemintsOnIngest,
-    /// VT-9's, through VT-5's rule: stamp an ingested event with the arrival
-    /// time instead of the origin's.
+    /// VT-9's, the one its `Rejects:` names: stamp an ingested event with the
+    /// arrival time instead of the origin's.
     RestampsRecordedAt,
+    /// VT-9's second: keep the origin's time in whole seconds, as a store does
+    /// that writes it through a seconds-resolution column or `strftime('%s')`.
+    TruncatesRecordedAtToSeconds,
+    /// VT-9's third: keep the time in an unsigned column, so one recorded
+    /// before 1970 is held as the epoch. `happenstance-sync`'s placeholder
+    /// `RecordedAt` was a `u64` until ADR-0073.
+    ClampsRecordedAtAtTheEpoch,
+    /// VT-9's fourth: hold recorded times non-decreasing with position, by
+    /// raising an ingested time to the one before it. The ordering relation
+    /// VT-9 forbids the contract to state, enforced by a store.
+    KeepsRecordedAtMonotonic,
+    /// VT-9's fifth: bind one recorded time per group, its head's, as a
+    /// multi-row insert does that binds the value once.
+    StampsEachGroupWithItsHeadsTime,
+    /// VT-9's sixth: refuse to hold a time from the future, and clamp any
+    /// foreign time later than its own clock, [`MUTANT_NOW`], to that clock.
+    ClampsRecordedAtToItsClock,
     /// SY-5's: an order-preserving merge. An ingested event is inserted where
     /// its origin numbered it and every later row is renumbered, so an event
     /// lands below a checkpoint a projection already read past.
@@ -122,6 +140,36 @@ enum Mistake {
     /// left alone, so the call is refused as `TagsPerEvent`, `Park`, and a
     /// runner parks a call that would have landed halved.
     RefusesTheTotalAsPerEvent,
+    /// SY-7's: a compensation minted under an incarnation the store never
+    /// read, a placeholder (the nil `StoreId`), because its compensation path
+    /// was written before the store kept its identity. The log then says a
+    /// store nobody assigned authored the reversal, and every such store files
+    /// every compensation under that one identity, so two stores' reversals at
+    /// one position collapse into one when they meet: the convergence SY-7's
+    /// marker asks about, reached by losing an event.
+    FilesCompensationUnderAPlaceholder,
+    /// SY-10's: the merge rule built into the store. A group whose travelling
+    /// guard the log already breaks is answered with a reversal the store
+    /// writes itself, in the same write. That is the hub's rule, and a store
+    /// that carries it runs it in every direction of every edge it sits on: as
+    /// a spoke it judges what the hub sends, which is SY-10's falsifier
+    /// written into an adapter, and its peers lose the per-direction rule the
+    /// runner is required to permit.
+    AdjudicatesOnIngest,
+    /// SY-14's, the serial peel's cousin at scale: consult what the store
+    /// holds for the first [`LOOKUP_CHUNK`] foreign events of a call only, as
+    /// a store does that sends one `IN (…)` list of identities under a
+    /// parameter budget and forgets to loop. A held event past the chunk is
+    /// written again, so only a pulled batch longer than the chunk, holding
+    /// a re-delivery behind it, sees it: SY-12's three-event call cannot.
+    LooksUpOneChunkOfIdentities,
+    /// VT-24's on the ingest path: refuse a call of more than
+    /// [`CALL_CAP_BELOW_THE_FLOOR`] events, compensation included, as
+    /// `ExceedsStoreLimit { limit: EventsPerBatch, .. }`, before writing. The
+    /// refusal is well formed and states its class; the number is below the
+    /// floor every store owes a call, so the minimum peer's 128-event push is
+    /// refused at the far side.
+    CapsTheCallBelowTheFloor,
     /// Not a mistake in the write: a store whose identity read fails, as a
     /// SQL store's does when its meta row is gone or its server is not
     /// reachable. Every rule that asks the store who it is must report the
@@ -141,8 +189,19 @@ const WRONG_MAX_METADATA_LEN: usize = 512;
 /// other rule makes, the largest of which is SY-18's control at 16.
 const WRONG_MAX_TAGS_PER_BATCH: usize = 64;
 
+/// The incarnation [`Mistake::FilesCompensationUnderAPlaceholder`] files
+/// every compensation under: one no store was given, and no rule's origin.
+const PLACEHOLDER: StoreId = StoreId::from_bytes([0; 16]);
+
 /// The time this store stamps everything it writes itself.
 const ARRIVAL: RecordedAt = RecordedAt::from_millis(1_234_567_890_123);
+
+/// What [`Mistake::ClampsRecordedAtToItsClock`] reads as now: 2027-01-15, a
+/// plausible clock, later than every past time any rule sends and earlier
+/// than VT-9's far-future one. Not [`ARRIVAL`], which every ordinary time any
+/// rule sends is already later than, so a clamp there would not need the
+/// far-future event to be seen.
+const MUTANT_NOW: i64 = 1_800_000_000_000;
 
 /// What a wrong store fails with.
 #[derive(Debug)]
@@ -182,6 +241,15 @@ impl Classify for WrongError {
 
 /// How many rows [`Mistake::ChunksWithoutATransaction`] commits at a time.
 const CHUNK: usize = 2;
+
+/// How many of a call's foreign events [`Mistake::LooksUpOneChunkOfIdentities`]
+/// checks against what it holds: half of VT-24's floor, and far above any call
+/// another rule makes.
+const LOOKUP_CHUNK: usize = 64;
+
+/// The most events [`Mistake::CapsTheCallBelowTheFloor`] takes in one call:
+/// half of VT-24's floor, and above any call another rule makes.
+const CALL_CAP_BELOW_THE_FLOOR: usize = 64;
 
 /// One stored row, and the identity the store dedupes and watermarks it by.
 ///
@@ -273,6 +341,18 @@ impl WrongIngestStore {
     /// is decided: every one, foreign and compensation, or the ones the
     /// mistake checks.
     fn check_ceilings(&self, groups: &[IngestGroup<'_>]) -> Result<(), IngestError<WrongError>> {
+        if self.mistake == Mistake::CapsTheCallBelowTheFloor {
+            let len: usize = groups
+                .iter()
+                .map(|group| group.events.len() + group.compensation.len())
+                .sum();
+            if len > CALL_CAP_BELOW_THE_FLOOR {
+                return Err(IngestError::exceeds_store_limit(
+                    StoreLimit::EventsPerBatch,
+                    len,
+                ));
+            }
+        }
         let foreign = if self.mistake == Mistake::ChecksOnlyEachGroupsHead {
             1
         } else {
@@ -379,20 +459,40 @@ impl WrongIngestStore {
         groups: &[IngestGroup<'_>],
     ) -> Result<Written, IngestError<WrongError>> {
         let held: BTreeSet<EventId> = rows.iter().map(|row| row.origin).collect();
+        // What [`Mistake::LooksUpOneChunkOfIdentities`] knows past its chunk.
+        let nothing_held = BTreeSet::new();
+        let start = rows.len();
         let mut working = rows.clone();
         let mut counts = Ingested::default();
         let mut marks = Vec::new();
+        // Each foreign event's index in the call, across its groups.
+        let mut in_call = 0_usize;
         for (group_index, group) in groups.iter().enumerate() {
             // What a group-by-group commit has kept when this group begins.
             let committed =
                 (self.mistake == Mistake::KeepsGroupsBeforeTheClaim).then(|| working.clone());
             let landed_before = counts.appended;
+            // The recorded time of the group's head, which the multi-row
+            // insert of `StampsEachGroupWithItsHeadsTime` binds once.
+            let group_head = group.events.first().map(|head| head.recorded_at);
             for (event_index, shipped) in group.events.iter().enumerate() {
                 let head_of_batch = group_index == 0 && event_index == 0;
-                match self.verdict(&held, &working, shipped, head_of_batch) {
+                let looked_up =
+                    self.mistake != Mistake::LooksUpOneChunkOfIdentities || in_call < LOOKUP_CHUNK;
+                in_call += 1;
+                // Past its chunk the mistake knows only what this call wrote.
+                let (held_here, seen) = if looked_up {
+                    (&held, working.as_slice())
+                } else {
+                    (&nothing_held, working.get(start..).unwrap_or_default())
+                };
+                match self.verdict(held_here, seen, shipped, head_of_batch) {
                     Verdict::Skip => counts.skipped += 1,
                     Verdict::Land => {
-                        self.land(&mut working, shipped);
+                        // Inside the loop the group has a head, so the
+                        // fallback is never taken.
+                        let heads_time = group_head.unwrap_or(shipped.recorded_at);
+                        self.land(&mut working, shipped, heads_time);
                         counts.appended += 1;
                     }
                     Verdict::Refuse => {
@@ -407,6 +507,9 @@ impl WrongIngestStore {
             if counts.appended > landed_before || self.mistake == Mistake::RecompensatesOnRedelivery
             {
                 counts.compensated += self.compensate(&mut working, group.compensation);
+                if self.mistake == Mistake::AdjudicatesOnIngest {
+                    counts.compensated += self.adjudicate(&mut working, rows, group);
+                }
             }
             marks.push(working.len());
         }
@@ -457,16 +560,14 @@ impl WrongIngestStore {
     }
 
     /// Writes one foreign event at the tail, or where the mistake puts it.
-    fn land(&self, working: &mut Vec<Row>, shipped: &ReplicatedEvent) {
+    /// `group_head` is the recorded time of its group's first event.
+    fn land(&self, working: &mut Vec<Row>, shipped: &ReplicatedEvent, group_head: RecordedAt) {
         let position = next_position(working);
         let stored_id = match self.mistake {
             Mistake::RemintsOnIngest => EventId::new(self.own, position),
             _ => shipped.id,
         };
-        let recorded_at = match self.mistake {
-            Mistake::RestampsRecordedAt => ARRIVAL,
-            _ => shipped.recorded_at,
-        };
+        let recorded_at = self.kept_time(working, shipped.recorded_at, group_head);
         let row = Row {
             stored: SequencedEvent::new(position, stored_id, recorded_at, shipped.event.clone()),
             origin: shipped.id,
@@ -478,20 +579,77 @@ impl WrongIngestStore {
         }
     }
 
+    /// The recorded time this store keeps for an ingested event its origin
+    /// recorded at `sent`: that time, or what the mistake makes of it.
+    fn kept_time(&self, working: &[Row], sent: RecordedAt, group_head: RecordedAt) -> RecordedAt {
+        let millis = sent.as_millis();
+        match self.mistake {
+            Mistake::RestampsRecordedAt => ARRIVAL,
+            // Toward zero, as an integer division in SQL truncates.
+            Mistake::TruncatesRecordedAtToSeconds => {
+                RecordedAt::from_millis(millis - millis % 1_000)
+            }
+            Mistake::ClampsRecordedAtAtTheEpoch => RecordedAt::from_millis(millis.max(0)),
+            // `RecordedAt` is deliberately not `Ord` (VT-9), so the mistake
+            // compares the raw milliseconds, as a store's SQL would.
+            Mistake::KeepsRecordedAtMonotonic => working.last().map_or(sent, |before| {
+                RecordedAt::from_millis(millis.max(before.stored.recorded_at.as_millis()))
+            }),
+            Mistake::StampsEachGroupWithItsHeadsTime => group_head,
+            Mistake::ClampsRecordedAtToItsClock => RecordedAt::from_millis(millis.min(MUTANT_NOW)),
+            _ => sent,
+        }
+    }
+
     /// Mints `compensation` here, and says how many it wrote.
     fn compensate(&self, working: &mut Vec<Row>, compensation: &[Event]) -> usize {
+        let author = if self.mistake == Mistake::FilesCompensationUnderAPlaceholder {
+            PLACEHOLDER
+        } else {
+            self.own
+        };
         for event in compensation {
             let mut position = next_position(working);
             if self.mistake == Mistake::LeavesAGap {
                 position = position.next().unwrap_or(position);
             }
-            let id = EventId::new(self.own, position);
+            let id = EventId::new(author, position);
             working.push(Row {
                 stored: SequencedEvent::new(position, id, ARRIVAL, event.clone()),
                 origin: id,
             });
         }
         compensation.len()
+    }
+
+    /// [`Mistake::AdjudicatesOnIngest`]'s judgement: when the log as the call
+    /// found it breaks `group`'s guard, write one reversal of the store's own,
+    /// tagged as the group's first event is, and say how many it wrote.
+    fn adjudicate(&self, working: &mut Vec<Row>, found: &[Row], group: &IngestGroup<'_>) -> usize {
+        let broken = group.guard.is_some_and(|guard| {
+            found.iter().any(|row| {
+                guard.is_violated_by(
+                    row.stored.position,
+                    row.stored.event_type(),
+                    row.stored.tags(),
+                )
+            })
+        });
+        let Some(head) = group.events.first().filter(|_| broken) else {
+            return 0;
+        };
+        let reversal = Event::new(EventType::from_static("ReversedOnIngest"), Bytes::new())
+            .map(|event| event.with_tags(head.event.tags().clone()));
+        let Ok(reversal) = reversal else {
+            return 0;
+        };
+        let position = next_position(working);
+        let id = EventId::new(self.own, position);
+        working.push(Row {
+            stored: SequencedEvent::new(position, id, ARRIVAL, reversal),
+            origin: id,
+        });
+        1
     }
 }
 
@@ -655,10 +813,23 @@ impl Stream for Owned {
 #[derive(Debug, Clone)]
 struct WrongFixture(Arc<WrongIngestStore>);
 
+/// The next wrong store's incarnation, counted so every fixture's store is a
+/// fresh one: SY-7's rule opens two stores and refuses a fixture that hands it
+/// one incarnation twice. `Relaxed`, because the count only has to be unique,
+/// and a read-modify-write is that under any ordering.
+static INCARNATIONS: AtomicU64 = AtomicU64::new(0);
+
+/// A fresh incarnation, `0xE1` in every byte but the counted low ones, so it
+/// is never one of the foreign origins a rule uses.
+fn fresh_incarnation() -> StoreId {
+    let counted = u128::from(INCARNATIONS.fetch_add(1, Ordering::Relaxed));
+    StoreId::from_bytes((u128::from_be_bytes([0xE1; 16]) ^ counted).to_be_bytes())
+}
+
 impl WrongFixture {
     fn new(mistake: Mistake) -> Self {
         Self(Arc::new(WrongIngestStore {
-            own: StoreId::from_bytes([0xE1; 16]),
+            own: fresh_incarnation(),
             rows: Mutex::new(Vec::new()),
             fault: Mutex::new(None),
             mistake,
@@ -824,6 +995,7 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
     let all = outcomes(async || WrongFixture::new(Mistake::CannotReadItsIdentity));
     let clauses = [
         ("ingest_preserves_origin_identity", "VT-5"),
+        ("ingest_preserves_the_recorded_time", "VT-9"),
         ("ingested_events_land_above_the_local_head", "SY-5"),
         ("dedupe_reaches_identity_without_decoding", "SY-12"),
         ("an_unheld_own_identity_stops_the_ingest", "SY-38"),
@@ -833,6 +1005,9 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
             "ingest_holds_the_call_to_its_tags_per_batch_ceiling",
             "VT-36",
         ),
+        ("only_the_adjudicator_compensates", "SY-7"),
+        ("directional_merge_rules_compose", "SY-10"),
+        ("bulk_ingest_is_idempotent_in_bounded_round_trips", "SY-14"),
     ];
     assert_eq!(all.len(), clauses.len(), "a rule was added: {all:?}");
     for (name, verdict) in all {
@@ -863,11 +1038,63 @@ fn ingest_preserves_origin_identity_fails_a_store_that_remints_on_ingest() {
 }
 
 #[test]
-fn ingest_preserves_origin_identity_fails_a_store_that_restamps_recorded_at() {
+fn ingest_preserves_the_recorded_time_fails_a_store_that_restamps_recorded_at() {
     fails_exactly(
         &verdicts(async || WrongFixture::new(Mistake::RestampsRecordedAt)),
-        "ingest_preserves_origin_identity",
-        "VT-5",
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// Only an event recorded off a whole second sees it, which is why the rule
+/// sends none on one.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_truncates_to_seconds() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::TruncatesRecordedAtToSeconds)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// Only the event recorded before 1970 sees it.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_clamps_at_the_epoch() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::ClampsRecordedAtAtTheEpoch)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// The event its origin recorded earlier than the one it numbered before it
+/// sees it, whatever the store stamped its own local event with.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_keeps_recorded_at_monotonic() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::KeepsRecordedAtMonotonic)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// Only the event recorded in the far future sees it.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_clamps_to_its_clock() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::ClampsRecordedAtToItsClock)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
+    );
+}
+
+/// Only a group of more than one event, each recorded at its own time, sees it.
+#[test]
+fn ingest_preserves_the_recorded_time_fails_a_store_that_stamps_each_group_with_its_heads_time() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::StampsEachGroupWithItsHeadsTime)),
+        "ingest_preserves_the_recorded_time",
+        "VT-9",
     );
 }
 
@@ -1097,5 +1324,74 @@ fn ingest_holds_the_call_to_its_tags_per_batch_ceiling_fails_a_store_that_refuse
     assert!(
         message.is_some_and(|message| message.contains("not as the tags per batch limit")),
         "{message:?}"
+    );
+}
+
+/// SY-7's rule fails it, and one other rule notices without failing it:
+/// SY-38's compensation-hidden half arranges a claim on the identity the
+/// compensation should take, finds the compensation elsewhere, and says so as
+/// a skip rather than a pass. Every other rule passes.
+#[test]
+fn only_the_adjudicator_compensates_fails_a_store_that_files_compensation_under_a_placeholder() {
+    let all = verdicts(async || WrongFixture::new(Mistake::FilesCompensationUnderAPlaceholder));
+    let (noticed, rest): (Vec<_>, Vec<_>) = all
+        .into_iter()
+        .partition(|(name, _)| *name == "an_unheld_own_identity_stops_the_ingest");
+    let hidden_claim_unarranged = RuleOutcome::Skipped {
+        capability: NO_HIDDEN_CLAIM,
+        reason: NO_HIDDEN_CLAIM_REASON,
+    };
+    assert_eq!(
+        noticed,
+        [(
+            "an_unheld_own_identity_stops_the_ingest",
+            Ok(hidden_claim_unarranged)
+        )]
+    );
+    fails_exactly(&rest, "only_the_adjudicator_compensates", "SY-7");
+}
+
+/// SY-10's rule fails it, and nothing else does. SY-7's rule sends no guard,
+/// so the merge rule this store carries never fires there. The two stores in
+/// SY-10's arrangement each take a claim under a guard their own log breaks,
+/// and a spoke that judges it writes the reversal the hub alone was to write.
+#[test]
+fn directional_merge_rules_compose_fails_a_store_that_adjudicates_on_ingest() {
+    let open = async || WrongFixture::new(Mistake::AdjudicatesOnIngest);
+    fails_exactly(&verdicts(open), "directional_merge_rules_compose", "SY-10");
+    // For the reason the clause names: the spoke judged what it pulled.
+    let violation = block_on(ingest_rules::directional_merge_rules_compose(open))
+        .expect_err("the rule rejects the store");
+    assert!(
+        violation
+            .message()
+            .starts_with("a claim pulled from the far end was counted as"),
+        "the rule failed for another reason: {violation}"
+    );
+}
+
+/// A held event past the store's one chunk of identity lookups is written
+/// again. Only a call longer than the chunk, holding a re-delivery behind it,
+/// sees it, which is why SY-14's rule batches by VT-24's floor.
+#[test]
+fn bulk_ingest_is_idempotent_in_bounded_round_trips_fails_a_store_that_looks_up_one_chunk_of_identities()
+ {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::LooksUpOneChunkOfIdentities)),
+        "bulk_ingest_is_idempotent_in_bounded_round_trips",
+        "SY-14",
+    );
+}
+
+/// A store whose ingest refuses a call of 65 events refuses the minimum
+/// peer's 128-event push, and the rule reports that refusal under VT-24, the
+/// floor it breaks, rather than SY-14.
+#[test]
+fn bulk_ingest_is_idempotent_in_bounded_round_trips_fails_a_store_that_caps_the_call_below_the_floor()
+ {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::CapsTheCallBelowTheFloor)),
+        "bulk_ingest_is_idempotent_in_bounded_round_trips",
+        "VT-24",
     );
 }
