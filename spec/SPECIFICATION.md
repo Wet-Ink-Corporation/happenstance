@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**186 `[FROZEN]`**, **14 `[PROVISIONAL]`**, **5 `[DEFERRED]`** and **seven
+**187 `[FROZEN]`**, **13 `[PROVISIONAL]`**, **5 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -6906,7 +6906,7 @@ It was written before that code existed, and the clauses that depend on
 measurement rather than on argument are consequently `[DEFERRED]` against the
 phase that builds the port against two real peers — five of the thirty-seven,
 with a further eleven `[PROVISIONAL]` (three and thirteen since ADR-0027 settled SY-27
-and SY-28 without the experiment, and one of thirty-nine and four since ADR-0107 at phase 13's close: SY-32, and SY-7, SY-10, SY-29 and SY-39). The rest are frozen, because the shape
+and SY-28 without the experiment, and one of thirty-nine and three since ADR-0107 at phase 13's close: SY-32, and SY-7, SY-10 and SY-29). The rest are frozen, because the shape
 does not wait on the transport. They are written anyway, and the reason is
 recorded in the decision ledger: `RUNBOOK.md:438-439` says deferring the
 sync port **"leaks `EventId` and a tail seam back into `EventStore`"**. That was a
@@ -8219,13 +8219,13 @@ highest. A store whose writers interleave can commit a later write with a lower
 position than an earlier one's last row; resuming above a group's lowest
 position can never skip a group that was not yet visible.
 
-`[PROVISIONAL — falsified by a store whose writers can commit a write group
-whose lowest position is below a group a reader has already passed, so that
-resuming above a name skips a write. Falsification test: interleave two
-writers on a store that does not serialise them and show a read chained on
-`after = last.first()` misses a committed group, rather than receiving it on a
-later page. Recorded in
-[ADR-0105](../.kb/decisions/0105-write-groups-are-recorded-per-row.md), proposed.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13 (§6), with
+[ADR-0105](../.kb/decisions/0105-write-groups-are-recorded-per-row.md) accepted 2026-11-09, on the write-group family's six rules (#420),
+pinned against nine wrong stores in `tests/wrong_write_group_stores.rs` and green on `MemoryIngestStore` and `happenstance-sqlite` (#434),
+on `happenstance-postgres` and `happenstance-neon`, whose writers interleave, in `live-postgres` and `live-neon` (#436), and on the Durable
+Object under `workerd`, local and deployed (#437). Reopened by a store whose writers can commit a write group whose lowest position is
+below a group a reader has already passed, so that resuming above a name skips a write: interleave two writers on a store that does not
+serialise them and show a read chained on `after = last.first()` misses a committed group, rather than receiving it on a later page.
 Rule: `an_append_reads_back_as_one_group`, `an_ingested_group_keeps_its_boundary_and_guard`,
 `compensation_joins_its_group`, `a_group_after_a_redelivery_is_named_by_its_first_landed_row`,
 `a_read_never_cuts_a_group` and `pages_chain_on_first_and_end_with_nothing`
@@ -10442,9 +10442,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 39 | 34 | 4 | 1 | 0 |
+| §5 `SyncPeer` | `SY` | 39 | 35 | 3 | 1 | 0 |
 | §6 conformance | `CF` | 43 | 38 | 2 | 2 | 1 |
-| **Total** | | **212** | **186** | **14** | **5** | **7** |
+| **Total** | | **212** | **187** | **13** | **5** | **7** |
 
 ### 7.2 The table
 
@@ -10640,7 +10640,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-36 | FROZEN | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
 | SY-37 | FROZEN | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |
 | SY-38 | FROZEN | `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test, `crat… | E2E-42, E2E-34 |
-| SY-39 | PROVISIONAL | `an_append_reads_back_as_one_group`, `an_ingested_group_keeps_its_boundary_and… | E2E-35, E2E-39 |
+| SY-39 | FROZEN | `an_append_reads_back_as_one_group`, `an_ingested_group_keeps_its_boundary_and… | E2E-35, E2E-39 |
 
 #### `CF` — conformance obligations (§6)
 

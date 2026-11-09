@@ -2,7 +2,7 @@
 id: kb-decision-0107
 title: Phase 13's clauses are frozen or re-dispositioned, and every deferred SY clause is settled or renewed
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0107
 reversibility: low
@@ -10,8 +10,8 @@ phase: 13
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed on 2026-11-09 for #124 and #128; every freeze in it is the owner's call (Ryan), and
-  nothing here binds until he accepts it. Fourteen clauses freeze on rules that run on phase-13
+  Accepted 2026-11-09 for #124 and #128, the owner's call (Ryan, wi-164211 for sections 1-4,
+  wi-56271e for section 5, both option A). Fourteen clauses freeze on rules that run on phase-13
   and wrong implementations they fail: VT-6, VT-9, VT-21, VT-24, SY-14, SY-18, SY-20, SY-22,
   SY-23, SY-27, SY-28, SY-30, SY-31 and CF-40. SY-14 freezes on the live Neon measurement its
   marker was deferred for: Kestrel Rotor's 1,840 events in 16 one-request pushes, 1,583 ms. SY-7
@@ -20,8 +20,8 @@ summary: >-
   deferred SY clause is left unowned. VT-36 moves to freeze-by-14, because the plan's
   freeze-by-21 is refused by the ledger lint. SY-35's Rule line is repaired so that the
   convergence family is outside the_sync_suite_never_decodes (#431). Four further freezes, SY-36,
-  SY-37, SY-38 and CF-42, have complete evidence and are proposed in their own sections, each
-  needing the owner's separate yes. CF-40 records the budget unit ADR-0043 left open: the field,
+  SY-37, SY-38 and CF-42, were held for the owner's separate yes and he gave it; SY-39 freezes too,
+  with ADR-0105 accepted the same day (wi-73ab4f). CF-40 records the budget unit ADR-0043 left open: the field,
   not data plus metadata.
 depends_on:
   - kb-decision-0026
@@ -57,12 +57,11 @@ last_reviewed: 2026-11-09
 
 # Phase 13's clauses are frozen or re-dispositioned, and every deferred SY clause is settled or renewed
 
-**Proposed on 2026-11-09 for #124 and #128.** Every freeze is the owner's call, and this record
-binds nothing until Ryan accepts it; on acceptance its `status` becomes `accepted` and the branch
-that carries it merges. Sections 1 to 4 are the record as a whole. Section 5 holds four more
-freezes whose evidence is complete, and **each of those needs its own yes**: they sit in the
-branch's second commit, one hunk per marker, so any of them can be declined without touching the
-rest. No long-form record exists; this atom is the record.
+**Accepted on 2026-11-09 for #124 and #128.** Proposed the same day, and every freeze in it was
+the owner's call. Ryan accepted sections 1 to 4 as proposed (`wi-164211`, option A), and froze all
+four of section 5's held clauses (`wi-56271e`, option A), each of which had been put to him
+separately. He accepted ADR-0105 the same day (`wi-73ab4f`), which lets section 6 freeze SY-39. No
+long-form record exists; this atom is the record.
 
 ## Context
 
@@ -186,8 +185,8 @@ After this record, the only `[DEFERRED]` SY clause is SY-32, and it names its ex
   it: a `freeze-by-N` must name a phase 1.0 waits on, minus 21 itself, which is the audit. Phase 14
   is the last non-documentation phase before 1.0. SY-7 and SY-10 take the same row for the same
   reason.
-- **SY-39 is not moved.** Its minting record, ADR-0105, is itself proposed. It stays
-  `freeze-by-13` and freezes with ADR-0105's acceptance, or is re-dispositioned then.
+- **SY-39** was held here while its minting record, ADR-0105, was proposed. ADR-0105 was accepted
+  on 2026-11-09, and section 6 freezes it.
 
 ## 4. SY-35's Rule line (#431)
 
@@ -199,12 +198,11 @@ holds. The repair scopes `the_sync_suite_never_decodes` to the peer, ingest, res
 write-group families and names the convergence family as outside it. The MUST sentence is
 byte-identical. #431 closes on this record.
 
-## 5. Proposed freezes that each need the owner's separate yes
+## 5. Freezes the owner answered separately
 
-These are the owner's explicitly (plan, "held for Ryan: every freeze, SY-36/37/38 explicitly", and
-default 6 for CF-42). The evidence for each is complete. Each is one hunk of the branch's second
-commit; declining one means reverting that hunk and giving the row a disposition, for which the
-fallback is stated.
+These were the owner's explicitly (plan, "held for Ryan: every freeze, SY-36/37/38 explicitly", and
+default 6 for CF-42), so each was put to him on its own, with the fallback stated. He froze all four
+on 2026-11-09 (`wi-56271e`, option A), and the fallbacks below are not taken.
 
 ### 5.1 SY-36: every peer error states its class
 
@@ -252,7 +250,24 @@ frontier in `live-postgres`; both green on run 42547020310 and on every phase-13
 The meta-tests fail `NeverAsked` and measure `EmptySettle`. Default 6 said the owner is asked when
 this evidence is complete. **Fallback:** `freeze-by-14`.
 
-## Open points for the owner
+## 6. SY-39: a store reads its log back in write groups
+
+Frozen with [ADR-0105](0105-write-groups-are-recorded-per-row.md), which the owner accepted on
+2026-11-09 (`wi-73ab4f`). The write-group family's six rules (`an_append_reads_back_as_one_group`,
+`an_ingested_group_keeps_its_boundary_and_guard`, `compensation_joins_its_group`,
+`a_group_after_a_redelivery_is_named_by_its_first_landed_row`, `a_read_never_cuts_a_group`,
+`pages_chain_on_first_and_end_with_nothing`) are pinned against nine wrong stores in
+`tests/wrong_write_group_stores.rs`: every row its own group, adjacent groups merged, a cut at
+`max_events`, a dropped guard, compensation apart, a resume by row position, a group named by its
+first allocated position, an oversized group skipped, and nothing-waiting said on a cut page. The
+family is green on `MemoryIngestStore` and `happenstance-sqlite` (#434), on `happenstance-postgres`
+and `happenstance-neon` in `live-postgres` and `live-neon`, with Neon's live interleave test (#436),
+and on the Durable Object under `workerd`, local and deployed (#437). Postgres and Neon, whose
+writers interleave, are the far end of the axis its falsifier names. Reopened by a store whose
+writers can commit a group named below one a reader already passed, so that resuming above a name
+skips a write.
+
+## Open points recorded at the proposal
 
 - **A. SY-20's width.** "Any two interleavings that agree on per-origin order and disagree
   everywhere else" admits only the two block orders, so a fold sensitive to alternation and not to
@@ -277,10 +292,9 @@ this evidence is complete. **Fallback:** `freeze-by-14`.
 
 ## Consequences
 
-- With section 5 accepted, no `freeze-by-13` row is left except SY-39, which waits on ADR-0105.
-  Without it, SY-36, SY-37, SY-38 and CF-42 take their fallbacks before phase 13 reads `done`.
-- §1.3 reads 182 `[FROZEN]`, 18 `[PROVISIONAL]` and 5 `[DEFERRED]` after sections 1 to 4, and 186,
-  14 and 5 with section 5.
+- No `freeze-by-13` row is left in the ledger.
+- §1.3 reads 187 `[FROZEN]`, 13 `[PROVISIONAL]` and 5 `[DEFERRED]`: 182, 18 and 5 after sections 1
+  to 4, then four more frozen by section 5 and one by section 6.
 - `crates/happenstance-sync/src/lib.rs` and both sync READMEs list the provisional SY clauses that
   remain.
 - The evidence for SY-14, SY-30, SY-36, SY-37, VT-6's live leg and CF-42 is in CI's live jobs, not

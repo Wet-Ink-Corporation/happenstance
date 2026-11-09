@@ -49,7 +49,7 @@ not the same as what a user needed to be told.
   first 64 identities of a call only, and one that caps a call at 64. Every
   mounted ingest family runs it, so an adapter whose ingest refuses a
   128-event call now fails (behaviour; CF-32). The live Neon measurement below
-  is recorded in ADR-0107, which proposes SY-14's freeze.
+  is recorded in ADR-0107, which freezes SY-14.
 - `happenstance-neon`: SY-14's bound counted on the peer it was deferred for
   (#139). `rotors_ingest_is_one_request_per_push_however_much_is_held` pushes
   Kestrel Rotor's 1,840 events, 46 write groups of 40, through
@@ -192,7 +192,7 @@ not the same as what a user needed to be told.
   every projection. A projection author writes a `ConvergenceFixture` (the
   projection, its store, the two origins' events, and its read model as
   bytes); `StockOnHandFixture` and `CostLayersFixture` are the reference
-  cases. ADR-0107 proposes freezing SY-20 and SY-22 on these rules.
+  cases. ADR-0107 freezes SY-20 and SY-22 on these rules.
 - `happenstance-sync`: the `runner` module, the first half of the runner
   (#244). `runner::Edge` drives one edge — a local store that is both
   `EventStore` and `IngestStore`, against one `SyncPeer` — one caller-driven
@@ -301,7 +301,7 @@ not the same as what a user needed to be told.
   fixture that inherits `REOPEN`'s default reason, so a projection fixture
   written against `0.5.1` states `REOPEN` — declined with its own reason, or
   supported with an override of `reopen` that answers `Reopened::Discarded`.
-- `happenstance-sync`: write groups (#420, SY-39, ADR-0105, proposed). The
+- `happenstance-sync`: write groups (#420, SY-39, ADR-0105, accepted 2026-11-09). The
   `write_group` module's `WriteGroupStore` (and its `Send` flavour
   `SendWriteGroupStore`) reads a store's log back in the writes that made it:
   `read_groups(after, max_events)` returns whole `WriteGroup`s above `after`,
@@ -488,9 +488,9 @@ not the same as what a user needed to be told.
 
 ### Changed
 
-- **Eighteen specification clauses are `[FROZEN]`, proposed** (#124, #128,
-  [ADR-0107](.kb/decisions/0107-phase-13s-clauses-are-frozen.md), `status:
-  proposed` until the owner accepts it). No code changed. VT-6 (a restore never
+- **Nineteen specification clauses are `[FROZEN]`** (#124, #128,
+  [ADR-0107](.kb/decisions/0107-phase-13s-clauses-are-frozen.md), accepted
+  2026-11-09). No code changed. VT-6 (a restore never
   reissues an `EventId`), VT-9 (ingest keeps the recorded time), VT-21 and
   VT-24 (the payload and batch floors, the ingest call being the batch), SY-14
   (bulk ingest in one round trip a pulled batch, measured on live Neon: Kestrel
@@ -508,7 +508,8 @@ not the same as what a user needed to be told.
   owner's separate yes for each (ADR-0107 §5): SY-36 (every peer error states its
   class), SY-37 (a pull says whether anything is waiting), SY-38 (an unheld own
   identity stops ingest) and CF-42 (a fixture that declines read-your-writes
-  settles the frontier).
+  settles the frontier). SY-39 (a store reads its log back in write groups)
+  freezes with ADR-0105, accepted the same day.
 
 - `happenstance-postgres`: a handle no longer caches the store's identity
   (#104). Every append, and every ingest, reads `store_meta` inside its own

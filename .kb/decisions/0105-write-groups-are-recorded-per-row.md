@@ -2,7 +2,7 @@
 id: kb-decision-0105
 title: A store records each write's group on its rows, and a peer reads and pushes in those groups
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0105
 reversibility: medium
@@ -10,7 +10,7 @@ phase: 13
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed for #420, on the owner's approval of the plan's option A on 2026-11-08. Before it,
+  Accepted 2026-11-09 (wi-73ab4f) for #420, on the owner's approval of the plan's option A on 2026-11-08. Before it,
   nothing in a store recorded which rows one write put in, so the runner cut a push at an event
   count and could split a losing event from the compensation it was ingested with, and a
   StoreSyncPeer served a page as one group with no guard, merging what it had ingested. This
@@ -34,7 +34,7 @@ source_paths:
   - crates/happenstance-sync-testkit/src/write_group_suite.rs
   - crates/happenstance-sqlite/src/event_store/write_group.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-11-08
+last_reviewed: 2026-11-09
 ---
 
 # A store records each write's group on its rows, and a peer reads and pushes in those groups

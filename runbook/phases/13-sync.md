@@ -184,10 +184,10 @@ provides the atomicity and the identity that makes it idempotent.
       filtered spoke exists to resume against, so the instrument answers nothing 1.0
       asks. CF-27's suffix store stays phase 14's, and the sequencing hazard
       between the two phases is gone. The issue can close as not planned for 1.0.
-- [ ] #124 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-13` row
-      in [the 1.0 dispositions](../ledgers.md), and what freezes it. **Proposed
-      2026-11-09 as [ADR-0107](../../.kb/decisions/0107-phase-13s-clauses-are-frozen.md)** (`claude/p13-124`); every freeze is the
-      owner's, and the item ticks when he accepts it and SY-39 is dispositioned:
+- [x] #124 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-13` row
+      in [the 1.0 dispositions](../ledgers.md), and what freezes it. **Done
+      2026-11-09 by [ADR-0107](../../.kb/decisions/0107-phase-13s-clauses-are-frozen.md)**, accepted by
+      the owner (`wi-164211`, `wi-56271e`), with SY-39 frozen on ADR-0105's acceptance (`wi-73ab4f`):
       - #133 · **VT-6** — `restored_peer_does_not_reissue_identities` in the sync
         testkit, after the restore gap above is closed. **Frozen** (memory and
         Postgres; a Neon mount is a follow-up).
@@ -231,8 +231,8 @@ provides the atomicity and the identity that makes it idempotent.
       WF-1 and WF-11 are renewed past 1.0, not frozen here; this phase records
       WF-1's renewal in ADR-0026 and confirms which encoding the sync transport
       forwards WF-11's payload through. ADR-0107 also moves VT-36 to
-      `freeze-by-14` and proposes SY-36, SY-37, SY-38 and CF-42 as freezes that
-      each need the owner's own yes. SY-39 waits on ADR-0105.
+      `freeze-by-14`, freezes SY-36, SY-37, SY-38 and CF-42, each on the owner's
+      own yes (§5), and freezes SY-39 with ADR-0105 accepted (§6).
 - [ ] #125 · **CF-25's bar for the peer-port freeze**
       (`.kb/open-questions/cf-25-cf-26-portfolio-check-does-not-exist.md`).
       CF-25 is `[FROZEN]` and gates every port freeze on `cargo xtask spec-trace`
@@ -267,9 +267,10 @@ two-peer half is what makes this a port rather than a protocol.
 - [x] #128 · Every `[DEFERRED]` `SY` clause is either settled or renewed against a named
       experiment; a renewal with no experiment is a build failure under CF-38.
       SY-14 and SY-18 frozen, SY-32 renewed to phase 14 with its experiment, by
-      ADR-0107 (proposed: ticked on its acceptance).
-- [ ] Every `freeze-by-13` clause in [`ledgers.md`](../ledgers.md)'s 1.0
+      ADR-0107, accepted 2026-11-09.
+- [x] Every `freeze-by-13` clause in [`ledgers.md`](../ledgers.md)'s 1.0
       dispositions is `[FROZEN]`, or re-dispositioned by a record that says why.
+      ADR-0107, accepted 2026-11-09: no `freeze-by-13` row is left.
 - [x] `restored_peer_does_not_reissue_identities` is green against the
       Postgres-backed peer, not only against the memory one, and both
       `happenstance-postgres` and `happenstance-neon` document what they do on a
@@ -344,3 +345,9 @@ of E2E-07 (ES-24).
   scoped so the convergence family is outside it (#431). SY-36, SY-37, SY-38 and
   CF-42 proposed as freezes in the branch's second commit, each needing its own
   yes. SY-39 waits on ADR-0105.
+- **2026-11-09** — the owner accepted ADR-0107 sections 1 to 4 (`wi-164211`),
+  froze all four of section 5 (`wi-56271e`) and accepted ADR-0105 (`wi-73ab4f`),
+  all option A. SY-39 is frozen under ADR-0107 §6; §1.3 reads 187 `[FROZEN]`, 13
+  `[PROVISIONAL]`, 5 `[DEFERRED]`, and no `freeze-by-13` row is left. #124 and
+  #128 are done. Phase 13 stays in progress: #126 (ADR-0106), the open work items
+  and phase-13 → `main` remain.

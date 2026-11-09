@@ -964,31 +964,32 @@ nothing. ADR-0103 is taken on another branch.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0104 | [`kb-decision-0104`](../decisions/0104-every-pull-and-ack-names-its-responder.md) | Every pulled and ack message names the store that answered, and the wire format is version 3 | accepted | 13 | — |
 
-## 2026-11-08: write groups are recorded per row (#420), proposed
+## 2026-11-08: write groups are recorded per row (#420), accepted 2026-11-09
 
-ADR-0105 is written straight here with no intake step, and is **proposed**: the owner approved
-the shape (option A) on 2026-11-08, and the SQLite marker and the Postgres rollout questions are
-still open on #420. Every row records the lowest position its write put in and an ingested
+ADR-0105 is written straight here with no intake step, and is **accepted 2026-11-09** (`wi-73ab4f`):
+the owner approved the shape (option A) on 2026-11-08 and accepted the record on 2026-11-09, after
+#420's three parts landed on every adapter. Every row records the lowest position its write put in and an ingested
 group's guard; `WriteGroupStore` reads them back, and SY-39 is minted provisional. It
 supersedes nothing.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0105 | [`kb-decision-0105`](../decisions/0105-write-groups-are-recorded-per-row.md) | A store records each write's group on its rows, and a peer reads and pushes in those groups | proposed | 13 | — |
+| ADR-0105 | [`kb-decision-0105`](../decisions/0105-write-groups-are-recorded-per-row.md) | A store records each write's group on its rows, and a peer reads and pushes in those groups | accepted | 13 | — |
 
-## 2026-11-09: phase 13's clauses are frozen or re-dispositioned (#124, #128), proposed
+## 2026-11-09: phase 13's clauses are frozen or re-dispositioned (#124, #128), accepted
 
-ADR-0107 is written straight here with no intake step, and is **proposed**: every freeze in it is
-the owner's call. Fourteen clauses freeze (VT-6, VT-9, VT-21, VT-24, SY-14, SY-18, SY-20, SY-22,
+ADR-0107 is written straight here with no intake step, and is **accepted 2026-11-09** (`wi-164211`
+for sections 1 to 4, `wi-56271e` for section 5). Fourteen clauses freeze (VT-6, VT-9, VT-21, VT-24, SY-14, SY-18, SY-20, SY-22,
 SY-23, SY-27, SY-28, SY-30, SY-31, CF-40); SY-7 and SY-10 are renewed to `freeze-by-14` on the
 runner's adjudication hook; SY-29, SY-32 and WF-1 are confirmed against their experiments; VT-36
 moves to `freeze-by-14`; SY-35's Rule line is scoped (#431). SY-36, SY-37, SY-38 and CF-42 are
-proposed in their own sections, each needing the owner's separate yes. It supersedes nothing.
+frozen in section 5, each on the owner's separate yes, and SY-39 in section 6 with ADR-0105
+accepted (`wi-73ab4f`). It supersedes nothing.
 ADR-0103 and ADR-0106 are taken on other branches.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0107 | [`kb-decision-0107`](../decisions/0107-phase-13s-clauses-are-frozen.md) | Phase 13's clauses are frozen or re-dispositioned, and every deferred SY clause is settled or renewed | proposed | 13 | — |
+| ADR-0107 | [`kb-decision-0107`](../decisions/0107-phase-13s-clauses-are-frozen.md) | Phase 13's clauses are frozen or re-dispositioned, and every deferred SY clause is settled or renewed | accepted | 13 | — |
 
 ## Adding a row
 
