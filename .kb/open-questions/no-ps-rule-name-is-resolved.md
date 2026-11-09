@@ -52,7 +52,7 @@ excluding the `PS` family outright, at `spec_trace.rs:696-698`. Verified
 against this worktree, that half of the finding is now wrong: `has_suite`
 (`xtask/src/spec_trace.rs:2689-2694`) admits the `PS-` prefix as of the
 2026-08-15 wave, a change held by its own test
-(`xtask/src/spec_trace.rs:3751-3758`, asserting `has_suite("PS-1")` and
+(`xtask/src/spec_trace.rs:3791-3797`, asserting `has_suite("PS-1")` and
 `has_suite("PS-37")`), and recorded at `kb-reference-spec-trace-has-suite-001`.
 
 The guard that actually gates check 4's rule-name resolution has two terms,

@@ -233,7 +233,7 @@ provides the atomicity and the identity that makes it idempotent.
       forwards WF-11's payload through. ADR-0107 also moves VT-36 to
       `freeze-by-14`, freezes SY-36, SY-37, SY-38 and CF-42, each on the owner's
       own yes (§5), and freezes SY-39 with ADR-0105 accepted (§6).
-- [ ] #125 · **CF-25's bar for the peer-port freeze**
+- [x] #125 · **CF-25's bar for the peer-port freeze**
       (`.kb/open-questions/cf-25-cf-26-portfolio-check-does-not-exist.md`).
       CF-25 is `[FROZEN]` and gates every port freeze on `cargo xtask spec-trace`
       reading §6.5's instrument-portfolio table, and `xtask/src/spec_trace.rs`
@@ -334,6 +334,25 @@ of E2E-07 (ES-24).
   negative control; CI's live jobs run both. Verified against a live Postgres
   17.10; the Neon target is compiled locally and runs in `live-neon`.
   `restored_peer_does_not_reissue_identities` stays #133's.
+- **2026-11-08** — #125: CF-25's portfolio check is built, on the owner's route (build it, do
+  not repair the `Rule:` line). `cargo xtask spec-trace` walks every port that carries a
+  `[FROZEN]` clause, or that §1.6 declares frozen, against §6.5's portfolio and its new *freeze
+  ledger*. Each row of such a port must be discharged by an adapter at the far end (only a verdict
+  saying *adapter yes* counts, CF-26), by an accepted ADR naming the axis and the port, or by an
+  open clause of that port, which fails as soon as the clause freezes. The open question's
+  sub-questions 1 and 2 are answered and it is closed. **The bar is not met yet.** ADR-0103 accepts `ProjectionStore`'s
+  async-flavour row (owner, 2026-11-08). Four rows still fail the gate: `ProjectionStore` on
+  durability, which #422's reopen rule discharges, and `SyncPeer` on async flavour, durability and
+  position allocation, which the network peers #130 and #131 discharge. This branch merges after
+  them, so #125 stays open.
+- **2026-11-09** — #125, finished: `phase-13` merged in, and the four undischarged rows now name
+  their far end. `ProjectionStore` × durability: #422's `committed_rows_and_checkpoint_survive_a_reopen`.
+  `SyncPeer` × position allocation: the Postgres peer (`live-postgres`). × async flavour: the Durable
+  Object under `workerd` (#130). × durability: `ack_never_confirms_a_non_durable_event` against the
+  Neon, Postgres and Durable Object peers, a reconnect rather than a reopen until `SyncFixture`
+  gains a reopen capability (#448). × transport moved from SY-14 to `NeonSyncPeer` (#131). §6.5's
+  position-allocation and async-flavour verdicts open *adapter yes*, as their cells' bodies already
+  said. `cargo xtask spec-trace` is green: 15 rows, 10 at the far end, 3 accepted, 2 carried.
 - **2026-11-09** — #124 and #128: the consolidated freeze, proposed as
   [ADR-0107](../../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) on
   `claude/p13-124` and held for the owner. Fourteen clauses frozen (VT-6, VT-9,
