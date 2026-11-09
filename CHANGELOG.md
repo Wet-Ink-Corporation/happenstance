@@ -33,6 +33,39 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-09
+
+Replication runs over the network. Phase 13 built `happenstance-sync`'s
+runner, `runner::Edge`, which drives one edge a step at a time or through a
+caller-owned backoff loop, acts on each failure class, keeps its watermark
+through the projection port, and stops when the far side answers as a new
+store incarnation. It built the network peer's two halves, `StoreSyncPeer`,
+`serve_sync` and `RemoteSyncPeer`, and three real peers that pass the peer
+suite: `happenstance-neon`'s `NeonSyncPeer`, `happenstance-cloudflare`'s
+Durable Object served over HTTP, and a `StoreSyncPeer` over
+`happenstance-postgres`. Every adapter reads its log back in write groups
+(ADR-0105), so a push carries the writes the log was made of. Nineteen more
+clauses are `[FROZEN]` (ADR-0107), and ADR-0003, opaque payloads, is no longer
+provisional (ADR-0106).
+
+**This is a breaking release from `0.5.x`.** If you replicate, **every peer in
+a deployment upgrades together**: the wire format is version 3, a version-2
+buffer is refused, and `Pulled` and `Ack` carry a `responder` whose JSON key is
+required (ADR-0104). **Every event store's schema moves**, for write groups:
+`happenstance-postgres` and `happenstance-neon` **migrate, then deploy** (apply
+migration 3 to every schema before this build writes to it, or its first
+append fails); `happenstance-sqlite` migrates a file to schema version 2 when
+this build opens it, after which an older build refuses the file, so stop
+every older process before the first open; `happenstance-cloudflare` adds two
+columns in `migrate` and an older build keeps working. On Postgres and Neon an
+append against a schema whose identity row is gone now refuses with
+`MissingIdentity`. An adapter author takes new rules in both testkits, and a
+projection fixture must state its new `REOPEN` capability. `happenstance` and
+`happenstance-core` do not change: an application on the in-memory store, with
+no `sync` feature, changes nothing. The
+[`0.6.0` trace](#060-trace) at the end of this section lists every break with
+the decision behind it. All nine crates move to `0.6.0` together.
+
 ### Added
 
 - `happenstance-sync-testkit`: the ingest rule
@@ -244,7 +277,8 @@ not the same as what a user needed to be told.
   returns the error with the edge still running; a Durable Object reset is
   `Transient`, and stops the edge only through the incarnation check once it
   answers under a new `StoreId`. Nothing is spawned and no runtime is named.
-  Changed within the unreleased runner: `EdgeState::Stopped` and
+  Changed before release, so no published version carried the earlier shape
+  and nothing here breaks a `0.5.x` caller: `EdgeState::Stopped` and
   `StepError::Stopped` carry a `StopCause` rather than a `Failure`, and a
   single-group `Split` now parks the edge where it left it running.
 - `happenstance-sync`: a network peer's transport-free halves (#117), with no
@@ -291,10 +325,10 @@ not the same as what a user needed to be told.
   process-local cache, which comes back claiming rows it no longer has. Every
   other projection rule reads back through a handle onto the same live
   process, so both passed the suite until now.
-- `happenstance-testkit`: `ProjectionFixture::REOPEN` and
+- **Breaking (CF-32): `happenstance-testkit`: `ProjectionFixture::REOPEN` and
   `ProjectionFixture::reopen`, the capability that rule is gated on, with the
   `Reopened` answer `reopen` returns and `UNSTATED_PROJECTION_REOPEN`, the
-  default declension. A fixture that declines `REOPEN` gets the rule as a
+  default declension.** A fixture that declines `REOPEN` gets the rule as a
   reported skip carrying its own reason. **This can turn a passing adapter's CI
   red without a code change in the adapter**: the suite's
   `every_declined_capability_is_stated_by_this_fixture` now also fails a
@@ -515,15 +549,16 @@ not the same as what a user needed to be told.
   trips through unlike peers: the Durable Object under workerd, `NeonSyncPeer`
   on a live endpoint, and the Postgres peer. No code changes.
 
-- `happenstance-postgres`: a handle no longer caches the store's identity
-  (#104). Every append, and every ingest, reads `store_meta` inside its own
+- **Breaking (behaviour): `happenstance-postgres`: a handle no longer caches
+  the store's identity** (#104). Every append, and every ingest, reads `store_meta` inside its own
   transaction, so a re-mint is seen by the next append on every handle and
   clone, with no restart; it costs one primary-key read per append. An append
   or an ingest on a schema whose identity row is gone now refuses with
   `MissingIdentity`, where a handle that had read the row before went on
   stamping it.
-- `happenstance-neon`: an append on a schema whose identity row is gone
-  inserts nothing and refuses with `NeonError::MissingIdentity` (#104), where
+- **Breaking (behaviour): `happenstance-neon`: an append on a schema whose
+  identity row is gone inserts nothing and refuses with
+  `NeonError::MissingIdentity`** (#104), where
   it used to commit rows with a NULL origin that every later read refused as
   `UnstampedEvent`. An ingest on such a schema now writes nothing and
   refuses with `IngestError::Store(NeonError::MissingIdentity)`, where its
@@ -531,7 +566,7 @@ not the same as what a user needed to be told.
   `NeonError::MissingIdentity` is no longer behind `sync` (additive: the enum
   is `#[non_exhaustive]`).
 - **`happenstance-sync`: every pull and push answer names its responder, and
-  the wire format is version 3** (#244, ADR-0104). **Breaking, for `0.6.0`.**
+  the wire format is version 3** (#244, ADR-0104). **Breaking.**
   `Pulled` and `Ack` gain a last field, `responder: Option<StoreId>`: the
   store incarnation that answered, so a runner can tell that a peer was
   restored or re-minted under a new `StoreId` (VT-6). `Pulled::new` and
@@ -548,7 +583,7 @@ not the same as what a user needed to be told.
   `WireError::UnsupportedFormatVersion`: **every peer in a deployment upgrades
   together**. The key is required: a JSON pulled or ack without `responder`
   is refused as a missing field, rather than read as naming none.
-- `happenstance-sqlite`: migration 2 (#420). `open`, `open_on` and
+- **Breaking (schema): `happenstance-sqlite`: migration 2** (#420). `open`, `open_on` and
   `open_in_memory` add `write_group` and `group_guard` to `event` on a file
   whose marker reads 1, and raise the marker to 2 in the same transaction;
   `SCHEMA_VERSION` is `2`. Every row an append or an ingested group writes
@@ -565,7 +600,7 @@ not the same as what a user needed to be told.
   wrap the file and fail its first append with `no such column`: a caller that
   wraps its own connection with `new` opens the file once through `open_on`
   first.
-- `happenstance-postgres`: migration 3 (#420), `migration::MIGRATION_3`
+- **Breaking (schema): `happenstance-postgres`: migration 3** (#420), `migration::MIGRATION_3`
   (`migrations/0003_write_group.sql`): `write_group` and `group_guard` on
   `event`, both nullable, and the partial index `event_write_group_idx`.
   `migration::apply` now sends migrations 1 and 3 in one batch, and
@@ -582,7 +617,7 @@ not the same as what a user needed to be told.
   be made first with `CREATE INDEX CONCURRENTLY` under the same name. An older
   build keeps working against a migrated schema, writing rows that read as
   groups of one.
-- `happenstance-neon`: migration 3 (#420), `migration::MIGRATION_3`, with the
+- **Breaking (schema): `happenstance-neon`: migration 3** (#420), `migration::MIGRATION_3`, with the
   new `@write_group_idx@` placeholder `migration::render` fills: the same two
   columns and partial index as `happenstance-postgres`'s. An append computes
   its group inside its one `INSERT`; an ingest writes a provisional negative
@@ -592,7 +627,7 @@ not the same as what a user needed to be told.
   then deploy**, as for `happenstance-postgres`: send
   `migration::request(MIGRATION_3, &config)` after migration 1 before this build
   writes to the schema.
-- `happenstance-cloudflare`: write groups (#420). `migrate` asks `PRAGMA
+- **Schema: `happenstance-cloudflare`: write groups** (#420). `migrate` asks `PRAGMA
   table_info` for the log's event table and adds `write_group INTEGER` and
   `group_guard BLOB` where they are missing, each on its own, per namespace;
   a second `migrate` adds nothing. The append's identity stamp now also names
@@ -603,6 +638,59 @@ not the same as what a user needed to be told.
   marker, so a build before this one keeps opening an object this one has
   migrated, and the rows it writes read as groups of one. Deploy this build
   to every writer and peer of an object before it serves replication.
+
+### `0.6.0` trace
+
+Every break `0.6.0` carries, each with the decision that caused it, written on
+2026-11-09 against `claude/p13-exit` at `48af8178` merged with `main`. It has
+**hand** rows only. Each was found by reading every entry above for a changed
+signature, a removed or renamed item, a changed value or a changed refusal, and
+by diffing the nine crates' `src/` against `v0.5.1` for removed `pub` lines:
+the only ones are the three constants H1, H3 and H4 change. `happenstance` and
+`happenstance-core` have no change in `src/` beyond one doc comment.
+
+**Not run here:** `cargo semver-checks` is not installed on the machine that
+wrote this table. Before tagging, run `cargo semver-checks check-release
+--workspace --baseline-version 0.5.1 --release-type minor` on `phase-13` →
+`main`'s merge commit. Any lint it reports that no row below covers becomes a
+**T** row.
+
+| # | Crate | Break | Source | Decided by | Entry above |
+|---|---|---|---|---|---|
+| H1 | `happenstance-sync` | `wire::FORMAT_VERSION` is `3`, was `2`, and a version-2 buffer is refused as `WireError::UnsupportedFormatVersion`, so every peer in a deployment upgrades together (behaviour) | hand | [ADR-0104](.kb/decisions/0104-every-pull-and-ack-names-its-responder.md), [ADR-0097](.kb/decisions/0097-the-sync-message-set-and-a-version-on-every-message.md) | Changed |
+| H2 | `happenstance-sync` | `Pulled` and `Ack` gain the field `responder: Option<StoreId>`; both were `#[non_exhaustive]`, so a constructor call compiles unchanged, but a JSON pulled or ack without the `responder` key is refused as a missing field (serialised shape) | hand | ADR-0104 | Changed |
+| H3 | `happenstance-sqlite` | the event store's `SCHEMA_VERSION` is `2`, was `1`: `open`, `open_on` and `open_in_memory` migrate a file at 1, after which a build before this one refuses it with `UnsupportedSchemaVersion`, and `SqliteEventStore::new` refuses a file still at 1 with `SchemaNeedsMigration` (behaviour) | hand | [ADR-0105](.kb/decisions/0105-write-groups-are-recorded-per-row.md) (SY-39, #420) | Changed |
+| H4 | `happenstance-postgres` | `SCHEMA_VERSION` is `2`, was `1`, and every `INSERT` names migration 3's `write_group`, so this build's first append against a schema without migration 3 fails with an undefined column: migrate, then deploy (behaviour) | hand | ADR-0105 (#420) | Changed |
+| H5 | `happenstance-neon` | as H4, through `migration::MIGRATION_3` and the new `@write_group_idx@` placeholder `migration::render` fills: migrate, then deploy (behaviour) | hand | ADR-0105 (#420) | Changed |
+| H6 | `happenstance-postgres` | a handle reads the identity row on every append and ingest instead of caching it, so a schema whose identity row is gone refuses with `MissingIdentity` where a warmed handle went on stamping (behaviour) | hand | [ADR-0086](.kb/decisions/0086-postgres-and-neon-keep-mint-once.md) (VT-6, #104) | Changed |
+| H7 | `happenstance-neon` | an append or ingest on a schema whose identity row is gone refuses with `NeonError::MissingIdentity`, where it committed rows with a NULL origin (behaviour) | hand | ADR-0086 (VT-6, #104) | Changed |
+| H8 | `happenstance-testkit` | a new projection rule, `committed_rows_and_checkpoint_survive_a_reopen` (PS-1, CF-17), gated on the new `ProjectionFixture::REOPEN`; `every_declined_capability_is_stated_by_this_fixture` now fails a projection fixture that inherits `REOPEN`'s default reason (behaviour; CF-32) | hand | #422 | Added |
+| H9 | `happenstance-testkit` | `append_reports_exceeded_store_limits` gains CF-40's budget-unit branch, which a store stating both byte ceilings and holding their sum to one budget now fails (behaviour; CF-32) | hand | [ADR-0107](.kb/decisions/0107-phase-13s-clauses-are-frozen.md) (CF-40, #143) | Added |
+| H10 | `happenstance-sync-testkit` | the ingest family gains `ingest_preserves_the_recorded_time` (VT-9), `bulk_ingest_is_idempotent_in_bounded_round_trips` (SY-14, a 128-event call), `only_the_adjudicator_compensates` (SY-7) and `directional_merge_rules_compose` (SY-10); the last two open two stores, so an `IngestFixture` that hands out one store twice now fails (behaviour; CF-32) | hand | ADR-0107, #134, #139, #136, #137 | Added |
+| H11 | `happenstance-sync-testkit` | the peer family gains `round_trip_preserves_the_whole_log` (SY-28), `event_id_order_is_identical_on_every_peer` (SY-23) and `push_envelope_preserves_group_boundaries` (SY-30), which a peer that filters, reorders or merges what it serves now fails (behaviour; CF-32) | hand | ADR-0107, [ADR-0027](.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md), #140, #136, #420 | Added |
+
+**Schema, and not a break:** `happenstance-cloudflare`'s `migrate` adds
+`write_group` and `group_guard` where they are missing, with no marker, and an
+older build keeps working against a migrated object, writing rows that read as
+groups of one (Changed).
+
+**Not a break, recorded so the absence is a decision:** `EdgeState::Stopped`
+and `StepError::Stopped` carrying a `StopCause` rather than a `Failure` changed
+inside the runner before any release carried it: the whole `runner` module is
+new in `0.6.0`. `IngestStore::store_id` became `async` and fallible in `0.4.4`,
+under that release's entry, and does not change here. `IngestGroup` gains
+`guard` on a `#[non_exhaustive]` struct. The new error variants
+(`SqliteEventStoreError::SchemaNeedsMigration`, `StoredGuard` and `GroupOrder`
+on the four adapters' errors, `NeonError::ResultSets` and
+`NeonError::UnstorableGuard`) are on `#[non_exhaustive]` enums, and
+`NeonError::MissingIdentity` leaving `sync` widens what builds.
+`StoreSyncPeer`, `RemoteSyncPeer`, `serve_sync`, `SendPeer`, the
+`write_group` module, `NeonSyncPeer`, the `sync_http` module and the restore,
+convergence, watermark and write-group families are new items. The
+`ProjectionFixture::REOPEN` constant and `reopen` method have defaults, so a
+fixture compiles unchanged; H8 is what it fails.
+
+**Pending:** none.
 
 ## [0.5.1] — 2026-11-08
 
@@ -5940,7 +6028,8 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.5...v0.4.6

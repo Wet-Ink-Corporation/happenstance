@@ -19,17 +19,17 @@ then [your first encounter](https://wet-ink-corporation.github.io/happenstance/g
 three short programs that end with the store refusing a write that would have
 broken a rule. The API reference is [on docs.rs](https://docs.rs/happenstance).
 
-> **Status: `0.5.1`, and worth being precise about what that number claims.** The
-> contract, the typed layer and a 122-rule conformance suite across four families
+> **Status: `0.6.0`, and worth being precise about what that number claims.** The
+> contract, the typed layer and a 123-rule conformance suite across four families
 > are real and tested, and **five adapters have run the suite** — SQLite against a
 > real file on disk, across the event-store, projection, concurrency and model
 > families; a Cloudflare Durable Object on `wasm32`; a live PostgreSQL 17.10,
 > including the concurrency family at 64 contenders; a live Neon endpoint over
 > one-shot HTTP; and, until its adapter was retired at phase 17, LadybugDB for the projection role alone. **The release set
 > is what the manifests and `xtask/src/package.rs`'s `PUBLISHABLE` agree on**: the
-> nine `0.5.1` crates, `happenstance-sync` and `happenstance-sync-testkit` among them since `0.4.4`.
+> nine `0.6.0` crates, `happenstance-sync` and `happenstance-sync-testkit` among them since `0.4.4`.
 >
-> What `0.5.x` promises, as `0.3.0` did: every clause marked `[FROZEN]` in
+> What `0.6.x` promises, as `0.3.0` did: every clause marked `[FROZEN]` in
 > [the specification](spec/SPECIFICATION.md) — the `EventStore` ones since
 > `0.2.0`, and the `ProjectionStore` ones since `0.3.0`. `0.2.0` shipped the
 > projection port behind an off-by-default `unstable-projection` feature, exempt
@@ -40,8 +40,8 @@ broken a rule. The API reference is [on docs.rs](https://docs.rs/happenstance).
 >
 > What it is not is production mileage — see the note under [status](#status),
 > which is narrower than the ticks suggest. Replication's port and conformance
-> suites ship from `0.4.4`, and its runner and network peers are built and
-> unreleased (Ladybug was retired at phase 17). The ambition is the whole list rather than the nine that ship here.
+> suites ship from `0.4.4`, and its runner and network peers from `0.6.0`
+> (Ladybug was retired at phase 17). The ambition is the whole list rather than the nine that ship here.
 
 ---
 
@@ -144,23 +144,23 @@ checkpoint until the runner has caught up, and `200` after.
 
 ## Status
 
-A ✅ below means **passing its suite**. The rows that say *in the `0.5.1`
-release set* are on crates.io at `0.5.1`; the manifests and
+A ✅ below means **passing its suite**. The rows that say *in the `0.6.0`
+release set* are on crates.io at `0.6.0`; the manifests and
 `xtask/src/package.rs`'s `PUBLISHABLE` are what name them. `happenstance-ladybug`
 is retired and outside the workspace, for the reason its row gives.
 
 | Crate | Role | Status |
 |---|---|---|
-| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ in the `0.5.1` release set |
-| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ in the `0.5.1` release set |
-| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ in the `0.5.1` release set — 122 rules across four families |
-| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ in the `0.5.1` release set; passes the suite against a real file |
-| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ in the `0.5.1` release set; passes the suite on `wasm32` — read the note below |
-| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ in the `0.5.1` release set; both roles pass their suites against a live server, and the first adapter to clear the concurrency family against a store that does not serialise its writers |
-| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ in the `0.5.1` release set; passes its suites against a live endpoint, with one open clause question its README names |
+| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ in the `0.6.0` release set |
+| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ in the `0.6.0` release set |
+| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ in the `0.6.0` release set — 123 rules across four families |
+| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ in the `0.6.0` release set; passes the suite against a real file |
+| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ in the `0.6.0` release set; passes the suite on `wasm32` — read the note below |
+| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ in the `0.6.0` release set; both roles pass their suites against a live server, and the first adapter to clear the concurrency family against a store that does not serialise its writers |
+| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ in the `0.6.0` release set; passes its suites against a live endpoint, with one open clause question its README names |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | ⛔ **retired** at phase 17 ([ADR-0078](.kb/decisions/0078-happenstance-ladybug-is-retired.md)) and excluded from the workspace, kept as a frozen record. It passed the projection suite against the real driver at phase 11 and was never published — `lbug` does not render on docs.rs |
-| [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, the ingest port every adapter implements behind its `sync` feature, and the wire messages | 🚧 in the `0.5.1` release set, first released at `0.4.4`. Unreleased since, from phase 13: a runner over one edge, write groups, and network peers that pass the peer suite |
-| [`happenstance-sync-testkit`](crates/happenstance-sync-testkit) | Conformance suites for sync peers and ingest stores | 🚧 in the `0.5.1` release set, first released at `0.4.4`, and still growing rule by rule — pin it exactly |
+| [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, the ingest port every adapter implements behind its `sync` feature, and the wire messages | 🚧 in the `0.6.0` release set, first released at `0.4.4`; from `0.6.0`, a runner over one edge, write groups, and network peers that pass the peer suite |
+| [`happenstance-sync-testkit`](crates/happenstance-sync-testkit) | Conformance suites for sync peers and ingest stores | 🚧 in the `0.6.0` release set, first released at `0.4.4`, and still growing rule by rule — pin it exactly |
 
 Read the ✅ rows narrowly. **"Passes the suite" is the only claim being made** —
 that the adapter has run `happenstance-testkit` and cleared it, which is what
@@ -170,18 +170,19 @@ mileage: nothing here has run anywhere but a test.
 The two 🚧 rows are published so that an adapter can implement the ingest port
 behind an optional feature, and so that an adapter outside this repository can
 be measured by the same suite. What replication between two running stores
-needs, a runner and a network peer, was built at phase 13 and is unreleased:
+needs, a runner and a network peer, was built at phase 13 and ships in `0.6.0`:
 `NeonSyncPeer`, a Durable Object served over HTTP and a Postgres `StoreSyncPeer`
 pass the peer suite, and a SQLite store round-trips through each byte for byte.
-The rows stay 🚧 until that ships, and while SY-7, SY-10, SY-29 and SY-32 are
-open.
+The rows stay 🚧 while SY-7, SY-10, SY-29 and SY-32 are open, and until a peer
+set above the single edge and an `Exchange` over a real network ship in a
+published crate.
 
 **`happenstance-postgres` is the row that changed and the one most easily
 misread.** It is no longer a stub: the event store clears 101 of 101 conformance
 rules against a live PostgreSQL 17.10 including the concurrency family at 64
 contenders — the first adapter here to clear that family against a store whose
 writers are *not* serialised — and the projection store clears the projection
-suite, 15 rules run and 3 reported as skips. **It ships in `0.5.1`**, together
+suite, 15 rules run and 3 reported as skips. **It ships in `0.6.0`**, together
 with `happenstance-neon`: the release set was five, decided, and the owner
 re-opened it on that evidence at `e597c34`. It is the *first* adapter here to
 clear the concurrency family against a store whose writers are not serialised,
@@ -189,7 +190,7 @@ not the only one — `happenstance-neon` clears it too, over the same server
 through a different transport. Both have been on crates.io since `0.2.0`.
 
 `happenstance-cloudflare` is the row most easily misread, and it ships in
-`0.5.1` with the thinnest evidence of the four adapters. Two things a reader should have
+`0.6.0` with the thinnest evidence of the four adapters. Two things a reader should have
 before weighing it. In the gate it passes the conformance suite under a
 `node:sqlite`-backed shim rather than under `workerd` itself. Since phase 17, the
 `workerd` CI job, a sibling of the gate, also runs every event-store rule in a real
@@ -207,10 +208,10 @@ answer to what is built.
 
 ```toml
 [dependencies]
-happenstance = "0.5"
+happenstance = "0.6"
 ```
 
-Add an adapter when you want durability — `happenstance-sqlite = "0.5"` — and
+Add an adapter when you want durability — `happenstance-sqlite = "0.6"` — and
 `happenstance-testkit` as a `[dev-dependencies]` if you are writing one of your
 own. **Pin the testkit exactly.** Adding a conformance rule is a semver-*minor*
 change that can turn a passing adapter's CI red, which is why it carries its own
@@ -352,12 +353,12 @@ reason rather than disappearing.
 The macro expands to one `#[tokio::test]` per rule, so a failure names the rule
 that broke. **An adapter is not finished until it passes.**
 
-There are 122 rules in four families. The **event-store** family (97) covers
+There are 123 rules in four families. The **event-store** family (97) covers
 query semantics, read options, position uniqueness and monotonicity, append
 atomicity and the full append-condition matrix including the exact `after`
 boundary. The **concurrency** family (6) supplies the second caller a
 one-at-a-time suite cannot, and is the case DCB exists to prevent. The
-**projection** family (18) holds a read-model write and its checkpoint to one
+**projection** family (19) holds a read-model write and its checkpoint to one
 unit of work. The **model** family (1) replays generated sequences of appends,
 conditional appends and reads against a model and compares every answer — which
 is the one that finds what the worked examples did not think to ask.

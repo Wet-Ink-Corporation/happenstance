@@ -317,7 +317,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
@@ -329,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-core"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "bytes",
  "futures-core",
@@ -340,7 +340,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-postgres"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
@@ -351,7 +351,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-sqlite"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "futures-core",
  "happenstance-core",

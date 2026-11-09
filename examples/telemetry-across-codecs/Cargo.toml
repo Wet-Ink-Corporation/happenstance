@@ -33,7 +33,7 @@ doc-scrape-examples = true
 #
 # `default-features = false` drops `memory`. Nothing here derives a read model,
 # so nothing here names the runner.
-happenstance = { version = "0.5.1", path = "../../crates/happenstance", default-features = false, features = [
+happenstance = { version = "0.6.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
   "postcard",

@@ -9,8 +9,7 @@ explains event sourcing and dynamic consistency boundaries from the beginning,
 with programs you can run.
 
 > **Status: published, and built against real peers.** Phase 13 built the runner
-> and the network peers on top of the port. They are unreleased, and ship in
-> the next release:
+> and the network peers on top of the port, and they ship in `0.6.0`:
 >
 > - **the runner** (#244): `runner::Edge` drives one edge, a step at a time or
 >   through `Edge::run`, a loop the caller drives on its own runtime with a

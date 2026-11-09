@@ -11,7 +11,7 @@ with programs you can run.
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant, and in the `0.5.1` release set.** This is the first
+> **Status: conformant, and in the `0.6.0` release set.** This is the first
 > happenstance adapter to pass
 > [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit)'s
 > conformance suite against a real file on disk — the event store family, the
@@ -35,9 +35,9 @@ with programs you can run.
 ## Features, and the one that costs you a promise
 
 ```toml
-happenstance-sqlite = "0.5"                                # the event store
-happenstance-sqlite = { version = "0.5", features = ["projection-store"] }
-happenstance-sqlite = { version = "0.5", features = ["sync"] }   # + the ingest port
+happenstance-sqlite = "0.6"                                # the event store
+happenstance-sqlite = { version = "0.6", features = ["projection-store"] }
+happenstance-sqlite = { version = "0.6", features = ["sync"] }   # + the ingest port
 
 rusqlite = "0.40"                                          # only for tables of your own
 ```
@@ -93,9 +93,10 @@ generic code bound on `IngestStore` accepts it, and re-exports the port as
 `happenstance_sqlite::happenstance_sync`. It turns on `event-store`, and
 `happenstance-core`'s `serde` feature through `happenstance-sync`. It also
 implements `SendWriteGroupStore`, which reads the log back in the writes that
-made it (#420). What it does not give you yet is replication: the runner is
-unfinished (issue #244), there is no network transport, and several of the
-`SY` clauses the port carries are still `[PROVISIONAL]`.
+made it (#420), so it can be the local side of `happenstance-sync`'s runner,
+`runner::Edge` (#244), against any `SyncPeer`. This crate ships no peer of its
+own and no network transport, and SY-7, SY-10 and SY-29, which the port carries, are
+still `[PROVISIONAL]`.
 
 **Schema version 2.** `open`, `open_on` and `open_in_memory` apply migration 2
 to a file that lacks it: two columns on `event` recording which rows one write
