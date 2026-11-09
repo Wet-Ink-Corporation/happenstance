@@ -1708,7 +1708,7 @@ refuses expensive conditions" is indistinguishable from "the hub is broken".
 There MUST NOT be a `MAX_EVENTS_PER_BATCH` constant and no `EventBatch` type MUST
 be introduced to carry one. Every store MUST accept an append of at least
 `MIN_SUPPORTED_EVENTS_PER_BATCH` = 128 events, MUST document its actual limit,
-and MUST refuse beyond it with `AppendError::ExceedsStoreLimit`.
+and MUST refuse beyond it with `AppendError::ExceedsStoreLimit`. On the ingest path the batch is the call: a store that implements `IngestStore` MUST accept one `ingest` of at least `MIN_SUPPORTED_EVENTS_PER_BATCH` events, foreign events and compensation together, and a capacity refusal is `IngestError::ExceedsStoreLimit`.
 
 `[PROVISIONAL — falsified by a domain whose smallest indivisible unit of work
 exceeds 128 events; Kestrel Cold Chain's largest single conditioned group is

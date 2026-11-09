@@ -41,9 +41,10 @@ not the same as what a user needed to be told.
   first call delivered every third of them and the last: it must land
   counted 84 appended and 44 skipped, with each event held once and every
   earlier row kept, and the same call again is 128 skips that change
-  nothing. A capacity refusal of that call is reported under VT-24: on the
-  ingest path the call is the batch, as VT-36 already says of tags, and a
-  push of 128 events is what `PeerLimits::minimum` declares a peer takes.
+  nothing. A capacity refusal of that call is reported under VT-24, whose
+  body now says so: on the ingest path the batch is the call, as VT-36 already
+  says of tags, and a push of 128 events is what `PeerLimits::minimum`
+  declares a peer takes.
   Two new wrong stores fail it and nothing else: one that looks up the
   first 64 identities of a call only, and one that caps a call at 64. Every
   mounted ingest family runs it, so an adapter whose ingest refuses a
@@ -56,8 +57,8 @@ not the same as what a user needed to be told.
   peer's 128 events, 16 requests, each the same five statements, and the
   replay 16 again. `rotors_bulk_ingest_through_the_live_neon_peer_is_bounded`
   is its `#[ignore]`d live twin, which `live-neon`'s library trio runs. It
-  seeds every third event first, asserts the counts and the 34-minute window,
-  and prints `SY14-MEASURE` lines. Tests only; no API change.
+  seeds every third event first, asserts the counts and that each push
+  averages under one event's share of the 34-minute window, and prints `SY14-MEASURE` lines. Tests only; no API change.
 - `happenstance-neon`: `NeonSyncPeer` and `NeonPeerError`, behind `sync`
   (#131). A `SyncPeer` whose far side is a Neon store reached over its HTTP
   endpoint, in **one SQL request per pull and one per push**: a pull is the

@@ -9,7 +9,6 @@ use happenstance_sync::{IngestError, IngestGroup, IngestStore, Ingested, Replica
 
 use super::{
     ensure_counts, ensure_foreign, ensure_unchanged, held_once, observe, read_all, shipped,
-    watermark,
 };
 use crate::violation::{Violation, ensure};
 
@@ -171,8 +170,7 @@ pub(super) async fn the_floor_lands_once<S: EventStore + IngestStore>(
 }
 
 /// The log holds each of `events` once and nothing else, keeps every row
-/// `before` held with its identity, time and bytes, and its watermark for the
-/// origin is the highest origin position sent.
+/// `before` held with its identity, time and bytes.
 async fn holds_each_once<S: EventStore + IngestStore>(
     store: &S,
     events: &[ReplicatedEvent],
@@ -206,11 +204,6 @@ async fn holds_each_once<S: EventStore + IngestStore>(
              the call that re-delivered them; a held event is a skip",
             before.len()
         )
-    })?;
-    let highest = events.last().map(|event| event.id.position());
-    let mark = watermark(store, SY_14).await?.get(BULK_ORIGIN);
-    ensure(mark == highest, SY_14, || {
-        format!("the watermark for {BULK_ORIGIN} is {mark:?}; the highest sent was {highest:?}")
     })
 }
 

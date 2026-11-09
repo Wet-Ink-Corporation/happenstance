@@ -174,3 +174,25 @@ proposed marker to the #124 notes file. **No marker flips.**
   clippy, test, doc all ok. spec-trace and lints re-run clean after the merge.
   The gate's advisories are all on lines older than this branch (base
   f6f7e147): none is in code this change wrote.
+
+## Review round 1 (a14b175c, changes requested)
+
+- F1: D1 adopted in VT-24's clause text, appended on its existing MUST line
+  so no line moves: "On the ingest path the batch is the call: a store that
+  implements `IngestStore` MUST accept one `ingest` of at least
+  `MIN_SUPPORTED_EVENTS_PER_BATCH` events, foreign events and compensation
+  together, and a capacity refusal is `IngestError::ExceedsStoreLimit`."
+  **D1 approved under the owner's standing AFK authority on 2026-11-09**
+  (relayed by the coordinator); the marker stays PROVISIONAL and the freeze
+  remains the owner's.
+- F2: the live test's 34-minute assertion could not fire inside the job's
+  30-minute timeout. Replaced with a per-push budget that can: each leg's mean
+  push must clear one event's share of the window (2,040 s / 1,840 ≈ 1.11 s),
+  the pace at which the rejected one-request-per-event peer would exactly fill
+  it. The window is still printed (`window_ms`). Chosen over window / pushes
+  (≈127 s), which the 30 s request timeout would preempt.
+- F3: comment on the scripted count asserts: they check only that the peer
+  sums its acks.
+- F4: rule doc reworded ("each in the group it travels in") and rewrapped.
+- F5: the watermark check could not discriminate (the first delivery already
+  carries the last event); dropped from the rustdoc and from the code.

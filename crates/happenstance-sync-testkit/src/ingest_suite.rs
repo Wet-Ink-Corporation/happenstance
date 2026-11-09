@@ -1394,13 +1394,13 @@ pub mod ingest_rules {
     ///
     /// One origin numbers 128 events 1 to 128, each with bytes of its own and
     /// no tags, in seven groups of 1, 3, 4, 8, 16, 32 and 64. A first call
-    /// delivers every third event and the last, 44 in all, each in its own
-    /// group: the first group whole, every other in part, and held events past
-    /// the first half of the call. Then the whole batch arrives in one call. It
-    /// must land, counted 84 appended and 44 skipped, leaving each event held
-    /// once, found by its bytes, every row the first call wrote still held
-    /// with its identity, time and bytes, and the origin's watermark at 128. The same call again is 128 skips
-    /// and leaves the log, head and watermark as they were.
+    /// delivers every third event and the last, 44 in all, each in the group
+    /// it travels in: the first group whole, every other in part, and held
+    /// events past the first half of the call. Then the whole batch arrives in
+    /// one call. It must land, counted 84 appended and 44 skipped, leaving
+    /// each event held once, found by its bytes, and every row the first call
+    /// wrote still held with its identity, time and bytes. The same call again
+    /// is 128 skips and leaves the log, head and watermark as they were.
     ///
     /// The round trip the clause bounds is the `ingest` call: one per pulled
     /// batch, which is all the port can see. How many requests an adapter

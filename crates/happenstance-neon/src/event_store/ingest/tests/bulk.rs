@@ -205,6 +205,8 @@ async fn rotors_ingest_is_one_request_per_push_however_much_is_held() {
     assert_eq!(pages.len(), pushes);
     assert_eq!((first.pushes, first.requests), (pushes, pushes));
     assert_eq!((replay.pushes, replay.requests), (pushes, pushes));
+    // The counts are the script's own answers: these check only that the
+    // peer sums its acks, not anything a server decided.
     assert_eq!(first.appended, 1_840);
     assert_eq!(replay.skipped, 1_840);
 
@@ -284,8 +286,9 @@ where
 
 /// SY-14's measurement, against the live endpoint: Rotor's 1,840 events
 /// through `NeonSyncPeer`, a third of them already held, in 16 pushes of one
-/// request each, inside the 34-minute window; and the replay, every event
-/// held, in 16 requests again, which writes nothing. Prints the numbers on
+/// request each, each push on average inside one event's share of the
+/// 34-minute window; and the replay, every event held, in 16 requests again,
+/// which writes nothing. Prints the numbers on
 /// `SY14-MEASURE` lines for the job's log.
 #[tokio::test]
 #[ignore = "needs a live Neon endpoint; set NEON_CONNECTION and run with `-- --ignored`"]
@@ -347,9 +350,18 @@ async fn rotors_bulk_ingest_through_the_live_neon_peer_is_bounded() {
     assert_eq!((replay.pushes, replay.requests), (pushes, pushes));
     assert_eq!((replay.appended, replay.skipped), (0, total));
     assert_eq!(held, total, "each of Rotor's events held once");
-    assert!(
-        seeding + bulk + replaying < ROTOR_WINDOW,
-        "Rotor's ingest took {:?}, past its window of {ROTOR_WINDOW:?}",
-        seeding + bulk + replaying
-    );
+    // The whole window cannot be the assertion: the job's own timeout is
+    // shorter, so a run past 34 minutes is cancelled, never red. The budget
+    // that can fail here is one event's share of the window, the pace at
+    // which SY-14's rejected one-request-per-event peer would exactly fill
+    // it: each push of up to 120 events must, on average, clear it.
+    let budget = ROTOR_WINDOW / u32::try_from(ROTOR_EVENTS).expect("small");
+    for (leg, pushed, elapsed) in [("bulk", first, bulk), ("replay", replay, replaying)] {
+        let per_push = elapsed / u32::try_from(pushed.pushes.max(1)).expect("small");
+        assert!(
+            per_push < budget,
+            "the {leg} leg averaged {per_push:?} a push, past one event's share of Rotor's \
+             {ROTOR_WINDOW:?} window, {budget:?}"
+        );
+    }
 }
