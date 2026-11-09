@@ -33,6 +33,22 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Security
+
+- `happenstance-sqlite`: moves to `rusqlite` 0.41 (`libsqlite3-sys` 0.39),
+  whose bundled SQLite is 3.54.1, clearing RUSTSEC-2026-0459 (SQLite
+  before 3.54.0). `cargo deny check` fails on every consumer that builds this
+  adapter on 0.40.
+
+### Changed
+
+- **Breaking** for `happenstance-sqlite`: the crate re-exports `rusqlite`
+  (`happenstance_sqlite::rusqlite`) and `SqliteBatch::push` takes
+  `rusqlite::types::Value`, so the `rusqlite` 0.40 to 0.41 move changes its
+  public API. A caller that names `rusqlite` itself must move to 0.41 with it;
+  one that only goes through the re-export changes nothing. This needs a minor
+  release, not a patch.
+
 ## [0.5.1] — 2026-11-08
 
 Documentation and tooling only: no public API changes, and nothing a `0.5.0`
