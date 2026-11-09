@@ -64,7 +64,8 @@ projection fixture must state its new `REOPEN` capability. `happenstance` and
 `happenstance-core` do not change: an application on the in-memory store, with
 no `sync` feature, changes nothing. The
 [`0.6.0` trace](#060-trace) at the end of this section lists every break with
-the decision behind it. All nine crates move to `0.6.0` together.
+the decision behind it, and [`docs/upgrading-to-0-6.md`](docs/upgrading-to-0-6.md)
+walks them. All nine crates move to `0.6.0` together.
 
 ### Added
 
