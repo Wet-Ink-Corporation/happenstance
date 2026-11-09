@@ -721,9 +721,14 @@ fn two_records_with_one_number_are_refused() {
 
     let found = numbered(&root.0.join(".kb/decisions"), "0013");
 
+    let message = found
+        .expect_err("a duplicate number must not pick a record")
+        .to_string();
     assert!(
-        found.is_err(),
-        "a duplicate number must not pick a record: {found:?}"
+        message.contains("two records numbered 0013")
+            && message.contains("0013-one.md")
+            && message.contains("0013-two.md"),
+        "the refusal names the number and both files: {message}"
     );
 }
 
