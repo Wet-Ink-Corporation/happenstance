@@ -8448,8 +8448,8 @@ Chain's hub **ran a domain decision, adjudicated a contested claim and authored 
 compensation without ever parsing a payload** — because every fact the decision
 needed was in the `EventType`, the `Tags` and the condition `Query` that
 travelled with the batch. That is ADR-0003 surviving at the exact point most
-likely to break it, and ADR-0003 is explicitly provisional pending exactly this
-demonstration (`references/adr/0003-opaque-payloads.md:6-15`).
+likely to break it, and ADR-0003 was provisional pending exactly this
+demonstration (`references/adr/0003-opaque-payloads.md:6-15`), lifted by ADR-0106 (#126).
 
 It survives only because the vocabulary was built for it. So the property is not
 a consequence of the design; it is an **obligation on the domain**, and this

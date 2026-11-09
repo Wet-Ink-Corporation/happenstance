@@ -23,7 +23,8 @@ summary: >-
   adapter signature and blocks dyn storage, and serde_json::Value in core, which locks the
   ecosystem to JSON and forces a parse on every pass-through read.
 depends_on: []
-related: []
+related:
+  - kb-decision-0106
 source_paths:
   - .kb/_intake/0003-opaque-payloads.md
   - references/adr/0003-opaque-payloads.md

@@ -263,7 +263,7 @@ two-peer half is what makes this a port rather than a protocol.
       `crates/happenstance-sync/src/lib.rs`'s module doc names both.
 - [ ] `ingest_never_rejects` and `compensation_is_atomic_with_the_losing_event`
       green, with a mutant that fails each.
-- [ ] #126 · The byte-identical round trip is green, and ADR-0003 loses `provisional`.
+- [x] #126 · The byte-identical round trip is green, and ADR-0003 loses `provisional`.
 - [x] #128 · Every `[DEFERRED]` `SY` clause is either settled or renewed against a named
       experiment; a renewal with no experiment is a build failure under CF-38.
       SY-14 and SY-18 frozen, SY-32 renewed to phase 14 with its experiment, by
@@ -368,5 +368,5 @@ of E2E-07 (ES-24).
   froze all four of section 5 (`wi-56271e`) and accepted ADR-0105 (`wi-73ab4f`),
   all option A. SY-39 is frozen under ADR-0107 §6; §1.3 reads 187 `[FROZEN]`, 13
   `[PROVISIONAL]`, 5 `[DEFERRED]`, and no `freeze-by-13` row is left. #124 and
-  #128 are done. Phase 13 stays in progress: #126 (ADR-0106), the open work items
+  #128 are done. #126 landed first (ADR-0106 accepted). Phase 13 stays in progress: the open work items
   and phase-13 → `main` remain.
