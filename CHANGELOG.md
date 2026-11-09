@@ -91,6 +91,31 @@ not the same as what a user needed to be told.
   adapter depends on another; `harness/workerd` is the precedent (#130).
   `live-neon` runs its `neon::` cases and `live-postgres` its `postgres::`
   cases, each as a strict list/run/assert trio.
+- `happenstance-sync-testkit`: the restore family (#133), VT-6's restore
+  half. `restore_rules::restored_peer_does_not_reissue_identities` writes an
+  event, takes a backup, writes a second, restores the backup and runs the
+  adapter's documented post-restore procedure, writes a third, and fails a
+  peer that hands back one `EventId` for two different events: the defect
+  VT-6's `Rejects:` line names, a store whose identity survives a restore and
+  so gives a new event the identity a lost one was issued, which every peer
+  that pulled the lost one then dedupes away. It also fails a restore that
+  restores nothing and a store that stamps its current incarnation on what it
+  reads back, so a re-mint rewrites restored history; no position is compared.
+  Mounted with `restore_conformance!` over a new `RestoreFixture` trait
+  (`connect`, `append_local`, `back_up`, `restore`), with
+  `emit_restore_tokio!`, `emit_restore_blocking!` and
+  `for_each_restore_rule!`. A family of its own rather than a capability on
+  `SyncFixture`, because `MemorySyncPeer` issues no identity to reissue and
+  every peer-family mutant is built on it. `MemoryRestoreFixture` is the
+  reference: a `StoreSyncPeer` over `MemoryIngestStore`, restored by ingesting
+  the backed-up groups into a fresh incarnation. `tests/wrong_restores.rs`
+  pins each wrong peer to its exact failing set.
+- `happenstance-postgres`: the restore family is mounted on the Postgres
+  sync peer (#133), in the library target `live-postgres` already runs. A
+  restore is simulated in place (rows deleted, `event_position_seq` set back,
+  the identity row put back) and followed by `remint_identity`, the procedure
+  ADR-0086 documents; the same sequence with the re-mint skipped is the
+  negative control, and reissues the identity the lost event was given.
 - `happenstance-sync-testkit`: the convergence family (#141), and with it a
   dependency on `happenstance`, the typed layer, with its `postcard` codec.
   `convergence_rules::convergent_projection_is_interleaving_independent`

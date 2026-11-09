@@ -300,6 +300,15 @@ impl SendWriteGroupStore for MemoryIngestHandle {
     }
 }
 
+// Declared below the impls so their lines do not move.
+impl MemoryIngestHandle {
+    /// A handle onto `store`, for a fixture that swaps the store its handles
+    /// reach: [`MemoryRestoreFixture`](crate::MemoryRestoreFixture)'s restore.
+    pub(crate) const fn over(store: Arc<MemoryIngestStore>) -> Self {
+        Self { store }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use core::future::Future;

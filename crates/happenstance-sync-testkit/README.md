@@ -75,11 +75,22 @@ let outcome = happenstance_testkit::block_on(
 )?;
 ```
 
+A peer whose store can be backed up and restored mounts the restore family
+(VT-6) on a `RestoreFixture`: a local writer, a backup, and a restore that also
+takes every step your adapter documents for after one, such as a re-mint of its
+identity. The rule fails a peer that, after the restore, hands back one
+`EventId` for two different events. `MemoryRestoreFixture` is the reference:
+
+```rust,ignore
+happenstance_sync_testkit::restore_conformance!(MyRestoreFixture::new());
+```
+
 The harness is a parameter: `emit_ingest_tokio!` (the default),
 `emit_ingest_blocking!` for a `!Send` store, and `emit_ingest_wasm!` for
 `wasm32-unknown-unknown`; the peer family has the same three, and the
 write-group family has `emit_write_group_tokio!` and
-`emit_write_group_blocking!`.
+`emit_write_group_blocking!`, and the restore family `emit_restore_tokio!` and
+`emit_restore_blocking!`.
 
 ## Features
 
