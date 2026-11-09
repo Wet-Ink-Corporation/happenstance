@@ -13,8 +13,8 @@
 //! new far-side incarnation, but holds no peer set; its watermark goes through the projection
 //! port in the caller's batch (SY-31, [`runner::Watermark`]); no [`Exchange`] runs over a real network for [`RemoteSyncPeer`]. A `[FROZEN]` `SY` clause binds this
 //! crate's semver as an `ES` clause binds `happenstance-core`'s. SY-7, SY-10,
-//! SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-39 are `[PROVISIONAL]`, binding
-//! until the falsifier each names, and SY-14, SY-18 and SY-32 `[DEFERRED]`.
+//! SY-29 and SY-36 – SY-39 are `[PROVISIONAL]`, binding until the falsifier each
+//! names, and SY-32 is `[DEFERRED]` (ADR-0107).
 //!
 //! # This is a port, not a protocol
 //!

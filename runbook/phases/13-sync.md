@@ -160,7 +160,7 @@ provides the atomicity and the identity that makes it idempotent.
 - [x] #119 · Record the DCB wire interop decision (WF-1) in ADR-0026's envelope section:
       named, deferred, with the experiment being a specific external implementation
       to interoperate with. Not silence.
-- [ ] #121 · **A KV-capped peer for SY-18.** The two real peers above are a SQL-backed
+- [x] #121 · **A KV-capped peer for SY-18.** The two real peers above are a SQL-backed
       Durable Object (2 MiB rows) and Postgres over HTTP; neither has a per-value
       cap, so neither can test whether `PeerLimits` prevents a failure or only
       relocates it. SY-18's own falsifier is the Turnstile peer-D shape: a store
@@ -169,7 +169,8 @@ provides the atomicity and the identity that makes it idempotent.
       not be a real KV binding. VT-21's floor is compared across the peer set on
       the same instrument. If it is not built, SY-18 is renewed past 1.0 by a
       record naming the Turnstile experiment — safe, because `PeerLimits` is
-      `#[non_exhaustive]` — and not left deferred by default.
+      `#[non_exhaustive]` — and not left deferred by default. **Built at #121**
+      (`KvCappedFixture`), and SY-18 is frozen on it by [ADR-0107](../../.kb/decisions/0107-phase-13s-clauses-are-frozen.md).
 - [ ] #122 · ~~**The filtered-subset store, built here rather than at phase 14.** SY-27's
       falsifier, and SY-28's after it, is a spoke holding a deliberately filtered
       subset of a hub's log, attempting a position-based resume against it. That
@@ -184,44 +185,54 @@ provides the atomicity and the identity that makes it idempotent.
       asks. CF-27's suffix store stays phase 14's, and the sequencing hazard
       between the two phases is gone. The issue can close as not planned for 1.0.
 - [ ] #124 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-13` row
-      in [the 1.0 dispositions](../ledgers.md), and what freezes it:
+      in [the 1.0 dispositions](../ledgers.md), and what freezes it. **Proposed
+      2026-11-09 as [ADR-0107](../../.kb/decisions/0107-phase-13s-clauses-are-frozen.md)** (`claude/p13-124`); every freeze is the
+      owner's, and the item ticks when he accepts it and SY-39 is dispositioned:
       - #133 · **VT-6** — `restored_peer_does_not_reissue_identities` in the sync
-        testkit, after the restore gap above is closed.
+        testkit, after the restore gap above is closed. **Frozen** (memory and
+        Postgres; a Neon mount is a follow-up).
       - #134 · **VT-9** — a sync-testkit rule that ingest preserves `RecordedAt`, with a
-        mutant; ADR-0066 restates the clock falsifier.
+        mutant; ADR-0066 restates the clock falsifier. **Frozen.**
       - #139 · **VT-21** — compared across the peer set with SY-18; the tightest shipped
-        target, Neon at 131,072 bytes, clears the 64 KiB floor twice over.
+        target, Neon at 131,072 bytes, clears the 64 KiB floor twice over. **Frozen.**
       - **VT-24** — SY-14's bulk ingest is the first consumer that batches by the
-        128-event floor.
+        128-event floor. #139. **Frozen**; the ceiling side is #379's.
       - #136 · **SY-7** — ADR-0027; the falsification test on `MemorySyncPeer` with two
         adjudicator configurations, its divergence recorded as the evidence.
+        **Renewed to `freeze-by-14`** with SY-10: the runner's adjudication hook.
       - #137 · **SY-10** — both topologies expressible, as the exit criterion below
-        already requires, with `directional_merge_rules_compose`.
+        already requires, with `directional_merge_rules_compose`. **Renewed to
+        `freeze-by-14`** with SY-7; #441 first.
       - **SY-14** — the bulk-ingest measurement against the Neon peer. ADR-0027
-        rewords the bound to one ingest round trip per pulled batch.
-      - **SY-18** — the KV-capped peer above.
+        rewords the bound to one ingest round trip per pulled batch. #139.
+        **Frozen**: 16 one-request pushes, 1,583 ms, on `live-neon` run 42547020310.
+      - #139 · **SY-18** — the KV-capped peer above. **Frozen.**
       - #141 · **SY-20** — `convergent_projection_is_interleaving_independent`, written
         against the convergence declaration phase 18 builds. Phase 18 runs
         first — it is in this phase's dependency row for that reason — so the
-        declaration exists when this rule is written.
+        declaration exists when this rule is written. **Frozen**, as worded.
       - **SY-22** — the `cost-layers` test; the declaration's placement is fixed
-        with SY-21 at phases 17 and 18, both of which precede this phase.
-      - **SY-23** — ADR-0027's merge rule.
+        with SY-21 at phases 17 and 18, both of which precede this phase. **Frozen.**
+      - #136 · **SY-23** — ADR-0027's merge rule. **Frozen.**
       - #140 · **SY-27, SY-28, SY-29** — ~~together, on the filtered-subset store above;
         a peer-supplied `Query` exists on the port only if replication is scoped.~~
         Since ADR-0027: SY-27 and SY-28 freeze on `round_trip_preserves_the_whole_log`
         with a mutant peer that withholds filtered events. SY-29 is renewed past 1.0
         against the first scoped-replication proposal, because no peer-supplied
-        `Query` is on the 1.0 port.
-      - #143 · **SY-30** — the two unlike real peers pushing real envelopes.
+        `Query` is on the 1.0 port. **SY-27 and SY-28 frozen; SY-29's renewal
+        confirmed.**
+      - #143 · **SY-30** — the two unlike real peers pushing real envelopes. **Frozen.**
       - **SY-31** — the runner half. The reserved `sync/` prefix is phase 17's,
-        with `projection-id-is-unvalidated`.
+        with `projection-id-is-unvalidated`. **Frozen**; a Cloudflare projection
+        store is a follow-up.
       - **CF-40** — whether `payload_len` (data plus metadata) is the budget unit,
-        once phase 17 has built ADR-0043's `MetadataLen`.
+        once phase 17 has built ADR-0043's `MetadataLen`. **Frozen**, field-wise.
 
       WF-1 and WF-11 are renewed past 1.0, not frozen here; this phase records
       WF-1's renewal in ADR-0026 and confirms which encoding the sync transport
-      forwards WF-11's payload through.
+      forwards WF-11's payload through. ADR-0107 also moves VT-36 to
+      `freeze-by-14` and proposes SY-36, SY-37, SY-38 and CF-42 as freezes that
+      each need the owner's own yes. SY-39 waits on ADR-0105.
 - [ ] #125 · **CF-25's bar for the peer-port freeze**
       (`.kb/open-questions/cf-25-cf-26-portfolio-check-does-not-exist.md`).
       CF-25 is `[FROZEN]` and gates every port freeze on `cargo xtask spec-trace`
@@ -247,19 +258,22 @@ two-peer half is what makes this a port rather than a protocol.
 - [ ] ADR-0026 and ADR-0027 written before the code they constrain.
 - [ ] `SyncPeer` implemented by three peers, one of which cannot hold a
       transaction open across a round trip.
-- [ ] Hub-and-spoke and peer-to-peer are both expressible, and the crate's module
-      doc no longer describes only one.
+- [x] Hub-and-spoke and peer-to-peer are both expressible, and the crate's module
+      doc no longer describes only one. `directional_merge_rules_compose` (#137);
+      `crates/happenstance-sync/src/lib.rs`'s module doc names both.
 - [ ] `ingest_never_rejects` and `compensation_is_atomic_with_the_losing_event`
       green, with a mutant that fails each.
 - [ ] #126 · The byte-identical round trip is green, and ADR-0003 loses `provisional`.
-- [ ] #128 · Every `[DEFERRED]` `SY` clause is either settled or renewed against a named
+- [x] #128 · Every `[DEFERRED]` `SY` clause is either settled or renewed against a named
       experiment; a renewal with no experiment is a build failure under CF-38.
+      SY-14 and SY-18 frozen, SY-32 renewed to phase 14 with its experiment, by
+      ADR-0107 (proposed: ticked on its acceptance).
 - [ ] Every `freeze-by-13` clause in [`ledgers.md`](../ledgers.md)'s 1.0
       dispositions is `[FROZEN]`, or re-dispositioned by a record that says why.
-- [ ] `restored_peer_does_not_reissue_identities` is green against the
+- [x] `restored_peer_does_not_reissue_identities` is green against the
       Postgres-backed peer, not only against the memory one, and both
       `happenstance-postgres` and `happenstance-neon` document what they do on a
-      restore.
+      restore. #133 in `live-postgres`; both crates' procedures landed at #104.
 - [ ] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
 
@@ -319,3 +333,14 @@ of E2E-07 (ES-24).
   negative control; CI's live jobs run both. Verified against a live Postgres
   17.10; the Neon target is compiled locally and runs in `live-neon`.
   `restored_peer_does_not_reissue_identities` stays #133's.
+- **2026-11-09** — #124 and #128: the consolidated freeze, proposed as
+  [ADR-0107](../../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) on
+  `claude/p13-124` and held for the owner. Fourteen clauses frozen (VT-6, VT-9,
+  VT-21, VT-24, SY-14, SY-18, SY-20, SY-22, SY-23, SY-27, SY-28, SY-30, SY-31,
+  CF-40), SY-14 on the live Neon measurement (16 one-request pushes, 1,583 ms, run
+  42547020310). SY-7 and SY-10 renewed to `freeze-by-14` on the adjudication
+  hook; SY-29, SY-32 and WF-1 confirmed against their experiments; VT-36 to
+  `freeze-by-14`, because the lint refuses `freeze-by-21`. SY-35's Rule line
+  scoped so the convergence family is outside it (#431). SY-36, SY-37, SY-38 and
+  CF-42 proposed as freezes in the branch's second commit, each needing its own
+  yes. SY-39 waits on ADR-0105.

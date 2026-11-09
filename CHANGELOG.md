@@ -48,8 +48,8 @@ not the same as what a user needed to be told.
   Two new wrong stores fail it and nothing else: one that looks up the
   first 64 identities of a call only, and one that caps a call at 64. Every
   mounted ingest family runs it, so an adapter whose ingest refuses a
-  128-event call now fails (behaviour; CF-32). The SY-14 marker stays
-  `[DEFERRED]` until the live Neon measurement below is recorded.
+  128-event call now fails (behaviour; CF-32). The live Neon measurement below
+  is recorded in ADR-0107, which proposes SY-14's freeze.
 - `happenstance-neon`: SY-14's bound counted on the peer it was deferred for
   (#139). `rotors_ingest_is_one_request_per_push_however_much_is_held` pushes
   Kestrel Rotor's 1,840 events, 46 write groups of 40, through
@@ -192,7 +192,7 @@ not the same as what a user needed to be told.
   every projection. A projection author writes a `ConvergenceFixture` (the
   projection, its store, the two origins' events, and its read model as
   bytes); `StockOnHandFixture` and `CostLayersFixture` are the reference
-  cases. SY-20 and SY-22 stay `[PROVISIONAL]`.
+  cases. ADR-0107 proposes freezing SY-20 and SY-22 on these rules.
 - `happenstance-sync`: the `runner` module, the first half of the runner
   (#244). `runner::Edge` drives one edge — a local store that is both
   `EventStore` and `IngestStore`, against one `SyncPeer` — one caller-driven
@@ -487,6 +487,25 @@ not the same as what a user needed to be told.
   local log alone.
 
 ### Changed
+
+- **Fourteen specification clauses are `[FROZEN]`, proposed** (#124, #128,
+  [ADR-0107](.kb/decisions/0107-phase-13s-clauses-are-frozen.md), `status:
+  proposed` until the owner accepts it). No code changed. VT-6 (a restore never
+  reissues an `EventId`), VT-9 (ingest keeps the recorded time), VT-21 and
+  VT-24 (the payload and batch floors, the ingest call being the batch), SY-14
+  (bulk ingest in one round trip a pulled batch, measured on live Neon: Kestrel
+  Rotor's 1,840 events in 16 one-request pushes, 1,583 ms), SY-18 (a peer
+  declares its limits before the push), SY-20 and SY-22 (convergence, and the
+  exclusion of a non-convergent projection), SY-23 (`EventId` order), SY-27 and
+  SY-28 (whole-log replication and its round-trip rule), SY-30 (the push keeps
+  write groups), SY-31 (the watermark goes through `ProjectionStore`) and CF-40
+  (a store's byte ceilings are per field; data plus metadata is the replication
+  port's unit). From `1.0.0`, loosening any of them is a major release. SY-7 and
+  SY-10 stay `[PROVISIONAL]` until the runner has an adjudication hook; SY-29,
+  SY-32 and WF-1 are renewed against their named experiments, so SY-32 is the only
+  `[DEFERRED]` SY clause left. VT-36 is rescheduled to phase 14. SY-35's rule line
+  no longer claims the convergence family (#431). SY-36, SY-37, SY-38 and CF-42
+  are proposed as freezes in their own right, each awaiting the owner's yes.
 
 - `happenstance-postgres`: a handle no longer caches the store's identity
   (#104). Every append, and every ingest, reads `store_meta` inside its own

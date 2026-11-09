@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**168 `[FROZEN]`**, **30 `[PROVISIONAL]`**, **7 `[DEFERRED]`** and **seven
+**182 `[FROZEN]`**, **18 `[PROVISIONAL]`**, **5 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -853,16 +853,16 @@ name or any other value that survives a restore. A store MUST NOT issue an
 `EventId` whose `(StoreId, SequencePosition)` pair it has previously issued for a
 different event.
 
-`[PROVISIONAL — falsified by a deployment in which the mint-once path is
-unavailable *and* mint-per-open produces so many incarnations that every peer's
-watermark, which carries one row per origin for ever, grows without bound. The
-candidate is a Cloudflare Durable Object, whose isolate is evicted and revived
-as a matter of routine; the first observation is phase 9 and the sync testkit's
-restore-and-diverge scenario measures the harm at phase 13]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on `restored_peer_does_not_reissue_identities` (#133), the restore family's rule: write, back up,
+write, restore and run the adapter's documented post-restore procedure, write, and no `EventId` may name two different events across the two pulls. It is green on `MemoryRestoreFixture` and on the
+Postgres `StoreSyncPeer` with `remint_identity` (ADR-0086), and red on Postgres with the re-mint skipped, where the store reissued `<id>:2` to an event lost to the restore and one written after
+it: the harm this marker named, measured. `tests/wrong_restores.rs` fails a device-keyed identity, a restore that restores nothing and a stamp-on-read incarnation, each and nothing else. Neon and
+the Durable Object are not mounted. Phase 9 answered the eviction half: Durable Object storage outlives the isolate, so mint-once is available there. Reopened by a deployment that follows its
+adapter's documented procedure and still reissues a pair (ADR-0086's first falsifier), or by one where mint-once is unavailable and mint-per-open's incarnations grow a watermark without bound.
 `Rule:` `reopened_store_does_not_reissue_an_event_id`, gated on
 `Fixture::REOPEN`, which asserts both that two events appended in one open
 share a `StoreId` and that an event appended after a reopen has an `EventId`
-matching neither; the restore half by `happenstance-sync-testkit`'s new
+matching neither; the restore half by `happenstance-sync-testkit`'s
 `restored_peer_does_not_reissue_identities`
 `Cases:` E2E-34, E2E-42
 `Rejects:` an adapter that keys `StoreId` on the device it runs on. A tablet
@@ -974,9 +974,9 @@ ingest. No store, runner or projection may derive an ordering from `RecordedAt`,
 and the contract MUST NOT state any relationship between `RecordedAt` order and
 `SequencePosition` order.
 
-`[PROVISIONAL — falsified if IngestStore cannot carry a foreign RecordedAt
-unchanged through the phase-13 envelope (ADR-0066 §2). The frozen-clock falsifier
-this marker used to name has fired on wasm32 with no effect, and is retired]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on `ingest_preserves_the_recorded_time` (#134), which fails six wrong ingest stores in `crates/happenstance-sync-testkit/tests/wrong_ingest_stores.rs`,
+among them one that re-stamps, one that clamps to its own clock and one that stamps each group with its head's time, and runs in every ingest family, the Durable Object's under `workerd` included. The frozen-clock falsifier fired on wasm32 with
+no effect and stays retired. Reopened if `IngestStore` cannot carry a foreign `RecordedAt` unchanged through the phase-13 envelope (ADR-0066 §2): name a peer that cannot hold it verbatim.
 `Rule:` `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`;
 the ingest half by `happenstance-sync-testkit`'s `ingest_preserves_the_recorded_time`;
 the "not an ordering key" half by §5's new
@@ -1637,9 +1637,9 @@ event whose `data` is at least `MIN_SUPPORTED_EVENT_DATA_LEN` = 65,536 bytes. A
 store MAY accept more, MUST document its actual limit, and MUST refuse an
 oversized payload with `AppendError::ExceedsStoreLimit` rather than truncating.
 
-`[PROVISIONAL — falsified by a named target that cannot honour 64 KiB; the
-legacy KV-backed Durable Object with a 128 KiB value cap is the closest and it
-clears the floor with room for the envelope]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13. Rule: `store_accepts_the_guaranteed_minimum_payload`, failing `PayloadCeilingStore` and `TruncatingPayloadStore`, and `append_reports_exceeded_store_limits`;
+on the peer side, the floor line of `peer_declares_its_own_limits`, which `tests/wrong_limits.rs`'s `BelowTheFloor` fails and no other rule does. Every mounted peer passes that line: 65,536 = `MemorySyncPeer` and `NeonSyncPeer::new` < `KvCappedFixture`
+114,465 < the Neon store's 131,072 ≤ SQLite, Postgres and Cloudflare 1,048,576 (#121, #131). Turnstile's KV peer D, under a 128 KiB value cap, clears the floor with its envelope. Reopened by a named target that cannot honour 64 KiB.
 `Rule:` `store_accepts_the_guaranteed_minimum_payload` — written at phase 3
 against **this clause's number rather than against a constant**, because
 `MIN_SUPPORTED_EVENT_DATA_LEN` does not exist until phase 4 introduces it;
@@ -1710,9 +1710,9 @@ be introduced to carry one. Every store MUST accept an append of at least
 `MIN_SUPPORTED_EVENTS_PER_BATCH` = 128 events, MUST document its actual limit,
 and MUST refuse beyond it with `AppendError::ExceedsStoreLimit`. On the ingest path the batch is the call: a store that implements `IngestStore` MUST accept one `ingest` of at least `MIN_SUPPORTED_EVENTS_PER_BATCH` events, foreign events and compensation together, and a capacity refusal is `IngestError::ExceedsStoreLimit`.
 
-`[PROVISIONAL — falsified by a domain whose smallest indivisible unit of work
-exceeds 128 events; Kestrel Cold Chain's largest single conditioned group is
-under forty]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13. Rule: `store_accepts_the_guaranteed_minimum_batch_size`, failing `BatchParameterCeilingStore` and `ChunkLosingBatchStore`, and `append_reports_exceeded_store_limits` for the refusal beyond a documented ceiling; on the ingest
+path, where the call is the batch, `bulk_ingest_is_idempotent_in_bounded_round_trips` (#139), whose `CapsTheCallBelowTheFloor` fails under this clause and no other. Sync ingest is the first consumer that batches by the floor: `PeerLimits::minimum` declares 128 events a push, `happenstance-neon`'s ingest ceiling is
+exactly 128 a call, and Rotor's 1,840 events are 46 groups of 40; no group above 128 surfaced. The refusal beyond a declared ingest ceiling is #379's, additive. Reopened by a domain whose smallest indivisible unit of work exceeds 128 events; Kestrel Cold Chain's largest single conditioned group is under forty.
 `Rule:` `store_accepts_the_guaranteed_minimum_batch_size`; and on the ingest path, where the call is the batch as VT-36 says of tags, `bulk_ingest_is_idempotent_in_bounded_round_trips` (`happenstance-sync-testkit`, #139), whose one call of 128 foreign events a store refusing it as over a capacity limit fails under this clause (`CapsTheCallBelowTheFloor`)
 `Cases:` E2E-35, E2E-36, E2E-39
 `Rejects:` an adapter that builds a multi-row `INSERT` with one parameter set per
@@ -2103,7 +2103,7 @@ code, and the specification's JSON snippets are labelled a "potential JSON
 representation" beside an explicit disclaimer that "implementations are not
 required to use the same terms or function/field names". There is nothing to
 build a bridge against, which makes the deferral stronger rather than weaker
-(ADR-0016 §1, reading of 2026-08-05).]`
+(ADR-0016 §1, reading of 2026-08-05). Confirmed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md): the named experiment is ADR-0026's, a bridge reading a UmaDB server's log over its published `umadb.proto` gRPC service.]`
 `Rule:` `wire::query_all_is_unambiguous` and `wire::empty_object_is_not_a_condition`
 are the two tests that fail if this clause is abandoned in practice; the scope
 half is a review obligation, and the clause says so rather than pretending
@@ -6906,7 +6906,7 @@ It was written before that code existed, and the clauses that depend on
 measurement rather than on argument are consequently `[DEFERRED]` against the
 phase that builds the port against two real peers — five of the thirty-seven,
 with a further eleven `[PROVISIONAL]` (three and thirteen since ADR-0027 settled SY-27
-and SY-28 without the experiment). The rest are frozen, because the shape
+and SY-28 without the experiment, and one of thirty-nine and seven since ADR-0107 at phase 13's close: SY-32, and SY-7, SY-10, SY-29 and SY-36 – SY-39). The rest are frozen, because the shape
 does not wait on the transport. They are written anyway, and the reason is
 recorded in the decision ledger: `RUNBOOK.md:438-439` says deferring the
 sync port **"leaks `EventId` and a tail seam back into `EventStore`"**. That was a
@@ -7215,7 +7215,7 @@ configuration, not a property of the port.
 able to adjudicate the same fact family and their compensations can be made
 convergent. Falsification test: two adjudicators for one family, disconnected
 from each other, each ingesting the same conflicting pair; assert the two logs
-converge after they meet.]`
+converge after they meet. Renewed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md), with SY-10: `only_the_adjudicator_compensates` holds the store half and the falsification test ran with its divergence recorded (#136), but no runner authors a compensation, so the MUST that a non-adjudicator writes none cannot fail yet. The named experiment is the runner's adjudication hook, a follow-up to #244, mounting the rule; the marker moves then.]`
 Rule: `only_the_adjudicator_compensates` (`happenstance-sync-testkit`, #136), in the
 ingest family: two stores take one conflicting pair in opposite orders, the rule plays
 the runner and holds a one-adjudicator assignment, and the adjudicator's log must hold
@@ -7312,7 +7312,7 @@ permit a different merge rule in each direction of one edge.**
 `[PROVISIONAL — falsified if a hub and a spoke can be shown to need the same
 merge rule in a deployment where the hub holds every log and the spoke holds
 one. Falsification test: implement the hub's rule on a spoke and show the spoke's
-projections stay correct.]`
+projections stay correct. Renewed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md), with SY-7: `directional_merge_rules_compose` (#137) fails `AdjudicatesOnIngest`, but `runner::Edge`'s pull always accepts, so a hub that drives its own edge toward a spoke cannot adjudicate what it pulls. The named experiment is the adjudication hook mounting the rule, after #441's decorative refused-push check is settled.]`
 Rule: `directional_merge_rules_compose` (`happenstance-sync-testkit`, #137, ingest family).
 Cases: E2E-42, E2E-44, E2E-45.
 
@@ -7442,17 +7442,17 @@ identity.
 **SY-14. Bulk ingest of a pulled batch MUST complete in one ingest round trip,
 however many of its events the receiver already holds.**
 
-`[DEFERRED — settled by the experiment named in PRESSURE-TEST.md:688-693 and by
-the Kestrel Rotor bulk-ingest measurement: 1,840 events over one-shot HTTP inside
-a 34-minute window, against a store-level `EventId` uniqueness guarantee versus a
-per-event conditional append. Owning phase: the phase that builds the two peer
-adapters.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on `bulk_ingest_is_idempotent_in_bounded_round_trips` (#139): VT-24's floor of 128 foreign events in seven groups, 44 of them delivered first,
+lands in one ingest call counted 84 appended and 44 skipped, each event held once and every earlier row kept, and the same call again is 128 skips that change nothing; it fails `LooksUpOneChunkOfIdentities` as SY-14 and no other rule does.
+The Neon measurement ADR-0027 held the marker for: Kestrel Rotor's 1,840 events, 46 write groups of 40, a third already held, through `NeonSyncPeer` in 16 pushes of one request each, in 1,583 ms against the 34-minute window, and the replay
+in 16 requests, all skips, in 1,362 ms (`rotors_bulk_ingest_through_the_live_neon_peer_is_bounded`, `live-neon` run 42547020310); the count is pinned with no endpoint by `rotors_ingest_is_one_request_per_push_however_much_is_held`. Reopened
+by a peer on which one ingest call at the floor cannot be one round trip, so that a pulled batch must be cut below 128 events; that is recorded as a deployment limit of that peer, never answered by a per-event condition (ADR-0027).
 Rule: `bulk_ingest_is_idempotent_in_bounded_round_trips` (`happenstance-sync-testkit`, #139, ingest family), which ingests VT-24's floor of 128 foreign events in seven groups as **one** call after a first call delivered every third of them and the last: the call must land counted 84 appended and 44 skipped, each event held once and every earlier row kept, and the same call again is 128 skips that change nothing. It fails a store that consults what it holds for the first 64 events of a call only (`LooksUpOneChunkOfIdentities`) and, under VT-24, one that refuses a call of more than 64 (`CapsTheCallBelowTheFloor`), both in `crates/happenstance-sync-testkit/tests/wrong_ingest_stores.rs`.
 The round trip a port can see is the `ingest` call; the requests an adapter spends inside it are its own to pin (CF-33): `happenstance-neon`'s `rotors_ingest_is_one_request_per_push_however_much_is_held` counts Rotor's 1,840 events at the minimum peer's 128 a push as 16 pushes of one request each, replay included, and `rotors_bulk_ingest_through_the_live_neon_peer_is_bounded` measures the same against the live endpoint.
 Cases: E2E-36, E2E-35.
 
 *Rejects:* all three shapes available against the port as it stands, which is why
-this is deferred rather than decided.
+this was deferred rather than decided until the measurement below (ADR-0107).
 
 - One `append` per event: 1,840 round trips, fatal on the one-shot HTTP peer.
 - One condition of 1,840 single-identity items: legal, but one already-seen event
@@ -7493,7 +7493,7 @@ DO NOTHING` (`crates/happenstance-sqlite/src/ingest_spike.rs:12`). And
 `IngestStore::ingest` is one call per pulled batch
 (`crates/happenstance-sync/src/ingest.rs:168`). What is left is the measurement,
 and the marker stays `[DEFERRED]` until it passes: Rotor's 1,840 events through
-the Neon peer's one-shot HTTP, inside the 34-minute window.
+the Neon peer's one-shot HTTP, inside the 34-minute window. It passed at phase 13, and the marker is `[FROZEN]` by ADR-0107: 16 pushes of one request each, 1,583 ms for the bulk ingest and 1,362 ms for the replay, about 0.08% of the window (`live-neon` run 42547020310).
 
 ---
 
@@ -7653,12 +7653,12 @@ the exclusion is discovered when the adapter is written, not when the runner is.
 **SY-18. A peer MUST be able to declare the limits it imposes on an event it can
 accept, and the runner MUST be able to read them before pushing.**
 
-`[DEFERRED — settled by building the Turnstile peer D shape: a KV-backed store
-with a 128 KiB value cap, against an origin store that has already durably
-committed a 340 KB payload. The experiment is whether a capability declaration
-prevents the failure or merely relocates it. Owning phase: the phase that builds
-the two peer adapters.]`
-Rule: `peer_declares_its_own_limits` (new, `happenstance-sync-testkit`); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared tags-per-batch ceiling to the whole call, compensation included; and `peer_takes_a_batch_at_its_declared_limits` (`happenstance-sync-testkit`, #337), which holds the declared batch limits to a push at their corner: `max_batch_events` events, and `max_batch_bytes` bytes over as many, must land whole and come back byte for byte, the count capped at `MAX_PROVOKED_BATCH_EVENTS` and the bytes at `MAX_PROVOKED_BATCH_BYTES` and at what that many events can carry under `max_event_bytes`.
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on four rules. `peer_declares_its_own_limits` (#121) runs the Turnstile experiment on `KvCappedFixture`, a fixture peer as phase 13's work list allows: a 340,000-byte seat map against
+a 131,072-byte value, declared 114,465. The declaration does not admit the map, so the runner parks it with no round trip and the receiver writes nothing. That is prevention, not relocation. It fails `tests/wrong_limits.rs`'s eight lying peers, each failing that rule alone.
+`peer_takes_a_batch_at_its_declared_limits` (#337) holds the batch limits at their corner and fails five wrong peers in `tests/wrong_peers.rs`; `ingest_validates_every_event_not_the_head` (#242) fails `ChecksOnlyEachGroupsHead`, `LeavesCompensationUnchecked` and
+`RefusesAtTheLimit`; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (#370) holds the declared per-call ceiling. The asynchronous declaration cannot be written, because `limits()` is not `async`, and the shipped runner reads `limits()` before every push and sizes the
+push by them. Reopened if a peer whose limits depend on state the push itself changes is shown to need a declaration the runner reads after a round trip, or if limits read before the push are shown stale often enough that `Split` and `Park`, not the declaration, carry the load.
+Rule: `peer_declares_its_own_limits` (`happenstance-sync-testkit`, #121); and `ingest_validates_every_event_not_the_head` (`happenstance-sync-testkit`, #242), which holds a store's declared per-event ceilings to every event an ingest writes, not to the head of each group; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared tags-per-batch ceiling to the whole call, compensation included; and `peer_takes_a_batch_at_its_declared_limits` (`happenstance-sync-testkit`, #337), which holds the declared batch limits to a push at their corner: `max_batch_events` events, and `max_batch_bytes` bytes over as many, must land whole and come back byte for byte, the count capped at `MAX_PROVOKED_BATCH_EVENTS` and the bytes at `MAX_PROVOKED_BATCH_BYTES` and at what that many events can carry under `max_event_bytes`.
 Cases: E2E-35.
 
 *Rejects:* the asynchronous form of the declaration, which is the shape a peer
@@ -7689,7 +7689,7 @@ What is still missing, and is what this clause defers, is the *declaration* — 
 value a runner can read **before** pushing rather than an error it discovers
 after. The floor makes the declaration meaningful (a peer below 64 KiB is
 non-conformant, not merely small); `ExceedsStoreLimit` makes the failure
-survivable; neither makes it avoidable.
+survivable; neither makes it avoidable. The declaration is `SyncPeer::limits()`, and ADR-0107 froze this clause on the experiment above.
 
 ---
 
@@ -7773,10 +7773,10 @@ and none can be constructed, because `SequencePosition` carries no origin
 under any two ingest interleavings that agree on per-origin order and disagree
 everywhere else.**
 
-`[PROVISIONAL — falsified if a projection is found that must converge, cannot be
-written as a commutative fold, and cannot be excluded under SY-22. Falsification
-test: express it as a commutative fold over `EventId`-ordered events, or show
-why it cannot be.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on `convergent_projection_is_interleaving_independent` as built at #141: the
+two block interleavings, with unit-ledger, first-arrival, arrival-rank and declared cost-layers folds failed in `tests/wrong_projections.rs` beside an `EventId`-ordered
+control. The clause's wording admits only that pair, and ADR-0107 records why it is frozen as worded. Reopened if a projection is found that must converge, cannot be
+written as a commutative fold, and cannot be excluded under SY-22: express it as a commutative fold over `EventId`-ordered events, or show why it cannot be.
 Rule: `convergent_projection_is_interleaving_independent`
 (`happenstance-sync-testkit`, #141) — takes a projection and a set of events from two
 origins, applies them under two interleavings, asserts byte-identical read models. The
@@ -7855,9 +7855,9 @@ compile, which is the only enforcement mechanism this workspace trusts.
 **SY-22. A projection MUST be able to declare itself non-convergent, and a
 convergence check MUST exclude it rather than fail it.**
 
-`[PROVISIONAL — falsified if every non-convergent projection in the catalogue
-turns out to be repairable, making the escape hatch a licence rather than a
-necessity. Falsification test: express `cost-layers` convergently.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on `non_convergent_projections_are_excluded_not_failed` (#141):
+FIFO cost layers diverges under SY-20's interleavings where stock-on-hand converges, and the `compile_fail` fence holds the exclusion. Reopened by its own
+falsifier: every non-convergent projection in the catalogue turns out repairable, the test being `cost-layers` expressed convergently, which turns that rule red.
 Rule: `non_convergent_projections_are_excluded_not_failed`
 (`happenstance-sync-testkit`, #141) — the cost-layers test: FIFO cost layers, undeclared,
 must commit two read models under SY-20's two interleavings where stock-on-hand over the
@@ -7888,9 +7888,9 @@ a runtime-queryable form can be added beside the marker later without a break.
 **SY-23. Where a deployment needs a peer-independent deterministic order, that
 order MUST be `EventId` order — the `(origin, origin_position)` pair, sorted.**
 
-`[PROVISIONAL — falsified if a domain needs a peer-independent order that also
-reflects real-world time or causality. Falsification test: name a requirement
-that `EventId` order fails and a store-assigned timestamp satisfies.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on `event_id_order_is_identical_on_every_peer`
+(#136) and `happenstance-core`'s derived `Ord` on `StoreId` and `EventId` (`identity.rs:43`, `:96`). Reopened if a domain needs a peer-independent
+order that also reflects real-world time or causality: name a requirement that `EventId` order fails and a store-assigned timestamp satisfies.
 Rule: `event_id_order_is_identical_on_every_peer` (`happenstance-sync-testkit`, #136),
 in the peer family: three origins' events, numbered with gaps, are pushed one to a push
 in an order unlike their `EventId` order, an origin's higher position arriving before
@@ -8039,12 +8039,12 @@ event it holds, and the port MUST NOT carry a peer-supplied filter over what is
 replicated. A slice that must not be replicated, for confidentiality or for size,
 is its own store.**
 
-`[PROVISIONAL — falsified if a real deployment before 1.0 needs filtered spokes
-and cannot use one store per slice. Falsification test: name the deployment and
-show either that a fact it must hold in two slices cannot be written to two
-stores, or that its adjudicator must see across slices. A firing is answered by
-scoped replication as an additive opt-in with its own ADR, never by changing what
-a whole-log peer does.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on
+`round_trip_preserves_the_whole_log` (#140) with `tests/wrong_scopes.rs`'s peer that withholds a slice by tag,
+by type, and by type and tag, each failing that rule and no other. Reopened by a real deployment that needs
+filtered spokes and cannot use one store per slice: name it, and show either that a fact it must hold in two
+slices cannot be written to two stores, or that its adjudicator must see across slices. A firing is answered
+by scoped replication as an additive opt-in with its own ADR, never by changing what a whole-log peer does.
 Rule: `round_trip_preserves_the_whole_log` (`happenstance-sync-testkit`, #140) —
 SY-28's rule, which rejects a peer that withholds the events a type or tag filter matches,
 among the types and tags its own log carries, and compares recorded time too (VT-9):
@@ -8086,10 +8086,10 @@ log: once two peers have pushed and pulled to quiescence, each holds the same se
 of `EventId`s, each with byte-identical type, tags, data and metadata. It MUST NOT
 compare positions.**
 
-`[PROVISIONAL — falsified with SY-27, since this clause is its consequence: if
-scoped replication arrives as an opt-in, a scoped edge needs its own round-trip
-rule over the scope its peers agreed. Falsification test: SY-27's. A firing adds
-a rule for the opt-in and leaves this one binding on whole-log edges.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase
+13, with SY-27, on `round_trip_preserves_the_whole_log` (#140): whole-log equality over
+`EventId` sets, byte for byte, no position compared. Reopened only with SY-27. A firing adds
+a round-trip rule for the scoped opt-in and leaves this one binding on whole-log edges.
 Rule: `round_trip_preserves_the_whole_log` (`happenstance-sync-testkit`, #140) —
 the rule plays one side, pushes a log spanning two origins, three types, two
 regions, a pricing slice in a two-event group, an untagged event and metadata,
@@ -8113,14 +8113,14 @@ the right one.
 **SY-29. A peer-supplied `Query` MUST be validated against a declared cost policy
 before it is evaluated.**
 
-`[PROVISIONAL — renewed past 1.0 by ADR-0027. Under SY-27's whole-log answer no
-port method takes a peer-supplied `Query`, so this MUST binds nothing on the 1.0
-port. Falsified, and reopened, by the first scoped-replication proposal: the
+`[PROVISIONAL — renewed past 1.0 by ADR-0027, and confirmed at phase 13 by ADR-0107:
+no 1.0 port method takes a peer-supplied `Query` (SY-27 frozen), so this MUST binds
+nothing on the 1.0 port. Reopened by the first scoped-replication proposal, the
 additive opt-in SY-27's marker names, which comes with its own ADR, puts a `Query`
-on the port, and must build this clause's rule with it. Falsification test for that
-proposal, unchanged: construct a query that satisfies any tag-based policy over
-`Query`'s surface (types and tags only, `query.rs:155-159`) and still scans the
-log, in which case the seam belongs in the adapter.]`
+on the port, and builds `ingest_refuses_an_unbounded_peer_query` with it. Named
+experiment for that proposal: construct a query that satisfies any tag-based policy
+over `Query`'s surface (types and tags only, `query.rs:155-159`) and still scans the
+log; if one exists, the seam belongs in the adapter, not in a port-level policy.]`
 Rule: `ingest_refuses_an_unbounded_peer_query` (new,
 `happenstance-sync-testkit`).
 Cases: E2E-40.
@@ -8161,10 +8161,10 @@ forwards what it ingested in the groups it ingested, so a group crosses any
 number of hops as one unit. What a store must record for that to be possible is
 SY-39's.
 
-`[PROVISIONAL — falsified if a peer is found whose unit of work genuinely spans
-groups, requiring an atomicity the store cannot supply. Falsification test:
-express it as one append and show `EventStore::append`'s single condition is
-insufficient rather than merely inconvenient.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on `push_envelope_preserves_group_boundaries` (#420) with `tests/wrong_peers.rs`'s page-merging, guard-dropping, flattening and paging peers, mounted on
+the Durable Object over HTTP and on `NeonSyncPeer`; on `ingest_group_is_atomic_under_a_mid_group_fault` (#242), armed on Neon by an `AFTER INSERT` trigger and on the Durable Object by a `BEFORE INSERT` trigger; and on the shipped runner pushing a
+SQLite log's write groups through the Durable Object, `NeonSyncPeer` and the Postgres `StoreSyncPeer` under a four-event batch, every group arriving whole with its guard, while the pre-#420 per-event push fails the same check (#143). Reopened by
+its own falsifier: a peer whose unit of work genuinely spans groups, requiring an atomicity the store cannot supply. Express it as one append and show `EventStore::append`'s single condition is insufficient rather than merely inconvenient.
 Rule: `push_envelope_preserves_group_boundaries` (`happenstance-sync-testkit`, #420): a page pulled back is the groups pushed, each with its guard; for the store's half,
 `ingest_group_is_atomic_under_a_mid_group_fault` (`happenstance-sync-testkit`, #242): a fault between two rows of one `IngestGroup` leaves nothing of it.
 Cases: E2E-35, E2E-39.
@@ -8254,10 +8254,10 @@ re-delivery makes a position no row of the group holds.
 **SY-31. A per-peer confirmation watermark MUST NOT be an event, and MUST be
 written through `ProjectionStore` under a reserved `ProjectionId`.**
 
-`[PROVISIONAL — falsified if a deployment needs the watermark inside a
-transaction with a read model whose adapter is a different `ProjectionStore` than
-the sync runner's. Falsification test: name one and show the two stores cannot be
-the same handle.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on `watermark_advances_transactionally_with_a_read_model` (#143), which plays the shipped runner over a projection
+fixture and fails `tests/wrong_watermark_stores.rs`'s four stores, green on the reference store, `happenstance-sqlite`, both `happenstance-postgres` stores and `happenstance-neon`, the last with no interactive
+transaction; and on `ack_never_confirms_a_non_durable_event` (#242) for the value the watermark advances to. `happenstance-cloudflare` has no `ProjectionStore`, an adapter gap ADR-0107 records. Reopened if a
+deployment needs the watermark inside a transaction with a read model whose adapter is a different `ProjectionStore` than the sync runner's: name one and show the two stores cannot be the same handle.
 Rule: `watermark_advances_transactionally_with_a_read_model` (`happenstance-sync-testkit`, #143): the shipped runner's watermark, committed in a batch with a read-model row under the reserved id, is read back with the row through a fresh handle, stays apart per peer and refuses to move backwards; and
 `ack_never_confirms_a_non_durable_event` (`happenstance-sync-testkit`, #242), which holds the value this watermark advances to: an `Ack` confirms only what the far side still holds once the acking handle is gone.
 Cases: E2E-33, E2E-44.
@@ -8332,7 +8332,7 @@ detects the offline-too-long peer. ADR-0028 has already decided that the floor
 does not have to describe a scattered purge, which E2E-46 shows no floor can.
 Owning phase: 14, which builds the instrument, and phase 13's two peer adapters
 if it lands first. That reconciles the owner this marker named before phase 16
-(the phase that builds the peers) with the ledger's `freeze-by-14`.]`
+(the phase that builds the peers) with the ledger's `freeze-by-14`. Confirmed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md): neither of phase 13's peers built the instrument, every shipped peer declares `retention_floor: None` and the runner reads none, so the experiment stays phase 14's (#158, #163).]`
 Rule: `retention_gap_is_reported_not_silent` (new,
 `happenstance-sync-testkit`).
 Cases: E2E-44, E2E-46, E2E-47.
@@ -8464,10 +8464,10 @@ convergence check needs to read MUST be present in the event's `EventType` or
 `Tags`. It MUST NOT be reachable only from `Event::data` or `Event::metadata`.
 
 `[FROZEN]`
-Rule: `the_sync_suite_never_decodes` (new, `happenstance-sync-testkit`) — the
-suite's own fixture domain supplies payloads that are not decodable in any codec,
-and every rule in the suite must still pass. A rule that needs to decode is a rule
-that has found a violation of this clause.
+Rule: `the_sync_suite_never_decodes` (new, `happenstance-sync-testkit`) — the suite's own fixture domain supplies payloads that are not
+decodable in any codec, and every rule of the peer, ingest, restore and write-group families must still pass. A rule there that needs to decode
+has found a violation of this clause. The convergence family (SY-20, SY-22) is outside it: its fold is the projection under test, which decodes
+as any application projection may, and the check compares read-model bytes only, which is all a convergence check reads (ADR-0107, #431).
 Cases: E2E-34, E2E-39, E2E-40, E2E-42.
 
 *Rejects:* the vocabulary design that puts an adjudication-relevant value in the
@@ -9425,24 +9425,24 @@ fiction in the CI log. What the two share is the *reporting* obligation, and onl
 that: the skip carries the testkit's own `NO_CEILING_REASON`, because "this store
 has no ceiling" is the same sentence for every store that says it.
 
-`[PROVISIONAL — falsified by a real adapter whose ceiling is not a constant: a
-Postgres row whose TOAST threshold depends on what else is in the row, or a KV
-store whose per-value cap varies with the key, would make a single
-`Option<usize>` unable to say where the boundary is, and the rule built on it
-would be asserting a number the store cannot honour. The first named instrument
-has landed and answered the **constant-ceiling** half: `happenstance-sqlite`
-states the first three of the four, each mirrored from the adapter's own `pub const` rather than
-restated (`crates/happenstance-sqlite/tests/support/mod.rs:212-218`, mirroring
-`crates/happenstance-sqlite/src/event_store.rs:342`, `:349` and `:358`), and
-`append_reports_exceeded_store_limits` runs there rather than skipping. On a
-store whose ceilings *are* constants, an `Option<usize>` says exactly where the
-boundary is and the rule asserts a number the store honours. What is still live
-is the other half, and it is narrower than "an adapter" was: a store whose
-ceiling is **not** a constant — the Postgres row whose TOAST threshold moves
-with the rest of the row, the KV store whose per-value cap moves with the key —
-for which no single number is honest. The instruments are the Cloudflare adapter
-at phase 9 and the Postgres adapter at phase 10, whichever states a varying
-ceiling first. Cloudflare's answer, at phase 17b, is ADR-0093's: its documented 2 MB row limit is a budget the four fields share, and the adapter carves it into four constant ceilings, so it states constants rather than a varying ceiling — one row at all four is 1,835,264 bytes (`crates/happenstance-cloudflare/src/lib.rs:163-180`). Its fifth, ADR-0100's 262,144 tags per call, is a constant placed below a deployed wall that moved across three runs (524,288, 775,168 and 1,040,384 tag rows), which is VT-36's falsifier rather than this one's: the count still says where the adapter refuses.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13 (#143), which settles
+the unit ADR-0043 left open: each byte ceiling bounds its own field and holds with the other at its own ceiling, so
+data plus metadata (`ReplicatedEvent::payload_len`) is the replication port's unit, never a store's, and SY-18
+holds a peer's one budget to both of its store's field ceilings. On `append_reports_exceeded_store_limits` and its
+seventeen mutants, `SharedPayloadBudgetStore` (#143) among them. The falsifier's constant-ceiling half is answered
+by every real adapter. `happenstance-sqlite` states its ceilings as constants mirrored from the adapter's own `pub
+const` rather than restated (`crates/happenstance-sqlite/tests/support/mod.rs:212-218`, mirroring
+`crates/happenstance-sqlite/src/event_store.rs:342`, `:349` and `:358`), and `happenstance-postgres` and
+`happenstance-neon` state constant policy ceilings below any physical wall, so the rule asserts a number each store
+honours. `happenstance-cloudflare`'s documented 2 MB row limit is a budget its fields share, and the adapter carves
+it into four constant ceilings that fit together (ADR-0093): one row at all four is 1,835,264 bytes
+(`crates/happenstance-cloudflare/src/lib.rs:163-180`). Its fifth, ADR-0100's 262,144 tags per call, is a constant
+placed below a deployed wall that moved across three runs, which is VT-36's falsifier rather than this one's: the
+count still says where the adapter refuses. No adapter in the workspace states a ceiling that moves with the rest
+of the row. Reopened by a real adapter whose ceiling is not a constant, the Postgres row whose TOAST threshold
+moves with what else is in it or the KV store whose per-value cap moves with the key, so that no single
+`Option<usize>` says where its boundary is. The remedy is a sixth, shared ceiling with its own `StoreLimit` as an
+additive change, never a re-reading of `EventDataLen` as the pair.
 Rule: `append_reports_exceeded_store_limits`, which is unwritable without it —
 a rule cannot locate a boundary the store has not named, and asserting a
 hard-coded one would be a `MAX_EVENT_DATA_LEN` constant by another route, which
@@ -10438,13 +10438,13 @@ between them because its *shape* does not wait on a transport but its
 
 | Section | Prefix | Clauses | `[FROZEN]` | `[PROVISIONAL]` | `[DEFERRED]` | `[NON-NORMATIVE]` |
 |---|---|---|---|---|---|---|
-| §2.1–§2.6 value types | `VT` | 36 | 28 | 7 | 0 | 1 |
+| §2.1–§2.6 value types | `VT` | 36 | 32 | 3 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 39 | 22 | 14 | 3 | 0 |
-| §6 conformance | `CF` | 43 | 36 | 4 | 2 | 1 |
-| **Total** | | **212** | **168** | **30** | **7** | **7** |
+| §5 `SyncPeer` | `SY` | 39 | 31 | 7 | 1 | 0 |
+| §6 conformance | `CF` | 43 | 37 | 3 | 2 | 1 |
+| **Total** | | **212** | **182** | **18** | **5** | **7** |
 
 ### 7.2 The table
 
@@ -10457,10 +10457,10 @@ between them because its *shape* does not wait on a transport but its
 | VT-3 | FROZEN | `append_preserves_event_payload` | E2E-34, E2E-42 |
 | VT-4 | FROZEN | `append_stamps_identity_and_time` | E2E-34, E2E-41, E2E-43 |
 | VT-5 | FROZEN | `event_ids_are_unique_within_a_store`, `append_stamps_a_local_event_id`, `inge… | E2E-33, E2E-34, E2E-36, E2E-41, E2E-42 |
-| VT-6 | PROVISIONAL | `reopened_store_does_not_reissue_an_event_id`, `restored_peer_does_not_reissue… | E2E-34, E2E-42 |
+| VT-6 | FROZEN | `reopened_store_does_not_reissue_an_event_id`, `restored_peer_does_not_reissue… | E2E-34, E2E-42 |
 | VT-7 | FROZEN | `event_id_is_not_matchable_by_query`, `contains_event_id_reports_membership` | E2E-32, E2E-34, E2E-36 |
 | VT-8 | FROZEN | `event_ids_are_unique_within_a_store` | E2E-33, E2E-36 |
-| VT-9 | PROVISIONAL | `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`, `ingest_pr… | E2E-41, E2E-43 |
+| VT-9 | FROZEN | `append_stamps_a_recorded_time`, `recorded_time_survives_a_reopen`, `ingest_pr… | E2E-41, E2E-43 |
 | VT-10 | FROZEN | the spike's unit tests in `crates/happenstance-sqlite/src/ingest_spike.rs` unt… | E2E-33, E2E-35, E2E-36, E2E-39, E2E-42 |
 | VT-11 | FROZEN | `positions_are_unique`, `positions_are_strictly_monotonic`, `positions_are_uni… | E2E-10, E2E-46 |
 | VT-12 | NON-NORMATIVE | *(none — see clause)* | E2E-01, E2E-02, E2E-08 |
@@ -10472,10 +10472,10 @@ between them because its *shape* does not wait on a transport but its
 | VT-18 | FROZEN | compile tests `event_new_accepts_a_held_event_type` and `command_handler_compo… | E2E-51 |
 | VT-19 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set`, `wire::decode_accepts_an_over_… | E2E-40, E2E-42 |
 | VT-20 | FROZEN | unit tests `rejects_invalid_event_types` and `rejects_invalid_tags`; `store_ac… | E2E-40 |
-| VT-21 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_payload`, `append_reports_exceeded_store… | E2E-42 |
+| VT-21 | FROZEN | `store_accepts_the_guaranteed_minimum_payload`, `append_reports_exceeded_store… | E2E-42 |
 | VT-22 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tag_count` | E2E-40 |
 | VT-23 | PROVISIONAL | `store_evaluates_a_query_at_the_guaranteed_minimum_item_count` | E2E-36, E2E-40 |
-| VT-24 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_batch_size`, `bulk_ingest_is_idempotent_… | E2E-35, E2E-36, E2E-39 |
+| VT-24 | FROZEN | `store_accepts_the_guaranteed_minimum_batch_size`, `bulk_ingest_is_idempotent_… | E2E-35, E2E-36, E2E-39 |
 | VT-25 | FROZEN | `append_reports_exceeded_store_limits` | E2E-35, E2E-42 |
 | VT-26 | FROZEN | compile test `query_items_is_not_constructible_downstream`; `condition_without… | E2E-40 |
 | VT-27 | FROZEN | compile-level; enforced by the wire tests, which would otherwise have a positi… | E2E-04, E2E-05, E2E-37, E2E-38 |
@@ -10615,24 +10615,24 @@ between them because its *shape* does not wait on a transport but its
 | SY-11 | FROZEN | `redelivery_of_an_accepted_group_is_a_no_op` | E2E-33, E2E-34, E2E-36 |
 | SY-12 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-34, E2E-36 |
 | SY-13 | FROZEN | `identity_survives_a_tag_reordering_peer` † | E2E-33, E2E-34 |
-| SY-14 | DEFERRED | `bulk_ingest_is_idempotent_in_bounded_round_trips`, `rotors_ingest_is_one_requ… | E2E-36, E2E-35 |
+| SY-14 | FROZEN | `bulk_ingest_is_idempotent_in_bounded_round_trips`, `rotors_ingest_is_one_requ… | E2E-36, E2E-35 |
 | SY-15 | FROZEN | `peer_conformance!` is invoked against a fixture peer whose transport asserts … | E2E-35, E2E-36 |
 | SY-16 | FROZEN | `resume_survives_a_dropped_peer_handle` † | E2E-35, E2E-36, E2E-44 |
 | SY-17 | FROZEN | the existing CLAUDE.md rule 4, checked by `happenstance-sync-testkit` compilin… | E2E-52, E2E-30 |
-| SY-18 | DEFERRED | `peer_declares_its_own_limits`, `ingest_validates_every_event_not_the_head`, `… | E2E-35 |
+| SY-18 | FROZEN | `peer_declares_its_own_limits`, `ingest_validates_every_event_not_the_head`, `… | E2E-35 |
 | SY-19 | FROZEN | `two_peers_disagree_on_total_order` † | E2E-41, E2E-42 |
-| SY-20 | PROVISIONAL | `convergent_projection_is_interleaving_independent` | E2E-41, E2E-22 |
+| SY-20 | FROZEN | `convergent_projection_is_interleaving_independent` | E2E-41, E2E-22 |
 | SY-21 | FROZEN | `apply_is_handed_the_origin_identity_not_the_local_position` †, `convergent_pr… | E2E-41 |
-| SY-22 | PROVISIONAL | `non_convergent_projections_are_excluded_not_failed` | E2E-41 |
-| SY-23 | PROVISIONAL | `event_id_order_is_identical_on_every_peer` | E2E-41, E2E-43 |
+| SY-22 | FROZEN | `non_convergent_projections_are_excluded_not_failed` | E2E-41 |
+| SY-23 | FROZEN | `event_id_order_is_identical_on_every_peer` | E2E-41, E2E-43 |
 | SY-24 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-25 | FROZEN | `forwarding_order_is_arrival_order` | E2E-42 |
 | SY-26 | FROZEN | `causality_is_expressible_without_a_contract_change` † | E2E-42, E2E-41 |
-| SY-27 | PROVISIONAL | `round_trip_preserves_the_whole_log` | E2E-33, E2E-36, E2E-44, E2E-46 |
-| SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` | E2E-44, E2E-46 |
+| SY-27 | FROZEN | `round_trip_preserves_the_whole_log` | E2E-33, E2E-36, E2E-44, E2E-46 |
+| SY-28 | FROZEN | `round_trip_preserves_the_whole_log` | E2E-44, E2E-46 |
 | SY-29 | PROVISIONAL | `ingest_refuses_an_unbounded_peer_query` † | E2E-40 |
-| SY-30 | PROVISIONAL | `push_envelope_preserves_group_boundaries`, `ingest_group_is_atomic_under_a_mi… | E2E-35, E2E-39 |
-| SY-31 | PROVISIONAL | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
+| SY-30 | FROZEN | `push_envelope_preserves_group_boundaries`, `ingest_group_is_atomic_under_a_mi… | E2E-35, E2E-39 |
+| SY-31 | FROZEN | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
 | SY-32 | DEFERRED | `retention_gap_is_reported_not_silent` † | E2E-44, E2E-46, E2E-47 |
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
 | SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |
@@ -10685,7 +10685,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-37 | FROZEN | `cargo xtask spec-trace` (CF-38). | *all* |
 | CF-38 | FROZEN | `cargo xtask spec-trace` (new step in `xtask/src/main.rs`'s `REQUIRED` list, `… | *all* |
 | CF-39 | FROZEN | `arming_a_mid_batch_fault_makes_the_append_fail`, `append_is_atomic_under_a_mi… | E2E-07, E2E-39 |
-| CF-40 | PROVISIONAL | `append_reports_exceeded_store_limits` | E2E-35, E2E-42 |
+| CF-40 | FROZEN | `append_reports_exceeded_store_limits` | E2E-35, E2E-42 |
 | CF-41 | FROZEN | `the_promised_emitters_are_exactly_the_pinned_list`, a meta-test in `crates/ha… | *(none — see clause)* |
 | CF-42 | PROVISIONAL | `an_unsettling_lag_skips_exactly_the_read_back_rules` and `the_read_back_inven… | *(none — see clause)* |
 | CF-43 | FROZEN | `refused_reset_changes_nothing` | *(none — see clause)* |

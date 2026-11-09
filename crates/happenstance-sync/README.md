@@ -31,9 +31,8 @@ with programs you can run.
 > A `[FROZEN]` `SY` clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > binds this crate's semver as an `ES` clause binds `happenstance-core`'s.
-> SY-7, SY-10, SY-20 – SY-23, SY-27 – SY-31 and SY-36 – SY-39 are
-> `[PROVISIONAL]`, binding until the falsifier each names, and SY-14, SY-18 and
-> SY-32 are `[DEFERRED]`. The version moves in lockstep with the rest of the
+> SY-7, SY-10, SY-29 and SY-36 – SY-39 are `[PROVISIONAL]`, binding until the
+> falsifier each names, and SY-32 is `[DEFERRED]` (ADR-0107). The version moves in lockstep with the rest of the
 > workspace.
 
 ## Which stores implement the port

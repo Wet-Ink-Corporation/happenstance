@@ -976,6 +976,20 @@ supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0105 | [`kb-decision-0105`](../decisions/0105-write-groups-are-recorded-per-row.md) | A store records each write's group on its rows, and a peer reads and pushes in those groups | proposed | 13 | — |
 
+## 2026-11-09: phase 13's clauses are frozen or re-dispositioned (#124, #128), proposed
+
+ADR-0107 is written straight here with no intake step, and is **proposed**: every freeze in it is
+the owner's call. Fourteen clauses freeze (VT-6, VT-9, VT-21, VT-24, SY-14, SY-18, SY-20, SY-22,
+SY-23, SY-27, SY-28, SY-30, SY-31, CF-40); SY-7 and SY-10 are renewed to `freeze-by-14` on the
+runner's adjudication hook; SY-29, SY-32 and WF-1 are confirmed against their experiments; VT-36
+moves to `freeze-by-14`; SY-35's Rule line is scoped (#431). SY-36, SY-37, SY-38 and CF-42 are
+proposed in their own sections, each needing the owner's separate yes. It supersedes nothing.
+ADR-0103 and ADR-0106 are taken on other branches.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0107 | [`kb-decision-0107`](../decisions/0107-phase-13s-clauses-are-frozen.md) | Phase 13's clauses are frozen or re-dispositioned, and every deferred SY clause is settled or renewed | proposed | 13 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it
