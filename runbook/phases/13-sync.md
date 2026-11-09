@@ -104,7 +104,7 @@ provides the atomicity and the identity that makes it idempotent.
       ([ADR-0027](../../.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md)):
       whole-log at 1.0, and SY-7, SY-10, SY-14 and SY-23 ratified with three edits.
       No marker moved to `[FROZEN]`; the items under #124 move them.
-- [ ] #108 · `IngestStore` in `happenstance-sync` (VT-10) — the seam through which a
+- [x] #108 · `IngestStore` in `happenstance-sync` (VT-10) — the seam through which a
       foreign identity arrives, and the reason `EventStore::append` never grew a
       slot for one. **VT-10 is frozen by ADR-0073 (phase 17)**: the write path is
       the adapter's own row writer. What is left here is turning the SQLite
@@ -127,7 +127,13 @@ provides the atomicity and the identity that makes it idempotent.
       **Part E** publishes both sync crates (nine in the release set, #199) and
       ships each adapter's ingest behind an off-by-default `sync` feature; the
       Durable Object's is `CloudflareIngestStore`, built from the object's
-      `DurableObjectState`. SY-38's freeze is its own PR.
+      `DurableObjectState`. SY-38's freeze is its own PR. **Done 2026-11-09,
+      confirmed from the tree:** `IngestError<E>` and `IngestStore::Error: Classify`
+      (`crates/happenstance-sync/src/ingest.rs`); `watermark_reads_the_origin_index_without_a_sort`
+      on SQLite, Postgres, Neon and the Durable Object; `MemoryIngestStore`, the oracle
+      (`memory_ingest.rs`), behind `memory`; `ingest_store_conformance!` mounted on all four
+      adapters, each behind its own `sync` feature; ADR-0098 accepted and SY-38 frozen by
+      ADR-0107 §5. The issue is open only because its PRs merged into `phase-13`.
 - [x] #109 · **ES-41's held-versus-visible reading.** ADR-0028 froze ES-41 at phase 17
       and left one reading open: where ES-10's frontier separates a committed row
       from a visible one, does `contains_event_id` mean held or visible?
@@ -135,28 +141,42 @@ provides the atomicity and the identity that makes it idempotent.
       as unsettled. Settle it, and write a rule that stages a committed row above
       the frontier, with a wrong implementation that carries the frontier
       predicate into the probe.
-- [ ] #111 · `sync_peer_conformance!` in `happenstance-sync-testkit`, emitted through
+- [x] #111 · `sync_peer_conformance!` in `happenstance-sync-testkit`, emitted through
       phase 1's registry so it inherits the tokio/blocking/wasm flavours. **The
       suite never decodes a payload** (SY-35) — a suite that parses `data` would
       certify a peer that does, and ADR-0003's guarantee is exactly that no peer
-      needs to.
-- [ ] #113 · `MemorySyncPeer` behind a `memory` feature — the oracle, the doctest target,
+      needs to. **Done** (#319, closed): `for_each_sync_peer_rule!` emitted through
+      `emit_sync_tokio!`, `emit_sync_blocking!` and `emit_sync_wasm!`, the last run by
+      `tests/memory_sync_conformance_wasm.rs`; SY-35 is `[FROZEN]`.
+- [x] #113 · `MemorySyncPeer` behind a `memory` feature — the oracle, the doctest target,
       and something an application author can test against before any real peer
       exists. The same three-part rationale `memory.rs:16-23` gives for
       `MemoryEventStore`, and the same cold-start problem the projection port had
-      without one.
+      without one. **Done** (#315, closed): `MemorySyncPeer` behind `memory`, mounted by
+      `tests/memory_sync_conformance.rs` and every peer-family mutant.
 - [x] ~~Delete `happenstance-sync`'s placeholder `EventId`, `StoreId` and
       `RecordedAt` from `src/identity.rs`, and use `happenstance-core`'s.~~ Done
       at phase 17 (ADR-0073), pulled forward because the spike's trait had to
       speak the store's own types: the placeholder `RecordedAt` was a `u64`, which
       fired VT-9's restated falsifier by construction.
-- [ ] #114 · Envelope types on phase 5's tested wire format, with the format version
-      first.
-- [ ] #116 · Ingest bound on `EventStore`, not `SendEventStore` — the Cloudflare side is
+- [x] #114 · Envelope types on phase 5's tested wire format, with the format version
+      first. **Done** (#316, closed; ADR-0097): four messages, each a type in
+      `wire::Envelope`, `format_version` declared first and read before the message;
+      version 3 since ADR-0104 (#428).
+- [x] #116 · Ingest bound on `EventStore`, not `SendEventStore` — the Cloudflare side is
       single-threaded, and CLAUDE.md rule 4 binds the sync runner too because the
-      `!Send` peer sits mid-chain rather than at a leaf.
-- [ ] #117 · Two real peers — the phase-9 Durable Object and the phase-10 Postgres — plus
-      the round trip between a native SQLite store and each.
+      `!Send` peer sits mid-chain rather than at a leaf. **Done** (#311, closed): the
+      runner, `StoreSyncPeer` and `serve_sync` bind the bare `SyncPeer`, `IngestStore`
+      and `WriteGroupStore`, the crate builds for `wasm32`, and the Durable Object's
+      `!Send` ingest store drives both halves under `workerd` (#130).
+- [x] #117 · Two real peers — the phase-9 Durable Object and the phase-10 Postgres — plus
+      the round trip between a native SQLite store and each. **Done 2026-11-09:** the
+      Durable Object over HTTP (#130, `happenstance_cloudflare::sync_http`, the sync
+      family under `workerd` local and deployed) and Postgres twice over: `NeonSyncPeer`
+      over one-shot HTTP (#131, `live-neon`) and `StoreSyncPeer<PostgresEventStore, _>`
+      (`live-postgres`). The SQLite round trips are `harness/workerd/tests/sqlite_round_trip`
+      and `harness/sync-round-trip`. The issue, and #130 and #131, close with
+      `phase-13` → `main`.
 - [x] #119 · Record the DCB wire interop decision (WF-1) in ADR-0026's envelope section:
       named, deferred, with the experiment being a specific external implementation
       to interoperate with. Not silence.
@@ -255,14 +275,22 @@ two-peer half is what makes this a port rather than a protocol.
 
 **Exit criteria**
 
-- [ ] ADR-0026 and ADR-0027 written before the code they constrain.
-- [ ] `SyncPeer` implemented by three peers, one of which cannot hold a
-      transaction open across a round trip.
+- [x] ADR-0026 and ADR-0027 written before the code they constrain. Both merged
+      2026-10-14 (#306, #307) ahead of the trait work they govern (#243's classified
+      errors, #321) and of every peer, runner and rule after it; the phase-2 sketch they
+      cite as evidence was an instrument, not the code they constrain.
+- [x] `SyncPeer` implemented by three peers, one of which cannot hold a
+      transaction open across a round trip. `MemorySyncPeer`, the Durable Object's
+      `CloudflareSyncPeer` (#130), `NeonSyncPeer` (#131, one request per pull and per
+      push, no interactive transaction) and `StoreSyncPeer` over Postgres, each mounting
+      `sync_peer_conformance!`.
 - [x] Hub-and-spoke and peer-to-peer are both expressible, and the crate's module
       doc no longer describes only one. `directional_merge_rules_compose` (#137);
       `crates/happenstance-sync/src/lib.rs`'s module doc names both.
-- [ ] `ingest_never_rejects` and `compensation_is_atomic_with_the_losing_event`
-      green, with a mutant that fails each.
+- [x] `ingest_never_rejects` and `compensation_is_atomic_with_the_losing_event`
+      green, with a mutant that fails each. `tests/wrong_peers.rs`:
+      `EvaluatesTheGuard` and `AcksThenDropsOnTheGuard` fail SY-1's rule alone;
+      `FlattensGroups` and the group-splitting `PagingFixture` fail SY-2's (with SY-30's).
 - [x] #126 · The byte-identical round trip is green, and ADR-0003 loses `provisional`.
 - [x] #128 · Every `[DEFERRED]` `SY` clause is either settled or renewed against a named
       experiment; a renewal with no experiment is a build failure under CF-38.
@@ -275,8 +303,10 @@ two-peer half is what makes this a port rather than a protocol.
       Postgres-backed peer, not only against the memory one, and both
       `happenstance-postgres` and `happenstance-neon` document what they do on a
       restore. #133 in `live-postgres`; both crates' procedures landed at #104.
-- [ ] The specification is reconciled against this phase's changes (session
-      protocol step 6), and `cargo xtask spec-trace` passes.
+- [x] The specification is reconciled against this phase's changes (session
+      protocol step 6), and `cargo xtask spec-trace` passes. 2026-11-09, line-neutral:
+      §1.6's `SyncPeer` row, §1.3, §1.5, §1.7, §5's preamble and SY-6's narrative; the
+      session log below names what was left.
 
 **Cases this makes writable.** E2E-33 – E2E-42, E2E-45, and the idempotency half
 of E2E-07 (ES-24).
@@ -370,3 +400,23 @@ of E2E-07 (ES-24).
   `[PROVISIONAL]`, 5 `[DEFERRED]`, and no `freeze-by-13` row is left. #124 and
   #128 are done. #126 landed first (ADR-0106 accepted). Phase 13 stays in progress: the open work items
   and phase-13 → `main` remain.
+- **2026-11-09** — the exit reconciliation, on `claude/p13-exit` from `phase-13` at
+  `a4a25ab4`, docs only. Every remaining box is ticked on evidence in the tree: #108 (parts
+  A–F; ADR-0098 accepted, SY-38 frozen), #111 (#319), #113 (#315), #114 (#316, ADR-0097),
+  #116 (#311) and #117 (#130, #131), and the four open exit criteria. #108, #117, #130, #131
+  and #244 are still open on GitHub only because their PRs merged into `phase-13`; they close
+  with `phase-13` → `main`. The proof artefact stands: `sync_peer_conformance!` green against
+  `MemorySyncPeer`, the Durable Object over HTTP and `NeonSyncPeer`, with the byte-identical
+  round trip ADR-0106 rests on. `phase-13`'s tip ran every CI job green, `workerd` included
+  (the overnight log's precondition for the merge). The specification is reconciled
+  line-neutrally: §1.6's `SyncPeer` row now inventories the runner, write groups and network
+  peers and reads **Frozen at phase 13**, with 35 of 39 `SY` clauses `[FROZEN]`; §1.3's sync
+  bullet, §1.5's tense, §1.7's VT-9 and SY-27 entries, §5's preamble, and two sentences in
+  SY-6's narrative that promised phase 13 would build the guard refusal. **Left, for the
+  owner:** SY-21's Rule line still says "phase 13 adds"
+  `convergent_projection_cannot_observe_local_position`, which was not written and is still
+  declared `Scheduled` for phase 13 in `xtask/src/spec_trace.rs`; and ten `[FROZEN]` `SY`
+  clauses name a † rule that exists nowhere in the tree (SY-3, SY-6, SY-9, SY-13, SY-16,
+  SY-19, SY-26, SY-33, SY-34, SY-35), which `spec-trace`'s check 4 does not see because it
+  reads no sync suite. The status row reads `done`; `phase-13` → `main` and the `0.6.0` tag
+  are the owner's.

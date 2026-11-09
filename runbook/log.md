@@ -10,6 +10,24 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-09 — phase 13 closes: the exit reconciliation (#64)
+
+*Committed on `claude/p13-exit`, cut from `origin/phase-13` at `a4a25ab4`.* Docs only. The
+phase file's last boxes are ticked on evidence in the tree — #108, #111, #113, #114, #116,
+#117 and four exit criteria — and the status row reads `done`, pending `phase-13` → `main`
+and the `0.6.0` tag. The specification is reconciled line-neutrally (§1.6's `SyncPeer` row,
+§1.3, §1.5, §1.7, §5's preamble, SY-6's narrative). README, both sync crates' READMEs and
+crate roots, the site's reference table and roadmap card say what phase 13 built and that
+it is unreleased; one `[Unreleased]` entry repoints SY-7's hook to #450. `CLAUDE.md`'s
+stale lines are proposed, not edited, in `/mnt/project-files/notes/0.6.0-claude-md-proposal.md`.
+Detail, and what is left for the owner, in [phase 13's session log](phases/13-sync.md).
+
+**Verified.** `cargo xtask spec-trace`, `lints`, `lint-kb`, `lint-constitution`,
+`narrative`, `lint-pages`, and `cargo doc` of both sync crates with `-D warnings`. Not run:
+the gate's test steps (no code changed) and `cargo xtask site` (no zola here).
+
+---
+
 ## 2026-11-08 — `0.5.1`, documentation and tooling
 
 *Committed on `claude/project-thread-m9xoqd`, cut from `origin/main` at `301d8213`.*
