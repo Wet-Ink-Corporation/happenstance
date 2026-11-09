@@ -197,8 +197,8 @@ the difference is deliberate rather than an inconsistency:
   until `0.5.0` removed it (#132), for a reason of its own — ADR-0074's shape,
   now built: `Projection::apply` is `async` and handed a `Delivered` event, with
   its error type and failure-policy seam — and that was never this port's.
-- `happenstance-sync` publishes unfinished (#108 part E) and with no semver
-  exemption, so a `[FROZEN]` `SY` clause is semver-binding as an `ES` one is.
+- `happenstance-sync` has published since #108 part E, was built against real peers at
+  phase 13, and has no semver exemption, so a `[FROZEN]` `SY` clause is semver-binding as an `ES` one is.
 
 The gate is always a clause, never a convention: PS-2 for `ProjectionStore`, CF-25
 for every port. A port whose gating clause is unsatisfied is not frozen no matter
@@ -365,7 +365,7 @@ everything else; ADR-0006 gave it the bare name, not the root of the graph.
 One deliberate exception, and it is a port relationship rather than a dependency
 between adapters. `happenstance-sync` is itself a port crate: peer adapters depend
 on it the way store adapters depend on `happenstance-core`
-(`crates/happenstance-sync/Cargo.toml:28-33`), and its conformance suite will live
+(`crates/happenstance-sync/Cargo.toml:28-33`), and its conformance suite lives
 in `happenstance-sync-testkit`. It stays out of the contract crate so that
 publishing `happenstance-core` never waits on replication.
 
@@ -403,7 +403,7 @@ unrelated crate wanted replication.
 |---|---|---|---|---|
 | **`EventStore`** | `crates/happenstance-core/src/store.rs:151-331` | Four methods; 96 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; one — completeness — is empty at both ends, and transport was the second until phase 10b put `happenstance-neon` at its far end (ADR-0061), where it was the workspace's only adapter instrument to have *failed* a clause rather than passed one, until ADR-0087's fence made it pass. Two `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-35, ES-40) — ES-10 was a fifth until phase 4 froze it, and ES-11 and ES-12 left at phase 17 (ADR-0087), and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
 | **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and six impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug` (retired at phase 17 by ADR-0078 and outside the workspace, so five remain and four of them build), a live `sqlx` transaction in `happenstance-postgres`'s second store (`crates/happenstance-postgres/src/live_projection_store.rs`, ADR-0062), and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding could not be discharged while `begin` was total, synchronous and infallible**, every route to a `sqlx` transaction being `async` and fallible — so `PostgresProjectionStore` became an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:455-685`), and stayed one when ADR-0062 moved `begin`, because the buffered shape is the one a synchronous `Projection::apply` could drive; the live binding was discharged one module over instead. Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:570-637`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:707-870`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Five of the six ran against the suite, and four still do since ADR-0078 retired the Ladybug adapter at phase 17** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, `LadybugProjectionStore` since phase 11, and `LivePostgresProjectionStore` since ADR-0062, each through `happenstance_testkit::projection_store_conformance!` against a real backing store; the last is the only one whose batch is a live transaction, and the only one on which PS-12's read-through rule has ever run rather than skipped. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Frozen** (ADR-0063); the `unstable-projection` feature survived on the contract crate as an empty name, so that `0.2.0` manifests resolved, until `0.4.0` removed it | PS-2, met: `CheckpointOnlyStore` fails the suite, and `LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`) passes it from the live-transaction end that the three buffered stores do not occupy |
-| **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Two ports in two flavours each — `SyncPeer` (`peer.rs:82`) and `IngestStore` (`crates/happenstance-sync/src/ingest.rs:140`) — a `memory` reference peer, and two stand-in peers in the crate's own `tests/`. A phase-2 sketch built to be falsified by a type checker, not the protocol (`lib.rs:3-16`) | **Shape specified, experiments deferred** — 5 of 35 clauses `[DEFERRED]`, 9 `[PROVISIONAL]` | The phase that builds the port against two real peers; §5's deferred clauses name it individually |
+| **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Three ports in two flavours each — `SyncPeer` (`peer.rs:82`), `IngestStore` (`crates/happenstance-sync/src/ingest.rs:140`) and, since #420, `WriteGroupStore` (`crates/happenstance-sync/src/write_group.rs`) — a runner over one edge (`runner::Edge`, #244), a network peer's two halves (`StoreSyncPeer` and `serve_sync`, and `RemoteSyncPeer` over a caller's `Exchange`, #117; `SendPeer` for the `Send` flavour, #421), and a `memory` reference peer. **`sync_peer_conformance!` is green against four unlike peers**: `MemorySyncPeer`; a `StoreSyncPeer` over `happenstance-postgres` (`live-postgres`); `NeonSyncPeer`, one SQL request per pull and per push over one-shot HTTP with no interactive transaction (#131, `live-neon`); and a Durable Object serving `serve_sync` over HTTP (#130, `workerd`, local and deployed). A native SQLite store round-trips through the last three with payload bytes identical (ADR-0106). The two stand-in peers in the crate's own `tests/` are still the phase-2 sketch, built to be falsified by a type checker (`lib.rs:3-16`) | **Frozen at phase 13** (ADR-0107), its CF-25 ledger rows each discharged (§6.5) — 35 of 39 clauses `[FROZEN]`, 3 `[PROVISIONAL]` (SY-7, SY-10, SY-29) and 1 `[DEFERRED]` (SY-32) | Already frozen. SY-7 and SY-10 freeze at phase 14 once the runner's adjudication hook (#450) can fail them; SY-29 is renewed past 1.0 against the first scoped-replication proposal; SY-32 waits on phase 14's retention instrument |
 
 The asymmetry is the point, and it has narrowed to one port. `EventStore` is
 frozen because it has evidence: ninety-six rules — each one shown to reject a
@@ -420,7 +420,7 @@ the port was most likely to be wrong about. `SyncPeer` is specified before it is
 the alternative is worse — `RUNBOOK.md:438-439` records that deferring the
 sync port *"leaks `EventId` and a tail seam back into `EventStore`"*, and a leak
 into a frozen port is not a deferral, it is a decision taken by omission in the
-crate that can least afford it.
+crate that can least afford it. It was, and phase 13 then built it: a runner, network peers at both ends of the transport and position-allocation axes, and the sync suites green against them, so the asymmetry above has closed and ADR-0107 froze all but four of its clauses.
 
 ### 1.7 What is settled, and what will move
 
@@ -489,8 +489,8 @@ answer.
   a report, which could only arrive as a provided method, and phase 14's instrument
   answers that.
 - **The scope of replication** (SY-27). Whole-log at 1.0 by ADR-0027, a slice is
-  its own store, and scoped replication can only arrive later as an opt-in.
-- **A store-assigned time on `SequencedEvent`** (VT-9), provisional.
+  its own store, and scoped replication can only arrive later as an opt-in. SY-27 itself is `[FROZEN]` since ADR-0107; what may move is only that later opt-in (SY-29).
+- **A store-assigned time on `SequencedEvent`** (VT-9). Frozen at phase 13 by ADR-0107, and kept on this list only so the citation resolves: it no longer moves.
 - **The tail or subscription seam.** Absent at 0.1 and stated as absent (ES-32),
   not omitted.
 
@@ -6900,7 +6900,7 @@ a per-question ledger (`crates/happenstance-sync/src/lib.rs:108-134`) recording
 which of the six questions the sketch answered and which it left alone. None of
 it is the protocol; it was built to be falsified by a type checker. This
 section is still what settles the shape, and what changed is that several of
-its clauses now have something in the tree to disagree with.
+its clauses now have something in the tree to disagree with. Since phase 13 that something is the port built rather than sketched — the runner, the write-group port, network peers and the sync suites, inventoried in §1.6 — and the paragraphs below are the record of how it got there.
 
 It was written before that code existed, and the clauses that depend on
 measurement rather than on argument are consequently `[DEFERRED]` against the
@@ -7030,7 +7030,7 @@ rejection more necessary rather than less, because prose is not a type
 constraint: `EventGroup::guard` is a **public** `Option<AppendCondition>` field
 on the wire type (`peer.rs:236-243`), so a receiver is handed exactly the value
 it would need to re-evaluate. What it may be used for is SY-6's answer, and
-until phase 13 that answer is prose too. It is the natural first cut, because the
+past phase 13 that answer is still prose, its rule unwritten (†). It is the natural first cut, because the
 condition arrives on the wire already (`append.rs:286-291`) and the receiving
 store's `append` will happily take it. It passes every event-store conformance
 rule, because it is one correct `append` call. It produces a peer set that
@@ -7175,7 +7175,7 @@ permits: the origin's condition is a **public** field on `EventGroup`
 (`crates/happenstance-sync/src/peer.rs:236-243`). The crate's own prose now
 rules it out — "evidence, not an instruction" (`peer.rs:230-235`) — and rules
 it out on the first of the two defects below, but a doc comment does not stop
-an implementer, and until phase 13 builds the refusal this clause's rule names,
+an implementer, and until the refusal this clause's rule names is built, which phase 13 did not do,
 nothing else does. Two independent defects, either fatal:
 
 - `after` is a `SequencePosition`, meaningful only inside the store that
@@ -8594,7 +8594,7 @@ Recorded so that silence is never mistaken for agreement.
   [ADR-0026](../.kb/decisions/0026-what-a-sync-peer-is.md)'s envelope section
   records WF-1's renewal past 1.0 and the implementation its experiment names.
 - **A store-assigned time on `SequencedEvent`.** E2E-43. Not undecided — section 2
-  takes it as VT-9, provisionally, and this section neither adds to it nor relies
+  takes it as VT-9, frozen since phase 13 (ADR-0107), and this section neither adds to it nor relies
   on it. SY-23 gives a deterministic tiebreak and explicitly refuses to be read
   as giving a fact about the world; VT-9 gives the fact about the world and
   forbids ordering by it.
