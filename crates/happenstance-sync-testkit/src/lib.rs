@@ -121,6 +121,7 @@
 //! | [`ingest_holds_the_call_to_its_tags_per_batch_ceiling`](ingest_rules::ingest_holds_the_call_to_its_tags_per_batch_ceiling) | VT-36, SY-18 | a tags-per-batch ceiling held to each group apart, a compensation left out of the total, a ceiling off by one, and a total refused as per-event, `Park` rather than `Split` |
 //! | [`only_the_adjudicator_compensates`](ingest_rules::only_the_adjudicator_compensates) | SY-7 | a compensation minted under an incarnation the store never read, so its log names an author nobody assigned |
 //! | [`directional_merge_rules_compose`](ingest_rules::directional_merge_rules_compose) | SY-10 | a store with the merge rule built in, which answers a group whose travelling guard its log breaks with a reversal of its own, and so judges, as a spoke, what the hub sends |
+//! | [`bulk_ingest_is_idempotent_in_bounded_round_trips`](ingest_rules::bulk_ingest_is_idempotent_in_bounded_round_trips) | SY-14, VT-24 | a store that consults what it holds for the first 64 events of a call only and writes a held event past them again, and one that refuses a call of VT-24's 128 events as over its batch limit |
 //!
 //! Each wrong store lives in `tests/wrong_ingest_stores.rs`, where a test runs
 //! the whole family against it and asserts it fails exactly its rule.
@@ -220,6 +221,71 @@
 //! [`StockOnHandFixture`] and [`CostLayersFixture`] are the reference cases:
 //! one domain, a sum that converges and a FIFO queue that cannot.
 //!
+//! # The restore family
+//!
+//! VT-6's restore half: a peer whose store is restored from a backup must not
+//! hand back an identity it already issued to a different event. Mounted on a
+//! [`RestoreFixture`], which supplies what no peer port has, a writer of the
+//! store's own events, a backup and a restore, and runs the adapter's
+//! documented post-restore procedure (VT-6's re-mint) as part of the restore:
+//!
+//! ```
+//! # macro_rules! ignore { ($($t:tt)*) => {} }
+//! # ignore! {
+//! happenstance_sync_testkit::restore_conformance!(
+//!     happenstance_sync_testkit::MemoryRestoreFixture::new()
+//! );
+//! # }
+//! ```
+//!
+//! | Rule | Clause | What it rejects |
+//! |---|---|---|
+//! | [`restored_peer_does_not_reissue_identities`](restore_rules::restored_peer_does_not_reissue_identities) | VT-6 | a store whose identity survives a restore, so a new event takes an identity a lost one was issued; a restore that restores nothing; and a store that stamps its current incarnation on what it reads back, so a re-mint rewrites restored history |
+//!
+//! A family of its own rather than a capability on [`SyncFixture`]: a peer
+//! that issues no identity of its own, as `MemorySyncPeer` does not, has
+//! nothing a restore could reissue, and every rule of the peer family is held
+//! against peers built on it. [`MemoryRestoreFixture`], a store peer over the
+//! in-memory oracle that restores into a fresh incarnation, is the reference;
+//! the wrong peers live in `tests/wrong_restores.rs`, and
+//! `happenstance-postgres` mounts the family with its re-mint and runs the
+//! same sequence without it as its negative control.
+//!
+//! # The watermark family
+//!
+//! A projection store's bar, not a peer's: the store a runner keeps its
+//! per-peer confirmation watermark in, beside the read model whose rows
+//! depend on it (SY-31). The rule takes the
+//! [`ProjectionFixture`](happenstance_testkit::ProjectionFixture) a projection
+//! adapter already mounts the projection suite with, and is called directly,
+//! as the convergence family's are:
+//!
+//! ```
+//! # macro_rules! ignore { ($($t:tt)*) => {} }
+//! # ignore! {
+//! #[tokio::test]
+//! async fn watermark_advances_transactionally_with_a_read_model()
+//! -> Result<(), happenstance_sync_testkit::Violation> {
+//!     happenstance_sync_testkit::watermark_rules::watermark_advances_transactionally_with_a_read_model(
+//!         async || happenstance_testkit::fixtures::MemoryProjectionFixture::new(),
+//!     )
+//!     .await?
+//!     .report("watermark_advances_transactionally_with_a_read_model");
+//!     Ok(())
+//! }
+//! # }
+//! ```
+//!
+//! | Rule | Clause | What it rejects |
+//! |---|---|---|
+//! | [`watermark_advances_transactionally_with_a_read_model`](watermark_rules::watermark_advances_transactionally_with_a_read_model) | SY-31 | a store that refuses the reserved `sync/` prefix, keeps a watermark in its handle, keys every peer's watermark alike, or upserts one around the port's regression check |
+//!
+//! The rule plays the runner, with the shipped
+//! [`Edge`](happenstance_sync::runner::Edge) and its
+//! [`Watermark`](happenstance_sync::runner::Watermark), so what it holds the
+//! store to is what that runner asks of it. The wrong stores live in
+//! `tests/wrong_watermark_stores.rs`.
+//!
 //! # Harnesses
 //!
 //! The emitter is a parameter, as in the event-store family, so the suite never
@@ -234,7 +300,9 @@
 //! write-group family has
 //! [`emit_write_group_tokio!`](crate::emit_write_group_tokio) (the default),
 //! [`emit_write_group_blocking!`](crate::emit_write_group_blocking) and
-//! [`emit_write_group_wasm!`](crate::emit_write_group_wasm).
+//! [`emit_write_group_wasm!`](crate::emit_write_group_wasm). The restore
+//! family has [`emit_restore_tokio!`](crate::emit_restore_tokio) (the default)
+//! and [`emit_restore_blocking!`](crate::emit_restore_blocking).
 //!
 //! # Failure is a value
 //!
@@ -310,6 +378,18 @@ pub use convergence_fixture::{
     StockOnHandFixture, StoreOf,
 };
 pub use convergence_suite::convergence_rules;
+
+// The restore family (#133), declared after the others so their lines do not
+// move. `restore_suite.rs` for `sync_suite.rs`'s reason.
+mod restore_fixture;
+mod restore_suite;
+pub use restore_fixture::{MemoryRestoreFixture, RestoreFixture};
+pub use restore_suite::restore_rules;
+
+// The watermark family (#143), declared after the others so their lines do
+// not move. `watermark_suite.rs` for `sync_suite.rs`'s reason.
+mod watermark_suite;
+pub use watermark_suite::watermark_rules;
 
 /// Generates the ingest conformance suite for a store adapter.
 ///
@@ -510,6 +590,65 @@ macro_rules! sync_peer_conformance {
     };
 }
 
+/// Generates the restore conformance suite for a peer adapter.
+///
+/// Takes an expression that produces a [`RestoreFixture`]. The rule list comes
+/// from [`for_each_restore_rule!`](crate::for_each_restore_rule).
+///
+/// # Examples
+///
+/// The default harness, `#[tokio::test]`:
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// happenstance_sync_testkit::restore_conformance!(
+///     happenstance_sync_testkit::MemoryRestoreFixture::new()
+/// );
+/// # }
+/// ```
+///
+/// A different harness, and a module name of your own:
+///
+/// ```
+/// # macro_rules! ignore { ($($t:tt)*) => {} }
+/// # ignore! {
+/// happenstance_sync_testkit::restore_conformance!(
+///     mod_name = blocking_restore_conformance,
+///     emit = happenstance_sync_testkit::emit_restore_blocking,
+///     fixture = super::MyFixture::new()
+/// );
+/// # }
+/// ```
+#[macro_export]
+macro_rules! restore_conformance {
+    (mod_name = $mod_name:ident, emit = $emit:path, fixture = $fixture:expr) => {
+        mod $mod_name {
+            // Hoisted as in the other families. Re-evaluated per rule, so
+            // every rule gets its own fixture.
+            async fn __restore_fixture() -> impl $crate::__private::RestoreFixture {
+                $fixture
+            }
+
+            $crate::for_each_restore_rule!($emit);
+        }
+    };
+    (mod_name = $mod_name:ident, fixture = $fixture:expr) => {
+        $crate::restore_conformance!(
+            mod_name = $mod_name,
+            emit = $crate::emit_restore_tokio,
+            fixture = $fixture
+        );
+    };
+    ($fixture:expr) => {
+        $crate::restore_conformance!(
+            mod_name = restore_conformance,
+            emit = $crate::emit_restore_tokio,
+            fixture = $fixture
+        );
+    };
+}
+
 /// What the macro expansions name, so a caller need not have this crate's
 /// dependencies in scope under any particular name. Not promised.
 #[doc(hidden)]
@@ -517,6 +656,8 @@ pub mod __private {
     pub use crate::fixture::SyncFixture;
     pub use crate::ingest_fixture::IngestFixture;
     pub use crate::ingest_suite::ingest_rules;
+    pub use crate::restore_fixture::RestoreFixture;
+    pub use crate::restore_suite::restore_rules;
     #[cfg(all(feature = "proptest", not(target_arch = "wasm32")))]
     pub use crate::sync_model::rules as model_rules;
     pub use crate::sync_suite::rules;

@@ -35,6 +35,81 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- `happenstance-sync-testkit`: the ingest rule
+  `bulk_ingest_is_idempotent_in_bounded_round_trips` (SY-14, VT-24, #139).
+  One call of VT-24's floor, 128 foreign events in seven groups, after a
+  first call delivered every third of them and the last: it must land
+  counted 84 appended and 44 skipped, with each event held once and every
+  earlier row kept, and the same call again is 128 skips that change
+  nothing. A capacity refusal of that call is reported under VT-24, whose
+  body now says so: on the ingest path the batch is the call, as VT-36 already
+  says of tags, and a push of 128 events is what `PeerLimits::minimum`
+  declares a peer takes.
+  Two new wrong stores fail it and nothing else: one that looks up the
+  first 64 identities of a call only, and one that caps a call at 64. Every
+  mounted ingest family runs it, so an adapter whose ingest refuses a
+  128-event call now fails (behaviour; CF-32). The SY-14 marker stays
+  `[DEFERRED]` until the live Neon measurement below is recorded.
+- `happenstance-neon`: SY-14's bound counted on the peer it was deferred for
+  (#139). `rotors_ingest_is_one_request_per_push_however_much_is_held` pushes
+  Kestrel Rotor's 1,840 events, 46 write groups of 40, through
+  `NeonSyncPeer` over the scripted transport: 16 pushes at the minimum
+  peer's 128 events, 16 requests, each the same five statements, and the
+  replay 16 again. `rotors_bulk_ingest_through_the_live_neon_peer_is_bounded`
+  is its `#[ignore]`d live twin, which `live-neon`'s library trio runs. It
+  seeds every third event first, asserts the counts and that each push
+  averages under one event's share of the 34-minute window, and prints `SY14-MEASURE` lines. Tests only; no API change.
+- `happenstance-sync`: `runner::Watermark` and `runner::LoadWatermarkError`,
+  and `Edge::watermark` and `Edge::restored` (#143, SY-31). The runner half of
+  SY-31: an edge's confirmation watermark, its far side's identity and
+  `SyncStatus::confirmed`, is kept through `ProjectionStore` under
+  `ProjectionId::sync_watermark`, never as an event. `Watermark::commit` takes
+  the caller's batch, so whatever read model the caller wrote into it through
+  its adapter's own API lands in the same commit, or neither does; PS-9 gives
+  the port no write vocabulary, so the runner writes no rows of its own.
+  `Watermark::load` reads it back, answering `None` for a peer never synced
+  and `LoadWatermarkError::NotLive` for a rebuilding checkpoint under the id,
+  which `commit` never writes, and `Edge::restored` resumes an edge from it.
+  `Edge::watermark` is `None` until the far side has named its store and
+  acknowledged a push. The pull token is not kept: an edge restored without it
+  pulls from the start, and ingest skips what it holds. Additive.
+- `happenstance-sync-testkit`: the watermark family (#143), one rule,
+  `watermark_rules::watermark_advances_transactionally_with_a_read_model`
+  (SY-31), over a `happenstance_testkit::ProjectionFixture`, called directly
+  as the convergence family's are. It plays the shipped runner: a real `Edge`
+  to an in-memory far side, its `Watermark` committed with a probe row, read
+  back through a fresh handle, an edge restored from it pushing nothing, a
+  second peer's watermark kept apart, and a stale one refused as
+  `CommitError::CheckpointRegression` with its row left out. It detects a
+  projection store that refuses the reserved `sync/` prefix, one that keeps a
+  watermark in its handle rather than its store, one that keys every peer's
+  watermark alike, and one that upserts it beside the batch around the port's
+  regression check: each is in `tests/wrong_watermark_stores.rs` with the
+  message it fails on, beside a faithful wrapper that passes. Mounted against
+  `MemoryProjectionFixture`, `happenstance-sqlite`'s projection fixture, both
+  of `happenstance-postgres`'s (`live-postgres`) and `happenstance-neon`'s
+  (`live-neon`), in test targets those jobs already run.
+- `happenstance-testkit`: `append_reports_exceeded_store_limits` gains CF-40's
+  budget-unit branch (#143). Where a fixture states both `MAX_EVENT_DATA_LEN`
+  and `MAX_METADATA_LEN`, one event at both ceilings at once must be accepted,
+  because each byte ceiling bounds its own field: `data` plus metadata,
+  `ReplicatedEvent::payload_len`, is the replication port's unit, never a
+  store's, and SY-18 holds a peer's one budget to both field ceilings. It
+  detects `SharedPayloadBudgetStore`, which states both and holds their sum to
+  the payload's ceiling, so each field at its ceiling alone fits and no other
+  branch saw it. Every store in the workspace that states both,
+  `happenstance-cloudflare` (ADR-0093's carving fits one row at all four) and
+  `GappedPositionFixture`, already accepts it.
+- `harness/sync-round-trip` and `harness/workerd`: the runner's push through
+  the two unlike real peers keeps the local log's write groups (#143, SY-30).
+  The shipped `Edge` pushes a SQLite log of appends of 2, 3 and 1 events and a
+  guarded ingested group of 2 through a peer declaring 4 events a batch, so it
+  takes several pushes, and the far side's pull hands back the four writes
+  whole, the ingested one with its guard. Run against `NeonSyncPeer`
+  (`live-neon`), the Postgres `StoreSyncPeer` (`live-postgres`) and the
+  Durable Object over HTTP (`workerd`, local and deployed), each picked up by
+  the job's existing strict list/run/assert; a gate test shows the pre-#420
+  push, cut at the batch limit, failing the same check on the same log.
 - `happenstance-neon`: `NeonSyncPeer` and `NeonPeerError`, behind `sync`
   (#131). A `SyncPeer` whose far side is a Neon store reached over its HTTP
   endpoint, in **one SQL request per pull and one per push**: a pull is the
@@ -68,6 +143,31 @@ not the same as what a user needed to be told.
   adapter depends on another; `harness/workerd` is the precedent (#130).
   `live-neon` runs its `neon::` cases and `live-postgres` its `postgres::`
   cases, each as a strict list/run/assert trio.
+- `happenstance-sync-testkit`: the restore family (#133), VT-6's restore
+  half. `restore_rules::restored_peer_does_not_reissue_identities` writes an
+  event, takes a backup, writes a second, restores the backup and runs the
+  adapter's documented post-restore procedure, writes a third, and fails a
+  peer that hands back one `EventId` for two different events: the defect
+  VT-6's `Rejects:` line names, a store whose identity survives a restore and
+  so gives a new event the identity a lost one was issued, which every peer
+  that pulled the lost one then dedupes away. It also fails a restore that
+  restores nothing and a store that stamps its current incarnation on what it
+  reads back, so a re-mint rewrites restored history; no position is compared.
+  Mounted with `restore_conformance!` over a new `RestoreFixture` trait
+  (`connect`, `append_local`, `back_up`, `restore`), with
+  `emit_restore_tokio!`, `emit_restore_blocking!` and
+  `for_each_restore_rule!`. A family of its own rather than a capability on
+  `SyncFixture`, because `MemorySyncPeer` issues no identity to reissue and
+  every peer-family mutant is built on it. `MemoryRestoreFixture` is the
+  reference: a `StoreSyncPeer` over `MemoryIngestStore`, restored by ingesting
+  the backed-up groups into a fresh incarnation. `tests/wrong_restores.rs`
+  pins each wrong peer to its exact failing set.
+- `happenstance-postgres`: the restore family is mounted on the Postgres
+  sync peer (#133), in the library target `live-postgres` already runs. A
+  restore is simulated in place (rows deleted, `event_position_seq` set back,
+  the identity row put back) and followed by `remint_identity`, the procedure
+  ADR-0086 documents; the same sequence with the re-mint skipped is the
+  negative control, and reissues the identity the lost event was given.
 - `happenstance-sync-testkit`: the convergence family (#141), and with it a
   dependency on `happenstance`, the typed layer, with its `postcard` codec.
   `convergence_rules::convergent_projection_is_interleaving_independent`

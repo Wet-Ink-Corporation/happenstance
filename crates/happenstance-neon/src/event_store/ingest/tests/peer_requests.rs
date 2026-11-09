@@ -19,7 +19,7 @@ use crate::error::NeonError;
 use crate::event_store::{BASE64, NeonPeerError, NeonSyncPeer};
 
 /// One result set as the endpoint renders it in the batch form.
-fn set(rows: &[serde_json::Value]) -> serde_json::Value {
+pub(super) fn set(rows: &[serde_json::Value]) -> serde_json::Value {
     serde_json::json!({
         "command": "SELECT", "rowCount": rows.len(), "fields": [], "rows": rows,
         "rowAsArray": false,
@@ -27,7 +27,7 @@ fn set(rows: &[serde_json::Value]) -> serde_json::Value {
 }
 
 /// The identity read's result set, naming `store`.
-fn identity(store: happenstance_core::StoreId) -> serde_json::Value {
+pub(super) fn identity(store: happenstance_core::StoreId) -> serde_json::Value {
     set(&[serde_json::json!({ "v": BASE64.encode(store.to_bytes()) })])
 }
 
@@ -50,7 +50,7 @@ fn row(position: u64, group: u64, scanned: u64) -> serde_json::Value {
 
 impl Scripted {
     /// Queues one 200 answer of `sets`, in the batch form.
-    fn answer_batch(&self, sets: &[serde_json::Value]) {
+    pub(super) fn answer_batch(&self, sets: &[serde_json::Value]) {
         let body = serde_json::json!({ "results": sets }).to_string();
         self.answers
             .borrow_mut()

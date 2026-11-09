@@ -7,6 +7,7 @@
 
 #![cfg(not(target_arch = "wasm32"))]
 
+mod groups;
 mod neon;
 mod postgres;
 

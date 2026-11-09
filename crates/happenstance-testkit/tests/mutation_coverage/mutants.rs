@@ -5397,3 +5397,6 @@ pub(crate) mod tags_per_batch_ceilings;
 
 // VT-36's floor (#368), declared here at the end for the same reasons.
 pub(crate) mod tags_per_batch_floor;
+
+// CF-40's budget unit (#143), declared here at the end for the same reasons.
+pub(crate) mod payload_budget;

@@ -19,8 +19,9 @@ with programs you can run.
 >   `Edge::run`, a loop the caller drives on its own runtime with a seeded,
 >   jittered, capped backoff. It acts on each failure class, bounds what it
 >   holds in memory, and stops when the far side answers as a new store
->   incarnation, never touching the local log. Still to come: a peer set above
->   the single edge, and the watermark's storage (SY-31), and
+>   incarnation, never touching the local log. Its watermark is kept through
+>   the projection port in the caller's batch (`runner::Watermark`, SY-31,
+>   #143). Still to come: a peer set above the single edge, and
 > - **a network transport**: `StoreSyncPeer`, `serve_sync` and
 >   `RemoteSyncPeer` are a network peer's transport-free halves (#117), and
 >   no crate yet supplies an `Exchange` over a real network. Wrapped in

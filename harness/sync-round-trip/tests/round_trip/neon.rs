@@ -27,6 +27,7 @@ use happenstance_neon::{
     HttpResponse, NeonConfig, NeonEventStore, NeonSyncPeer, ReadLedger, ReadTicket, SqlRequest,
     SqlStatement, SqlTransport, migration,
 };
+use happenstance_sync::PeerLimits;
 use http_body_util::{BodyExt, Full};
 use hyper::Uri;
 use hyper::header::{CONTENT_TYPE, HeaderName, HeaderValue};
@@ -255,6 +256,11 @@ struct Schema {
 
 impl Schema {
     async fn fresh() -> Self {
+        Self::fresh_with(PeerLimits::minimum()).await
+    }
+
+    /// [`fresh`](Self::fresh), with a peer that declares `limits`.
+    async fn fresh_with(limits: PeerLimits) -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(1);
         // Relaxed: the counter publishes no other memory; all it must give is
         // a distinct value per call.
@@ -273,7 +279,7 @@ impl Schema {
         )
         .await;
         Self {
-            peer: NeonSyncPeer::new(NeonEventStore::new(transport, config)),
+            peer: NeonSyncPeer::with_limits(NeonEventStore::new(transport, config), limits),
         }
     }
 
@@ -315,6 +321,19 @@ async fn a_sqlite_batch_replayed_to_the_neon_peer_changes_nothing() {
     let schema = Schema::fresh().await;
 
     super::replay_changes_nothing(&schema.peer, schema.store()).await;
+
+    schema.drop_schema().await;
+}
+
+/// The runner pushes a SQLite log to Neon in its write groups, over several
+/// pushes, each one SQL request, and each group arrives whole with its guard
+/// (SY-30, #143).
+#[tokio::test]
+#[ignore = "needs a live Neon endpoint; set NEON_CONNECTION and run with `-- --ignored`"]
+async fn the_runner_keeps_write_groups_through_the_neon_peer() {
+    let schema = Schema::fresh_with(super::groups::small_batches()).await;
+
+    super::groups::runner_keeps_write_groups(&schema.peer).await;
 
     schema.drop_schema().await;
 }

@@ -1708,12 +1708,12 @@ refuses expensive conditions" is indistinguishable from "the hub is broken".
 There MUST NOT be a `MAX_EVENTS_PER_BATCH` constant and no `EventBatch` type MUST
 be introduced to carry one. Every store MUST accept an append of at least
 `MIN_SUPPORTED_EVENTS_PER_BATCH` = 128 events, MUST document its actual limit,
-and MUST refuse beyond it with `AppendError::ExceedsStoreLimit`.
+and MUST refuse beyond it with `AppendError::ExceedsStoreLimit`. On the ingest path the batch is the call: a store that implements `IngestStore` MUST accept one `ingest` of at least `MIN_SUPPORTED_EVENTS_PER_BATCH` events, foreign events and compensation together, and a capacity refusal is `IngestError::ExceedsStoreLimit`.
 
 `[PROVISIONAL — falsified by a domain whose smallest indivisible unit of work
 exceeds 128 events; Kestrel Cold Chain's largest single conditioned group is
 under forty]`
-`Rule:` `store_accepts_the_guaranteed_minimum_batch_size`
+`Rule:` `store_accepts_the_guaranteed_minimum_batch_size`; and on the ingest path, where the call is the batch as VT-36 says of tags, `bulk_ingest_is_idempotent_in_bounded_round_trips` (`happenstance-sync-testkit`, #139), whose one call of 128 foreign events a store refusing it as over a capacity limit fails under this clause (`CapsTheCallBelowTheFloor`)
 `Cases:` E2E-35, E2E-36, E2E-39
 `Rejects:` an adapter that builds a multi-row `INSERT` with one parameter set per
 event and per tag and discovers `SQLITE_MAX_VARIABLE_NUMBER` at write time — that
@@ -4998,7 +4998,7 @@ has not yet passed. That agrees with ES-25, which evaluates a condition over wha
 the store holds, and with VT-8's uniqueness on the origin pair. Neither reading can
 produce a duplicate through ingest, which does not probe first
 (`crates/happenstance-sync/src/ingest.rs:97-101`), so agreement is the reason, and
-`contains_event_id_reports_a_held_row_above_the_frontier` stages the row. That rule is gated on `Fixture::HELD_ABOVE_FRONTIER` and armed by `Fixture::arm_held_above_frontier`, whose answer it asserts is `Armed::Staged` before it appends (`crates/happenstance-testkit/src/suite.rs:7116-7119`, `crates/happenstance-testkit/src/contract.rs:641-675`). The Postgres and Neon fixtures support it; `MemoryFixture` declines it, because its store shows a row to every read from the moment its append returns (`crates/happenstance-testkit/src/fixtures.rs:323`).
+`contains_event_id_reports_a_held_row_above_the_frontier` stages the row. That rule is gated on `Fixture::HELD_ABOVE_FRONTIER` and armed by `Fixture::arm_held_above_frontier`, whose answer it asserts is `Armed::Staged` before it appends (`crates/happenstance-testkit/src/suite.rs:7155-7158`, `crates/happenstance-testkit/src/contract.rs:641-675`). The Postgres and Neon fixtures support it; `MemoryFixture` declines it, because its store shows a row to every read from the moment its append returns (`crates/happenstance-testkit/src/fixtures.rs:323`).
 
 The `async fn` spelling is load-bearing and matches ES-30's: a clause written
 without it describes a different method under `trait_variant`.
@@ -7447,8 +7447,8 @@ the Kestrel Rotor bulk-ingest measurement: 1,840 events over one-shot HTTP insid
 a 34-minute window, against a store-level `EventId` uniqueness guarantee versus a
 per-event conditional append. Owning phase: the phase that builds the two peer
 adapters.]`
-Rule: `bulk_ingest_is_idempotent_in_bounded_round_trips` (new,
-`happenstance-sync-testkit`).
+Rule: `bulk_ingest_is_idempotent_in_bounded_round_trips` (`happenstance-sync-testkit`, #139, ingest family), which ingests VT-24's floor of 128 foreign events in seven groups as **one** call after a first call delivered every third of them and the last: the call must land counted 84 appended and 44 skipped, each event held once and every earlier row kept, and the same call again is 128 skips that change nothing. It fails a store that consults what it holds for the first 64 events of a call only (`LooksUpOneChunkOfIdentities`) and, under VT-24, one that refuses a call of more than 64 (`CapsTheCallBelowTheFloor`), both in `crates/happenstance-sync-testkit/tests/wrong_ingest_stores.rs`.
+The round trip a port can see is the `ingest` call; the requests an adapter spends inside it are its own to pin (CF-33): `happenstance-neon`'s `rotors_ingest_is_one_request_per_push_however_much_is_held` counts Rotor's 1,840 events at the minimum peer's 128 a push as 16 pushes of one request each, replay included, and `rotors_bulk_ingest_through_the_live_neon_peer_is_bounded` measures the same against the live endpoint.
 Cases: E2E-36, E2E-35.
 
 *Rejects:* all three shapes available against the port as it stands, which is why
@@ -8186,6 +8186,19 @@ event count. Both type-check against the envelope, and both tear a group a
 store wrote atomically into pieces that land apart on the far side, so a crash
 between two pushes leaves a losing event there without its compensation (#420).
 
+Both halves run against the two unlike real peers. The peer's: the boundary
+rule is mounted on the Durable Object over HTTP and on `NeonSyncPeer` over
+one-shot HTTP, in CI's `workerd` and `live-neon` jobs. The runner's (#143): the
+shipped `Edge` pushes a SQLite log of three appends and one guarded ingested
+group through a peer declaring four events a batch, so the log takes several
+pushes, and the far side's pull hands back the four writes whole with the
+guard. It runs against the Durable Object in
+`harness/workerd/tests/sqlite_round_trip/main.rs` (the `workerd` job, local and
+deployed), against `NeonSyncPeer` and the Postgres `StoreSyncPeer` in
+`harness/sync-round-trip/tests/round_trip/groups.rs` (`live-neon`,
+`live-postgres`), and the same file shows the pre-#420 push, cut at the batch
+limit, failing the check on the same log.
+
 ---
 
 **SY-39. A store a peer reads from MUST read its log back in the writes that
@@ -8245,7 +8258,7 @@ written through `ProjectionStore` under a reserved `ProjectionId`.**
 transaction with a read model whose adapter is a different `ProjectionStore` than
 the sync runner's. Falsification test: name one and show the two stores cannot be
 the same handle.]`
-Rule: `watermark_advances_transactionally_with_a_read_model` (new, `happenstance-sync-testkit`); and
+Rule: `watermark_advances_transactionally_with_a_read_model` (`happenstance-sync-testkit`, #143): the shipped runner's watermark, committed in a batch with a read-model row under the reserved id, is read back with the row through a fresh handle, stays apart per peer and refuses to move backwards; and
 `ack_never_confirms_a_non_durable_event` (`happenstance-sync-testkit`, #242), which holds the value this watermark advances to: an `Ack` confirms only what the far side still holds once the acking handle is gone.
 Cases: E2E-33, E2E-44.
 
@@ -8275,6 +8288,20 @@ watermark. It writes the watermark through the concrete adapter's inherent API,
 in the same batch, or it is not generic — which is a constraint on the runner
 rather than a blocker on this clause, and it is why the falsifier above is about
 handles rather than about bounds.
+
+The runner half is built (#143) in exactly that shape. `happenstance-sync`'s
+`runner::Watermark` is the edge's far-side identity and confirmed position;
+`Watermark::commit` takes the caller's batch, with whatever read model the
+caller wrote into it through the adapter's own API, and commits it under the
+reserved id; `Watermark::load` and `Edge::restored` read it back into an edge.
+The rule above plays that runner over a projection fixture, and
+`tests/wrong_watermark_stores.rs` holds it to four stores wrong only for a
+`sync/` id: one refusing the prefix, one keeping the watermark in its handle,
+one keying every peer's watermark alike, and one upserting it beside the batch
+without the port's regression check. It runs against the reference store,
+`happenstance-sqlite`, both `happenstance-postgres` stores and
+`happenstance-neon`'s, so the handle that keeps the watermark is the one that
+keeps the read model on every projection adapter in the workspace.
 
 ---
 
@@ -9379,6 +9406,17 @@ the total tags of one append, spread so that no event is over its own ceiling
 least `MAX_TAGS_PER_EVENT`, and reachable under `MAX_EVENTS_PER_BATCH`. `None` means the store has no ceiling for that limit, and a rule
 that needs one MUST report a skip rather than being omitted.
 
+Each byte ceiling bounds its own field and holds with the other at its own
+ceiling: where both are stated, one event whose `data` is `MAX_EVENT_DATA_LEN`
+bytes and whose metadata is `MAX_METADATA_LEN` bytes MUST be accepted. So a
+store's budget unit is the field, never `data` plus metadata. That sum,
+`ReplicatedEvent::payload_len`, is the replication port's unit, checked against
+`PeerLimits::max_event_bytes`, and SY-18 holds a peer's one number to both of its
+store's field ceilings by carrying its boundary once in `data` and once in
+metadata. A store whose physical limit is shared states each field's share of it,
+as `happenstance-cloudflare` carves one row into ceilings that fit together
+(ADR-0093). Decided at phase 13 (#143), the question ADR-0043 left open.
+
 They MUST NOT be spelled as `Capability`. A declined capability is a **trade** —
 the fixture could have co-operated and its stated reason is the record of what
 was given up — and `None` here is a store reporting a **fact about itself**,
@@ -9411,7 +9449,7 @@ hard-coded one would be a `MAX_EVENT_DATA_LEN` constant by another route, which
 VT-21 forbids in terms.
 Cases: E2E-35, E2E-42.
 Rejects: a fixture that states a ceiling its store does not have, or does not
-enforce distinguishably. Sixteen are compiled and registered: `PayloadCeilingStore`,
+enforce distinguishably. Seventeen are compiled and registered: `PayloadCeilingStore`,
 `BatchParameterCeilingStore`, `MetadataCeilingStore` and
 `TagsPerBatchThroughStoreStore` refuse through `Store`;
 `MisnamedMetadataCeilingStore` names `EventDataLen` and
@@ -9422,7 +9460,9 @@ the over batch; `OffByOneMetadataCeilingStore` and `OffByOneTagsPerBatchStore`
 refuse the ceiling itself; `RefuseAfterInsertMetadataStore` and
 `RefuseAfterInsertTagsPerBatchStore` refuse after writing; and
 `UnreachableTagsPerBatchStore` and `TagsPerBatchBelowTagsPerEventStore` enforce an
-incoherent set of ceilings. It also rejects a suite
+incoherent set of ceilings; and `SharedPayloadBudgetStore` (#143) states both byte
+ceilings and holds `data` plus metadata to the payload's, so it refuses the event
+at both at once, which no other branch writes. It also rejects a suite
 where **no** fixture states a ceiling and VT-25 is a variant nothing exercises. `GappedPositionFixture` states the first three at
 VT-21 – VT-24's floors and a metadata ceiling, and is what makes the rule run. It
 states no `MAX_TAGS_PER_BATCH` because at those floors none is legal: 128 events
@@ -10435,7 +10475,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-21 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_payload`, `append_reports_exceeded_store… | E2E-42 |
 | VT-22 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tag_count` | E2E-40 |
 | VT-23 | PROVISIONAL | `store_evaluates_a_query_at_the_guaranteed_minimum_item_count` | E2E-36, E2E-40 |
-| VT-24 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_batch_size` | E2E-35, E2E-36, E2E-39 |
+| VT-24 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_batch_size`, `bulk_ingest_is_idempotent_… | E2E-35, E2E-36, E2E-39 |
 | VT-25 | FROZEN | `append_reports_exceeded_store_limits` | E2E-35, E2E-42 |
 | VT-26 | FROZEN | compile test `query_items_is_not_constructible_downstream`; `condition_without… | E2E-40 |
 | VT-27 | FROZEN | compile-level; enforced by the wire tests, which would otherwise have a positi… | E2E-04, E2E-05, E2E-37, E2E-38 |
@@ -10575,7 +10615,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-11 | FROZEN | `redelivery_of_an_accepted_group_is_a_no_op` | E2E-33, E2E-34, E2E-36 |
 | SY-12 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-34, E2E-36 |
 | SY-13 | FROZEN | `identity_survives_a_tag_reordering_peer` † | E2E-33, E2E-34 |
-| SY-14 | DEFERRED | `bulk_ingest_is_idempotent_in_bounded_round_trips` † | E2E-36, E2E-35 |
+| SY-14 | DEFERRED | `bulk_ingest_is_idempotent_in_bounded_round_trips`, `rotors_ingest_is_one_requ… | E2E-36, E2E-35 |
 | SY-15 | FROZEN | `peer_conformance!` is invoked against a fixture peer whose transport asserts … | E2E-35, E2E-36 |
 | SY-16 | FROZEN | `resume_survives_a_dropped_peer_handle` † | E2E-35, E2E-36, E2E-44 |
 | SY-17 | FROZEN | the existing CLAUDE.md rule 4, checked by `happenstance-sync-testkit` compilin… | E2E-52, E2E-30 |
@@ -10592,7 +10632,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-28 | PROVISIONAL | `round_trip_preserves_the_whole_log` | E2E-44, E2E-46 |
 | SY-29 | PROVISIONAL | `ingest_refuses_an_unbounded_peer_query` † | E2E-40 |
 | SY-30 | PROVISIONAL | `push_envelope_preserves_group_boundaries`, `ingest_group_is_atomic_under_a_mi… | E2E-35, E2E-39 |
-| SY-31 | PROVISIONAL | `watermark_advances_transactionally_with_a_read_model` †, `ack_never_confirms_… | E2E-33, E2E-44 |
+| SY-31 | PROVISIONAL | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
 | SY-32 | DEFERRED | `retention_gap_is_reported_not_silent` † | E2E-44, E2E-46, E2E-47 |
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
 | SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |

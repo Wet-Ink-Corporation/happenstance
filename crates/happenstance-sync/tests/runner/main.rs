@@ -14,6 +14,7 @@ mod drive;
 mod groups;
 mod incarnation;
 mod probe;
+mod watermark;
 
 use happenstance_core::{
     Event, EventId, EventStore, RecordedAt, SequencePosition, SequencedEvent, StoreId,
