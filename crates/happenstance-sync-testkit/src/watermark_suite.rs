@@ -37,8 +37,7 @@ pub mod watermark_rules {
     use core::num::NonZeroUsize;
 
     use happenstance_core::{
-        CommitError, Event, EventStore, ProjectionProbe, ProjectionStore, Query, ReadOptions,
-        SequencePosition, StoreId, collect,
+        CommitError, Event, EventStore, ProjectionProbe, ProjectionStore, SequencePosition, StoreId,
     };
     use happenstance_sync::runner::{Edge, Watermark};
     use happenstance_sync::{MemoryIngestStore, StoreResume, StoreSyncPeer, WriteGroupStore};
@@ -76,8 +75,7 @@ pub mod watermark_rules {
     /// hub, then commits the edge's watermark through the fixture's store in a
     /// batch carrying one probe row. Through a fresh handle it requires:
     ///
-    /// 1. the row and the watermark both, and the local log still holding only
-    ///    what was appended, so the watermark is not an event;
+    /// 1. the row and the watermark both, so they landed in one commit;
     /// 2. an edge restored from that watermark to push nothing more;
     /// 3. after a third group and a second edge, to a spoke, committed with a
     ///    row of its own, each peer's watermark its own;
@@ -124,7 +122,6 @@ pub mod watermark_rules {
         commit_with_row(&writer, &first, ROW_WITH_THE_HUB).await?;
         let observer = fixture.connect().await;
         kept_with_its_row(&observer, &first, ROW_WITH_THE_HUB).await?;
-        not_an_event(&local, 3).await?;
         restored_pushes_nothing(&first, &hub, &local).await?;
 
         append(&local, 1).await?;
@@ -134,7 +131,7 @@ pub mod watermark_rules {
         commit_with_row(&writer, &second, ROW_WITH_THE_SPOKE).await?;
         let observer = fixture.connect().await;
         kept_with_its_row(&observer, &second, ROW_WITH_THE_SPOKE).await?;
-        kept(&observer, &first).await?;
+        kept(&observer, &first, Requirement::EachPeersOwn).await?;
 
         stale_is_refused(&fixture, &local, &first).await?;
         Ok(RuleOutcome::Ran)
@@ -180,7 +177,7 @@ pub mod watermark_rules {
             },
         )?;
         let observer = fixture.connect().await;
-        kept(&observer, kept_one).await?;
+        kept(&observer, kept_one, Requirement::UnmovedByARegression).await?;
         let row = probe_read(&observer, ROW_WITH_THE_STALE).await?;
         ensure(row.is_none(), CLAUSE, || {
             format!(
@@ -285,44 +282,57 @@ pub mod watermark_rules {
                  handle; the watermark and the read model must land in one commit"
             )
         })?;
-        kept(observer, watermark).await
+        kept(observer, watermark, Requirement::KeptWithItsRow).await
     }
 
-    /// `watermark` is what `observer` loads for its peer.
+    /// Which numbered requirement a [`kept`] check serves, so a violation says
+    /// which one failed.
+    #[derive(Debug, Clone, Copy)]
+    enum Requirement {
+        /// 1: read back with the row it was committed with.
+        KeptWithItsRow,
+        /// 3: one peer's watermark untouched by another's.
+        EachPeersOwn,
+        /// 4: unchanged by a refused regression.
+        UnmovedByARegression,
+    }
+
+    impl core::fmt::Display for Requirement {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            f.write_str(match self {
+                Self::KeptWithItsRow => "requirement 1, a watermark kept with its row",
+                Self::EachPeersOwn => "requirement 3, each peer's watermark its own",
+                Self::UnmovedByARegression => {
+                    "requirement 4, a watermark unmoved by a refused regression"
+                }
+            })
+        }
+    }
+
+    /// `watermark` is what `observer` loads for its peer, as `requirement`
+    /// asks.
     async fn kept<S: ProjectionStore>(
         observer: &S,
         watermark: &Watermark,
+        requirement: Requirement,
     ) -> Result<(), Violation> {
         let loaded = Watermark::load(observer, watermark.peer())
             .await
             .map_err(|error| {
                 Violation::new(
                     CLAUSE,
-                    format!("a fresh handle could not read a kept watermark: {error:?}"),
+                    format!(
+                        "{requirement}: a fresh handle could not read a kept watermark: {error:?}"
+                    ),
                 )
             })?;
         ensure(loaded == Some(*watermark), CLAUSE, || {
             format!(
-                "a fresh handle loads {loaded:?} under `{}` where {watermark:?} was committed: a \
+                "{requirement}: a fresh handle loads {loaded:?} under `{}` where {watermark:?} was \
+                 committed: a \
                  watermark is a checkpoint of the store, kept per peer, not of the handle that \
                  wrote it nor one shared by every peer",
                 watermark.id()
-            )
-        })
-    }
-
-    /// The local log holds the `events` the rule appended and nothing else.
-    async fn not_an_event(local: &MemoryIngestStore, events: usize) -> Result<(), Violation> {
-        let log = collect(EventStore::read(local, &Query::all(), ReadOptions::new()))
-            .await
-            .map_err(|error| {
-                Violation::new(CLAUSE, format!("the reference local log failed: {error:?}"))
-            })?;
-        ensure(log.len() == events, CLAUSE, || {
-            format!(
-                "the local log holds {} events after keeping a watermark, where {events} were \
-                 appended: a watermark is never an event",
-                log.len()
             )
         })
     }

@@ -273,9 +273,10 @@ impl<R> Edge<R> {
     /// The edge's confirmation watermark, to keep through the projection port
     /// (SY-31): the far side's identity and [`SyncStatus::confirmed`].
     ///
-    /// `None` until both are known: before the far side has acknowledged a
-    /// push, and for good with a far side that never names its store
-    /// (ADR-0104), whose watermark has no id to be kept under. A caller who
+    /// `None` until the edge knows both its peer and a confirmed position:
+    /// before the far side has acknowledged a push, and for good with a far
+    /// side that never names its store (ADR-0104), whose watermark has no id
+    /// to be kept under. A caller who
     /// knows that peer's identity another way builds one with
     /// [`Watermark::new`].
     #[must_use]

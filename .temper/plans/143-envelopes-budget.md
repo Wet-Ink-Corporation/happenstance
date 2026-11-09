@@ -146,3 +146,10 @@ HTTP. A non-live test pins that the check rejects the pre-#420 per-event cut.
   (`--ignored --test-threads=1`); Neon CI-only.
 - spec-trace, lints, `cargo check -D warnings` (default and no-default) and
   `cargo doc -D warnings --document-private-items` green.
+- **Review of 6ebe8c6c (coordinator).** Merged origin/phase-13 (7b9c7f80, #133's restore
+  family): RULE_FILES and ENUMERATIONS keep both families, `spec_trace.rs` stays
+  line-neutral. F1: three citations repointed to `assert_reference_projection_declensions`.
+  F2: `kept` names its requirement, so each mutant's pin is distinct. F3: the rule's
+  decorative `not_an_event` dropped (it read the rule's own reference log);
+  `Watermark::commit` takes no event store, so the property holds by signature.
+  F4: `Edge::watermark`'s `None` wording.

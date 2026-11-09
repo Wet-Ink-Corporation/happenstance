@@ -306,19 +306,27 @@ async fn the_rule_fails_a_store_that_refuses_the_reserved_prefix() {
 
 #[tokio::test]
 async fn the_rule_fails_a_store_that_keeps_the_watermark_in_its_handle() {
-    fails_with(Mistake::HandleLocalWatermark, "a fresh handle loads None").await;
+    fails_with(
+        Mistake::HandleLocalWatermark,
+        "requirement 1, a watermark kept with its row: a fresh handle loads None",
+    )
+    .await;
 }
 
 #[tokio::test]
 async fn the_rule_fails_a_store_that_keys_every_peers_watermark_alike() {
     fails_with(
         Mistake::OneWatermarkForEveryPeer,
-        "a fresh handle loads Some",
+        "requirement 3, each peer's watermark its own: a fresh handle loads Some",
     )
     .await;
 }
 
 #[tokio::test]
 async fn the_rule_fails_a_store_that_upserts_the_watermark_around_the_port() {
-    fails_with(Mistake::UpsertedWatermark, "a fresh handle loads Some").await;
+    fails_with(
+        Mistake::UpsertedWatermark,
+        "requirement 4, a watermark unmoved by a refused regression: a fresh handle loads Some",
+    )
+    .await;
 }
