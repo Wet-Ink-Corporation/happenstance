@@ -193,6 +193,22 @@ through `open_on` first, which migrates it and leaves your pragmas alone. In
 let store = SqliteEventStore::open_on(connection)?;
 ```
 
+### The re-exported `rusqlite` is 0.41 **[H12]**
+
+**What changed.** `happenstance-sqlite` depends on `rusqlite` 0.41, was 0.40,
+because 0.40 bundles an SQLite before 3.54.0, which
+[RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459) reports
+can return uninitialised page-cache memory when it opens a database file with a
+crafted `-wal` beside it. `Connection`, `rusqlite::Error` and
+`rusqlite::types::Value` are on this crate's public signatures and re-exported
+as `happenstance_sqlite::rusqlite`, so the driver's version is part of the API.
+
+**What to change.** If your `Cargo.toml` names `rusqlite` directly, so you can
+hand a `Connection` to `open_on` or `new`, move it to `"0.41"`. Two versions of
+`rusqlite` in one build are two different `Connection` types, and the call does
+not compile. If you reach the driver through `happenstance_sqlite::rusqlite`,
+change nothing.
+
 ## Postgres and Neon
 
 ### Apply migration 3, then deploy **[H4, H5]**

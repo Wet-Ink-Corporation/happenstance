@@ -523,6 +523,14 @@ walks them. All nine crates move to `0.6.0` together.
 
 ### Changed
 
+- **`happenstance-sqlite` moves to `rusqlite` 0.41**, was 0.40, which bundles
+  `libsqlite3-sys` 0.39 and SQLite 3.54. 0.40's bundled SQLite is affected by
+  [RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459): a
+  database file opened with a crafted `-wal` of a different page size can make
+  queries return uninitialised page-cache memory. `rusqlite` is re-exported and
+  on the crate's public signatures, so a consumer that names `rusqlite` itself
+  moves to `0.41` with it (H12). No code in the adapter changed.
+
 - **Nineteen specification clauses are `[FROZEN]`** (#124, #128,
   [ADR-0107](.kb/decisions/0107-phase-13s-clauses-are-frozen.md), accepted
   2026-11-09). No code changed. VT-6 (a restore never
@@ -669,6 +677,7 @@ wrote this table. Before tagging, run `cargo semver-checks check-release
 | H9 | `happenstance-testkit` | `append_reports_exceeded_store_limits` gains CF-40's budget-unit branch, which a store stating both byte ceilings and holding their sum to one budget now fails (behaviour; CF-32) | hand | [ADR-0107](.kb/decisions/0107-phase-13s-clauses-are-frozen.md) (CF-40, #143) | Added |
 | H10 | `happenstance-sync-testkit` | the ingest family gains `ingest_preserves_the_recorded_time` (VT-9), `bulk_ingest_is_idempotent_in_bounded_round_trips` (SY-14, a 128-event call), `only_the_adjudicator_compensates` (SY-7) and `directional_merge_rules_compose` (SY-10); the last two open two stores, so an `IngestFixture` that hands out one store twice now fails (behaviour; CF-32) | hand | ADR-0107, #134, #139, #136, #137 | Added |
 | H11 | `happenstance-sync-testkit` | the peer family gains `round_trip_preserves_the_whole_log` (SY-28), `event_id_order_is_identical_on_every_peer` (SY-23) and `push_envelope_preserves_group_boundaries` (SY-30), which a peer that filters, reorders or merges what it serves now fails (behaviour; CF-32) | hand | ADR-0107, [ADR-0027](.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md), #140, #136, #420 | Added |
+| H12 | `happenstance-sqlite` | the re-exported `rusqlite` is `0.41`, was `0.40`, so a consumer that passes its own `rusqlite::Connection` to `open_on` or `new` moves its `rusqlite` requirement to `0.41` with it (API, through the re-export) | hand | [RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459) | Changed |
 
 **Schema, and not a break:** `happenstance-cloudflare`'s `migrate` adds
 `write_group` and `group_guard` where they are missing, with no marker, and an

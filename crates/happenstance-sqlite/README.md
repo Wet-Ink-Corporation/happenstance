@@ -39,7 +39,7 @@ happenstance-sqlite = "0.6"                                # the event store
 happenstance-sqlite = { version = "0.6", features = ["projection-store"] }
 happenstance-sqlite = { version = "0.6", features = ["sync"] }   # + the ingest port
 
-rusqlite = "0.40"                                          # only for tables of your own
+rusqlite = "0.41"                                          # only for tables of your own
 ```
 
 **You do not need that third line to name the driver.** `Connection`,
