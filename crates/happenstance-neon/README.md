@@ -51,8 +51,8 @@ records comes from that one sentence.
 ## The transport is yours
 
 ```toml
-happenstance-neon = "0.5"
-happenstance-neon = { version = "0.5", features = ["projection-store"] }
+happenstance-neon = "0.6"
+happenstance-neon = { version = "0.6", features = ["projection-store"] }
 ```
 
 **This crate owns no socket.** `SqlTransport` takes the whole request by value,
@@ -130,7 +130,7 @@ than tested.
 ## Replication: the `sync` feature
 
 ```toml
-happenstance-neon = { version = "0.5", features = ["sync"] }
+happenstance-neon = { version = "0.6", features = ["sync"] }
 ```
 
 `sync` is off by default and is the store's half of replication: it
@@ -142,8 +142,8 @@ call, never cached on the handle. It turns on `event-store`, and
 `happenstance-core`'s `serde` feature through `happenstance-sync`. It also
 implements `WriteGroupStore`, the bare flavour again, which reads the log back
 in the writes that made it (#420), and stores the guard an ingested group
-arrived under. The runner is unfinished (issue #244) and there is no network
-transport yet, so this is the port, not replication.
+arrived under. That makes it a local side for `happenstance-sync`'s runner,
+`runner::Edge` (#244), and the far side is the peer below.
 
 ### The sync peer: `NeonSyncPeer`
 

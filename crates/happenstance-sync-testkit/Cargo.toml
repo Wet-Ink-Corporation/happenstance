@@ -39,7 +39,7 @@ happenstance-sync = { workspace = true, features = ["memory"] }
 # ADR-0057 is about, so this line spells its own path rather than inheriting.
 # `RuleOutcome` is part of this crate's public API through every rule's
 # signature, which is the decision publishing it took (#108 part E, D4).
-happenstance-testkit = { version = "0.5.1", path = "../happenstance-testkit" }
+happenstance-testkit = { version = "0.6.0", path = "../happenstance-testkit" }
 # The typed layer, for the convergence family (#141): SY-20's rule bounds on
 # `happenstance::ConvergentProjection` and drives `run_projection`, because a
 # convergence claim is a claim about a typed fold, and the fold lives one crate

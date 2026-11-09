@@ -12,7 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/p13-exit`, cut from `phase-13` at `a4a25ab4`. 2026-11-09.
+`claude/p13-release`, cut from `claude/p13-exit` at `48af8178`, with `origin/main` (#456)
+and `claude/p13-exit`'s `353eea88` merged in. 2026-11-09.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -20,42 +21,39 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**Phase 13 is done** on `phase-13`, pending only `phase-13` → `main` and the `0.6.0` tag
-(phase 18's precedent: its row read `done` on its integration branch before #403 merged).
-Every work item and exit criterion in [the phase file](phases/13-sync.md) is ticked on
-evidence in the tree. The runner (#244), write groups (#420, ADR-0105), `SendPeer` (#421),
-the Durable Object peer over HTTP (#130), `NeonSyncPeer` and `harness/sync-round-trip`
-(#131) and the freeze rules (#133, #134, #136, #137, #139, #140, #141, #143) are merged.
-CF-25's portfolio check is built (#125), ADR-0003 is no longer provisional (ADR-0106, #126),
-and [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) froze nineteen
-clauses (#124, #128). `cargo xtask spec-trace` reads 187 `[FROZEN]`, 13 `[PROVISIONAL]`,
-5 `[DEFERRED]` and 7 `[NON-NORMATIVE]`; in §5, 35 of 39 `SY` clauses are frozen, with
-SY-7 and SY-10 `freeze-by-14` on the adjudication hook (#450).
+**Phase 13 is done** on `phase-13`, and this branch is its `0.6.0` release commit:
+`[Unreleased]` becomes `[0.6.0] — 2026-11-09` under a summary that marks it breaking from
+`0.5.x`, with a `0.6.0` trace of eleven hand rows (wire format 3 and `responder`, the three
+schema moves, the two identity refusals, and the new rules in both testkits). All nine
+crates, the workspace requirements, the sync-testkit's pin, the testkit's recipe pins and
+the six examples are at `0.6.0`; `Cargo.lock` and the three off-workspace lockfiles move
+only the path crates. Status lines, install lines (`"0.6"`), SECURITY's table, the site's
+roadmap card and reference table, and the `0.6.0` status row follow.
 
-**`0.5.1` is released** (2026-11-08; all nine crates on crates.io and docs.rs). Phases
-0–13, 15–17b and 18 are done. What remains is sequenced in [`roadmap.md`](roadmap.md):
-retention (14), then `1.0.0` (21).
+**`0.5.1` is the latest on crates.io** (2026-11-08). Phases 0–13, 15–17b and 18 are done.
+What remains is sequenced in [`roadmap.md`](roadmap.md): retention (14), then `1.0.0` (21).
 
 **`0.6.0` is tagged on `main`, at `phase-13` → `main`'s merge commit**, as `0.5.0` was at
-#403's: its release PR merges into `phase-13`, and `release.yml` publishes only a tag on
-`main`. Cloud sessions cannot push tags; the owner pushes them.
+#403's: the release PR merges into `phase-13`, and `release.yml` publishes only a tag on
+`main`, then creates the GitHub release from the tag's `## [0.6.0]` section
+(`scripts/release-notes.sh`, #456). Cloud sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
-The phase-13 exit reconciliation, `claude/p13-exit` into `phase-13`, docs only. No release
-PR is open yet.
+`claude/p13-exit` (#459) into `phase-13`, then this branch's release PR, which is not
+opened yet.
 
 ## Next action
 
-1. The owner merges this branch into `phase-13`.
-2. The `0.6.0` release PR into `phase-13`: `[Unreleased]` becomes `[0.6.0]`, all nine
-   crates and the pins move, a `0.6.0` trace (ADR-0104's wire v3 and the migrations are the
-   breaking rows), an upgrading guide if the `0.5` precedent holds, and the `0.6.0` status
-   row. Then `phase-13` → `main`, `cargo semver-checks check-release --workspace
-   --baseline-version 0.5.1 --release-type minor` on its merge commit, and the tag.
-3. On the merge, close #64, #108, #117, #130, #131 and #244, whose PRs merged into
+1. The owner merges #459, then the `0.6.0` release PR, into `phase-13`.
+2. `phase-13` → `main`. On its merge commit run `cargo semver-checks check-release
+   --workspace --baseline-version 0.5.1 --release-type minor`; any lint no trace row
+   covers becomes a **T** row in the `0.6.0` trace before the tag.
+3. Tag `v0.6.0` on that merge commit. Check that the GitHub release job read the
+   `## [0.6.0]` section.
+4. On the merge, close #64, #108, #117, #130, #131 and #244, whose PRs merged into
    `phase-13` and so closed nothing.
-4. Phase 14 (#65). It owns SY-7 and SY-10 (#450 first, then #441), SY-32 and VT-36.
+5. Phase 14 (#65). It owns SY-7 and SY-10 (#450 first, then #441), SY-32 and VT-36.
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
@@ -63,11 +61,12 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- This branch, the `0.6.0` release PR, `phase-13` → `main`, and the `v0.6.0` tag.
-- `CLAUDE.md` is protected: the proposed replacement text for its stale sync lines is at
-  `/mnt/project-files/notes/0.6.0-claude-md-proposal.md`. The earlier items on this list
-  (the #412 doc build, `unstable-projection` at `CLAUDE.md:440-443` and in
-  `bug_report.yml`) are already corrected in the tree.
+- #459, the `0.6.0` release PR, `phase-13` → `main`, the semver-checks run and the
+  `v0.6.0` tag.
+- No `docs/upgrading-to-0-6.md` was written: the `0.5` guide's precedent registers it in
+  `xtask/src/narrative.rs`, which the release commit does not touch. The CHANGELOG
+  summary and trace carry the upgrade steps. Write the guide in a follow-up, or confirm
+  the trace is enough for a release whose breaks are wire and schema rather than code.
 - SY-21's `convergent_projection_cannot_observe_local_position` was not written at phase
   13: its Rule line says "phase 13 adds" it and `spec_trace.rs` still declares it
   `Scheduled` for phase 13. Write it, or reschedule it with a follow-up issue.

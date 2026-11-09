@@ -93,3 +93,35 @@ jobs:
           -p happenstance-sqlite -p happenstance-cloudflare
           -p happenstance-postgres -p happenstance-neon
           -p happenstance-sync -p happenstance-sync-testkit
+
+  github-release:
+    name: GitHub release
+    # Only once every crate is on crates.io: a GitHub release for a version
+    # that failed to publish would announce something nobody can install.
+    needs: publish
+    runs-on: ubuntu-latest
+    # The one job that writes to the repository, and all it writes is the
+    # release. It never sees the crates.io token.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Release notes from CHANGELOG.md
+        # The tag's `## [X.Y.Z]` section. A tag with no section fails here,
+        # after the crates are published, and the release can be created by
+        # hand with the same script once the changelog says something.
+        run: scripts/release-notes.sh "$GITHUB_REF_NAME" CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+
+      - name: Create the GitHub release
+        # `gh` is on every hosted runner, so no third-party action has to be
+        # allowed for this. A tag with a hyphen (`v1.0.0-rc.1`) is a
+        # pre-release and never becomes the repository's "latest".
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pre=()
+          case "$GITHUB_REF_NAME" in *-*) pre=(--prerelease) ;; esac
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+            --verify-tag --title "happenstance ${GITHUB_REF_NAME#v}" \
+            --notes-file "$RUNNER_TEMP/notes.md" "${pre[@]}"
