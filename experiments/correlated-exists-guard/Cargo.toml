@@ -38,7 +38,7 @@ futures-core = "0.3"
 # off a running store instead of asserting a transcription against itself. It
 # adds no crate to the graph: `Cargo.lock` here holds exactly the nodes
 # `experiments/append-condition`'s does, plus `happenstance-sqlite`'s own.
-rusqlite = { version = "0.40", default-features = false, features = ["bundled", "trace"] }
+rusqlite = { version = "0.41", default-features = false, features = ["bundled", "trace"] }
 thiserror = "2"
 
 [dev-dependencies]

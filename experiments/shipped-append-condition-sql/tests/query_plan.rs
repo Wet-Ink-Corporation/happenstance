@@ -153,9 +153,11 @@ async fn the_plans_behind_the_numbers() {
     // Capture the statement off a real replay rather than writing it out. The
     // trace callback is installed before the store is built, so it sees every
     // page.
-    let traced =
+    let mut traced =
         happenstance_sqlite::connection::open_configured(&path).expect("opening must succeed");
-    traced.trace_v2(TraceEventCodes::SQLITE_TRACE_STMT, Some(record));
+    traced
+        .trace_v2(TraceEventCodes::SQLITE_TRACE_STMT, Some(record))
+        .expect("installing the trace callback must succeed");
     let store = SqliteEventStore::new(traced).expect("the file is migrated");
 
     let all = Query::all();
