@@ -1,10 +1,10 @@
 //! The conformance suite for `happenstance-sync` peers, and for the stores
 //! they ingest into.
 //!
-//! # Status: two peer families and an ingest family, and the shape every later rule plugs into
+//! # Status: the peer, ingest, write-group, restore, watermark and convergence families
 //!
-//! Published since #108 part E, with `happenstance-sync`, and **unfinished**:
-//! phase 13 grows it rule by rule. It is the bar a peer or ingest adapter must
+//! Published since #108 part E, with `happenstance-sync`, and grown rule by rule
+//! through phase 13, which ran it against the network peers. It is the bar a peer or ingest adapter must
 //! clear before it is considered to exist, exactly as `happenstance-testkit` is
 //! for a store, and an adapter outside this workspace mounts it the same way.
 //! **Pin it exactly**: a new rule is a minor of this crate's number.

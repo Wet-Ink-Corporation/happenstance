@@ -1,17 +1,17 @@
 //! Replication between happenstance instances.
 //!
-//! # Status: published, and unfinished
+//! # Status: published, and built against real peers
 //!
 //! [`SyncPeer`] and [`IngestStore`] began here as a phase-2 sketch, to be
 //! *falsified by a type checker* before an adapter was written. The stand-in
 //! peers in `tests/` are still `todo!()` on purpose (see [`peer`]), because the
 //! type checker is the instrument there, not the runtime.
 //!
-//! Published since #108 part E, so that a store adapter can implement
-//! [`IngestStore`] behind its own `sync` feature. **Unfinished**: the [`runner`]
-//! drives one edge (#244), by step or by a caller-owned backoff loop, and stops it on a
-//! new far-side incarnation, but holds no peer set; its watermark goes through the projection
-//! port in the caller's batch (SY-31, [`runner::Watermark`]); no [`Exchange`] runs over a real network for [`RemoteSyncPeer`]. A `[FROZEN]` `SY` clause binds this
+//! Published since #108 part E, and built at phase 13. The [`runner`] drives one edge
+//! (#244), by step or by a caller-owned backoff loop, and keeps its watermark through the
+//! projection port in the caller's batch (SY-31, [`runner::Watermark`]); a push keeps the
+//! writes the log was made of (SY-39, [`write_group`]); [`StoreSyncPeer`], [`serve_sync`] and [`RemoteSyncPeer`] are a network peer's two halves, and `happenstance-neon`'s `NeonSyncPeer` and `happenstance-cloudflare`'s Durable Object over HTTP pass `happenstance-sync-testkit`'s peer suite. Not here yet: a peer set above one edge, and an
+//! [`Exchange`] over a real network, which your HTTP client supplies. A `[FROZEN]` `SY` clause binds this
 //! crate's semver as an `ES` clause binds `happenstance-core`'s. SY-7, SY-10 and
 //! SY-29 are `[PROVISIONAL]`, binding until the falsifier each names, and SY-32
 //! is `[DEFERRED]` (ADR-0107).

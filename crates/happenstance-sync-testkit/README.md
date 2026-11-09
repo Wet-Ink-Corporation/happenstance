@@ -11,8 +11,9 @@ New to happenstance? [The happenstance guide](https://wet-ink-corporation.github
 explains event sourcing and dynamic consistency boundaries from the beginning,
 with programs you can run.
 
-> **Status: published, and unfinished.** Phase 13 adds rules, and a new rule is
-> a minor of this crate's number, which is exactly the bump `cargo update`
+> **Status: published, and run against real peers.** Phase 13 grew it into
+> seven families and ran them against the network peers. A new rule is a minor
+> of this crate's number, which is exactly the bump `cargo update`
 > takes without being asked and the one that can turn a passing adapter red.
 > **Pin it exactly**, as you pin `happenstance-testkit`: an `=` requirement on
 > the version you test against, in `[dev-dependencies]`.
@@ -22,8 +23,9 @@ with programs you can run.
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > it checks; two of those are still `[PROVISIONAL]` (SY-7 and SY-10 among the
 > ones a rule here checks, ADR-0107),
-> and a rule over a provisional clause moves when its clause does. There is no
-> runner yet (issue #244), so nothing here checks one.
+> and a rule over a provisional clause moves when its clause does. The
+> watermark family plays `happenstance-sync`'s shipped runner, `runner::Edge`,
+> and holds a projection store to what that runner asks of it (SY-31).
 >
 > Every rule returns `happenstance_testkit::RuleOutcome`, so that crate's type
 > is part of this one's public API.

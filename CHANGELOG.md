@@ -267,7 +267,7 @@ not the same as what a user needed to be told.
   bound on `WriteGroupStore`, and a push stores each group's guard with it.
   `StoreSyncPeer` ingests
   with no compensation, so it cannot be SY-7's adjudicator; that hook is
-  planned with SY-7 (#136). Both peers pass
+  planned with SY-7 (#450, after #136). Both peers pass
   `sync_peer_conformance!`, and `StoreSyncPeer` the model family too.
 - `happenstance-postgres` and `happenstance-neon`: a re-mint for after a
   restore or a copy (#104, ADR-0086, VT-6). `PostgresEventStore::remint_identity`

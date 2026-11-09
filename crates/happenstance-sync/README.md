@@ -8,31 +8,35 @@ New to happenstance? [The happenstance guide](https://wet-ink-corporation.github
 explains event sourcing and dynamic consistency boundaries from the beginning,
 with programs you can run.
 
-> **Status: published, and unfinished.** This crate is published so that a
-> store adapter can implement `IngestStore` behind an optional `sync` feature,
-> and so that an outside adapter can be measured by
-> [`happenstance-sync-testkit`](https://docs.rs/happenstance-sync-testkit).
-> Two things a replicating application needs are not finished yet:
+> **Status: published, and built against real peers.** Phase 13 built the runner
+> and the network peers on top of the port. They are unreleased, and ship in
+> the next release:
 >
-> - **the runner**, the loop that pulls from a peer, ingests, and acknowledges
->   (issue #244): `runner::Edge` drives one edge, a step at a time or through
->   `Edge::run`, a loop the caller drives on its own runtime with a seeded,
->   jittered, capped backoff. It acts on each failure class, bounds what it
->   holds in memory, and stops when the far side answers as a new store
+> - **the runner** (#244): `runner::Edge` drives one edge, a step at a time or
+>   through `Edge::run`, a loop the caller drives on its own runtime with a
+>   seeded, jittered, capped backoff. It acts on each failure class, bounds what
+>   it holds in memory, and stops when the far side answers as a new store
 >   incarnation, never touching the local log. Its watermark is kept through
->   the projection port in the caller's batch (`runner::Watermark`, SY-31,
->   #143). Still to come: a peer set above the single edge, and
-> - **a network transport**: `StoreSyncPeer`, `serve_sync` and
->   `RemoteSyncPeer` are a network peer's transport-free halves (#117), and
->   no crate yet supplies an `Exchange` over a real network. Wrapped in
->   `SendPeer`, either half over `Send + Sync` parts is a `SendSyncPeer`, so code
->   that spawns from a generic function takes it (#421).
+>   the projection port in the caller's batch (`runner::Watermark`, SY-31), and
+>   a push carries the local log in the writes it was made of (SY-30, SY-39).
+> - **network peers**: `StoreSyncPeer`, `serve_sync` and `RemoteSyncPeer` are a
+>   network peer's two halves over an `Exchange` you supply (#117), and
+>   `SendPeer` makes either a `SendSyncPeer` (#421). `happenstance-neon`'s
+>   `NeonSyncPeer` (#131), `happenstance-cloudflare`'s Durable Object served
+>   over HTTP (#130), and a `StoreSyncPeer` over `happenstance-postgres` each
+>   pass `happenstance-sync-testkit`'s peer suite, and a native SQLite store
+>   round-trips through all three with its payload bytes identical.
+>
+> Still to come: a peer set above the single edge, an `Exchange` over a real
+> network in a published crate, and the adjudication hook SY-7 and SY-10 wait
+> on (#450).
 >
 > A `[FROZEN]` `SY` clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > binds this crate's semver as an `ES` clause binds `happenstance-core`'s.
-> SY-7, SY-10 and SY-29 are `[PROVISIONAL]`, binding until the falsifier each
-> names, and SY-32 is `[DEFERRED]` (ADR-0107). The version moves in lockstep with the rest of the
+> Thirty-five of the thirty-nine `SY` clauses are `[FROZEN]`. SY-7, SY-10 and
+> SY-29 are `[PROVISIONAL]`, binding until the falsifier each names, and SY-32
+> is `[DEFERRED]` (ADR-0107). The version moves in lockstep with the rest of the
 > workspace.
 
 ## Which stores implement the port
@@ -53,8 +57,9 @@ requirement and accepts both flavours.
 A store the runner pushes from, or a `StoreSyncPeer` serves, also implements
 `WriteGroupStore`, which reads the log back in the writes that made it
 (SY-39, #420), so a push never tears one. `happenstance-sqlite` implements it
-behind `sync`, as `SendWriteGroupStore`, over its migration 2; the other three
-adapters follow in #420's later parts.
+behind `sync`, as `SendWriteGroupStore`, over its migration 2;
+`happenstance-postgres` as `SendWriteGroupStore`, and `happenstance-neon` and
+`happenstance-cloudflare` (through `CloudflareIngestStore`) as the bare flavour.
 
 ## Use
 

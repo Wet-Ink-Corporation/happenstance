@@ -39,9 +39,9 @@ broken a rule. The API reference is [on docs.rs](https://docs.rs/happenstance).
 > every build now, and semver covers it like the rest of the crate.
 >
 > What it is not is production mileage — see the note under [status](#status),
-> which is narrower than the ticks suggest. Replication has begun: its port and
-> conformance suites ship from `0.4.4`, and its runner and network peer come next
-> (Ladybug was retired at phase 17). The ambition is the whole list rather than the nine that ship here.
+> which is narrower than the ticks suggest. Replication's port and conformance
+> suites ship from `0.4.4`, and its runner and network peers are built and
+> unreleased (Ladybug was retired at phase 17). The ambition is the whole list rather than the nine that ship here.
 
 ---
 
@@ -159,8 +159,8 @@ is retired and outside the workspace, for the reason its row gives.
 | [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ in the `0.5.1` release set; both roles pass their suites against a live server, and the first adapter to clear the concurrency family against a store that does not serialise its writers |
 | [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ in the `0.5.1` release set; passes its suites against a live endpoint, with one open clause question its README names |
 | [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | ⛔ **retired** at phase 17 ([ADR-0078](.kb/decisions/0078-happenstance-ladybug-is-retired.md)) and excluded from the workspace, kept as a frozen record. It passed the projection suite against the real driver at phase 11 and was never published — `lbug` does not render on docs.rs |
-| [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, the ingest port every adapter implements behind its `sync` feature, and the wire messages | 🚧 in the `0.5.1` release set, first released at `0.4.4`, and unfinished: no runner and no network peer yet |
-| [`happenstance-sync-testkit`](crates/happenstance-sync-testkit) | Conformance suites for sync peers and ingest stores | 🚧 in the `0.5.1` release set, first released at `0.4.4`, and growing rule by rule — pin it exactly |
+| [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, the ingest port every adapter implements behind its `sync` feature, and the wire messages | 🚧 in the `0.5.1` release set, first released at `0.4.4`. Unreleased since, from phase 13: a runner over one edge, write groups, and network peers that pass the peer suite |
+| [`happenstance-sync-testkit`](crates/happenstance-sync-testkit) | Conformance suites for sync peers and ingest stores | 🚧 in the `0.5.1` release set, first released at `0.4.4`, and still growing rule by rule — pin it exactly |
 
 Read the ✅ rows narrowly. **"Passes the suite" is the only claim being made** —
 that the adapter has run `happenstance-testkit` and cleared it, which is what
@@ -169,9 +169,12 @@ mileage: nothing here has run anywhere but a test.
 
 The two 🚧 rows are published so that an adapter can implement the ingest port
 behind an optional feature, and so that an adapter outside this repository can
-be measured by the same suite. They are not finished: replication between two
-running stores needs a runner (issue #244) and a network peer, and neither
-exists yet.
+be measured by the same suite. What replication between two running stores
+needs, a runner and a network peer, was built at phase 13 and is unreleased:
+`NeonSyncPeer`, a Durable Object served over HTTP and a Postgres `StoreSyncPeer`
+pass the peer suite, and a SQLite store round-trips through each byte for byte.
+The rows stay 🚧 until that ships, and while SY-7, SY-10, SY-29 and SY-32 are
+open.
 
 **`happenstance-postgres` is the row that changed and the one most easily
 misread.** It is no longer a stub: the event store clears 101 of 101 conformance
