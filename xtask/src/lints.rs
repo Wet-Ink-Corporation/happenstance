@@ -2369,7 +2369,13 @@ struct Enumeration {
 /// `spec-trace`, `lints`, `lint-changelog`, clippy and the testkit's own tests.
 /// Including it is a decision recorded here; leaving it out silently is the
 /// shape RS-80-2 forbids.
-const ENUMERATIONS: [Enumeration; 11] = [
+const ENUMERATIONS: [Enumeration; 12] = [
+    Enumeration {
+        // The restore family (#133), joined in the change that creates it.
+        file: "crates/happenstance-sync-testkit/src/restore_suite.rs",
+        macro_name: "for_each_restore_rule",
+        macro_file: "crates/happenstance-sync-testkit/src/restore_suite.rs",
+    },
     Enumeration {
         // The write-group family (#420), joined in the change that creates it.
         file: "crates/happenstance-sync-testkit/src/write_group_suite.rs",
