@@ -85,18 +85,18 @@ const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 ///
 /// It lives here rather than in `lints` because [`collect_rules`] does, and a
 /// list of files kept next to the function that parses them cannot drift from it.
-pub(crate) const RULE_FILES: [&str; 9] = [
+pub(crate) const RULE_FILES: [&str; 10] = [
     SUITE,
     "crates/happenstance-testkit/src/model.rs",
     "crates/happenstance-testkit/src/concurrency.rs",
     "crates/happenstance-testkit/src/projection.rs",
-    // The sync-testkit families (#111, #246, #108, #420), each joined in its change.
+    // The sync-testkit families (#111, #246, #108, #420, #141, #143), each joined in its change.
     "crates/happenstance-sync-testkit/src/sync_suite.rs",
     "crates/happenstance-sync-testkit/src/sync_model.rs",
     "crates/happenstance-sync-testkit/src/ingest_suite.rs",
     "crates/happenstance-sync-testkit/src/write_group_suite.rs",
-    // The convergence family (#141), joined in the change that creates it.
     "crates/happenstance-sync-testkit/src/convergence_suite.rs",
+    "crates/happenstance-sync-testkit/src/watermark_suite.rs",
 ];
 
 /// Every file a `wire::`-qualified name a clause cites may be defined in.

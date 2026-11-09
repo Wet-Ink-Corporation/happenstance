@@ -192,3 +192,20 @@ async fn a_sqlite_batch_replayed_to_the_postgres_peer_changes_nothing() {
 
     super::replay_changes_nothing(&peer, &far).await;
 }
+
+/// The runner pushes a SQLite log to the Postgres peer in its write groups,
+/// over several pushes, and each arrives whole with its guard (SY-30, #143).
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container, or set HAPPENSTANCE_POSTGRES_URL)"]
+async fn the_runner_keeps_write_groups_through_the_postgres_peer() {
+    let server = server().await;
+    let pool = fresh_pool(&server.url).await;
+    // Refcounted handles onto the one pool.
+    let peer = StoreSyncPeer::with_limits(
+        PostgresEventStore::new(pool.clone()),
+        PostgresEventStore::new(pool),
+        super::groups::small_batches(),
+    );
+
+    super::groups::runner_keeps_write_groups(&peer).await;
+}

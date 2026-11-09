@@ -703,3 +703,17 @@ async fn a_newer_projection_schema_is_refused() {
         ),
     }
 }
+
+/// SY-31's watermark rule (#143), over the same fixture the projection suite
+/// runs on: a runner's watermark kept under its reserved `sync/` id, in one
+/// commit with a read-model row, and read back through a fresh connection.
+#[tokio::test]
+async fn watermark_advances_transactionally_with_a_read_model()
+-> Result<(), happenstance_sync_testkit::Violation> {
+    happenstance_sync_testkit::watermark_rules::watermark_advances_transactionally_with_a_read_model(
+        async || SqliteProjectionFixture::new(),
+    )
+    .await?
+    .report("watermark_advances_transactionally_with_a_read_model");
+    Ok(())
+}

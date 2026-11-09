@@ -85,14 +85,20 @@
 //! given a `Send + Sync` resume token; `tests/flavours.rs` proves both, the
 //! second in generic code under `tokio::spawn`.
 //!
-//! # Where the watermark lives is not decided here
+//! # Where the watermark lives
 //!
-//! SY-31 says the per-peer confirmation watermark is written through
-//! `ProjectionStore` under a reserved id, and that seam is not built. The edge
-//! holds the watermark, the token and the far side's incarnation in memory,
-//! exposes them ([`SyncStatus::confirmed`], [`Edge::resume_token`],
-//! [`SyncStatus::responder`]), and takes them back through [`Edge::resuming`]
-//! and [`Edge::with_responder`], so a caller can persist them wherever it must.
+//! SY-31: the per-peer confirmation watermark is written through
+//! `ProjectionStore` under the reserved id [`ProjectionId::sync_watermark`]
+//! names, never as an event. The edge holds the watermark, the token and the
+//! far side's incarnation in memory and does no projection I/O of its own.
+//! [`Edge::watermark`] hands the first and the last back as a [`Watermark`],
+//! whose [`commit`](Watermark::commit) lands it in the caller's batch beside
+//! whatever read model the caller wrote there, and [`Edge::restored`] builds an
+//! edge back from one [`Watermark::load`] read. The token stays the caller's
+//! to keep or drop ([`Edge::resume_token`], [`Edge::resuming`]): an edge that
+//! lost it pulls from the start, and ingest skips what it holds.
+//!
+//! [`ProjectionId::sync_watermark`]: happenstance_core::ProjectionId::sync_watermark
 
 use alloc::vec::Vec;
 use core::num::NonZeroUsize;
@@ -110,6 +116,7 @@ mod error;
 mod incarnation;
 mod run;
 mod status;
+mod watermark;
 
 use run::Run;
 
@@ -117,6 +124,7 @@ pub use backoff::{Backoff, BackoffError, SendSleep, Sleep};
 pub use error::{Failure, Phase, StepError, StepFailure};
 pub use incarnation::{IncarnationChanged, StopCause};
 pub use status::{EdgeState, Pending, Stepped, SyncStatus};
+pub use watermark::{LoadWatermarkError, Watermark};
 
 /// One replication edge: the local side's view of one peer relationship.
 ///
@@ -260,6 +268,33 @@ impl<R> Edge<R> {
     #[must_use]
     pub const fn resume_token(&self) -> Option<&R> {
         self.resume.as_ref()
+    }
+
+    /// The edge's confirmation watermark, to keep through the projection port
+    /// (SY-31): the far side's identity and [`SyncStatus::confirmed`].
+    ///
+    /// `None` until both are known: before the far side has acknowledged a
+    /// push, and for good with a far side that never names its store
+    /// (ADR-0104), whose watermark has no id to be kept under. A caller who
+    /// knows that peer's identity another way builds one with
+    /// [`Watermark::new`].
+    #[must_use]
+    pub const fn watermark(&self) -> Option<Watermark> {
+        match (self.status.responder, self.status.confirmed) {
+            (Some(peer), Some(confirmed)) => Some(Watermark::new(peer, confirmed)),
+            _ => None,
+        }
+    }
+
+    /// An edge resuming from a kept `watermark`: it pushes what the local log
+    /// holds above it, pulls from the start of the far side's log, and stops
+    /// at the first answer from a store other than the watermark's peer.
+    ///
+    /// [`Edge::resuming`] with the watermark's position and no token, then
+    /// [`with_responder`](Self::with_responder) with its peer.
+    #[must_use]
+    pub const fn restored(watermark: Watermark) -> Self {
+        Self::resuming(Some(watermark.confirmed()), None).with_responder(watermark.peer())
     }
 
     /// One exchange: pull and ingest, then read and push.

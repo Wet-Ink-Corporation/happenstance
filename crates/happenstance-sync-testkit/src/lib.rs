@@ -220,6 +220,41 @@
 //! [`StockOnHandFixture`] and [`CostLayersFixture`] are the reference cases:
 //! one domain, a sum that converges and a FIFO queue that cannot.
 //!
+//! # The watermark family
+//!
+//! A projection store's bar, not a peer's: the store a runner keeps its
+//! per-peer confirmation watermark in, beside the read model whose rows
+//! depend on it (SY-31). The rule takes the
+//! [`ProjectionFixture`](happenstance_testkit::ProjectionFixture) a projection
+//! adapter already mounts the projection suite with, and is called directly,
+//! as the convergence family's are:
+//!
+//! ```
+//! # macro_rules! ignore { ($($t:tt)*) => {} }
+//! # ignore! {
+//! #[tokio::test]
+//! async fn watermark_advances_transactionally_with_a_read_model()
+//! -> Result<(), happenstance_sync_testkit::Violation> {
+//!     happenstance_sync_testkit::watermark_rules::watermark_advances_transactionally_with_a_read_model(
+//!         async || happenstance_testkit::fixtures::MemoryProjectionFixture::new(),
+//!     )
+//!     .await?
+//!     .report("watermark_advances_transactionally_with_a_read_model");
+//!     Ok(())
+//! }
+//! # }
+//! ```
+//!
+//! | Rule | Clause | What it rejects |
+//! |---|---|---|
+//! | [`watermark_advances_transactionally_with_a_read_model`](watermark_rules::watermark_advances_transactionally_with_a_read_model) | SY-31 | a store that refuses the reserved `sync/` prefix, keeps a watermark in its handle, keys every peer's watermark alike, or upserts one around the port's regression check |
+//!
+//! The rule plays the runner, with the shipped
+//! [`Edge`](happenstance_sync::runner::Edge) and its
+//! [`Watermark`](happenstance_sync::runner::Watermark), so what it holds the
+//! store to is what that runner asks of it. The wrong stores live in
+//! `tests/wrong_watermark_stores.rs`.
+//!
 //! # Harnesses
 //!
 //! The emitter is a parameter, as in the event-store family, so the suite never
@@ -310,6 +345,11 @@ pub use convergence_fixture::{
     StockOnHandFixture, StoreOf,
 };
 pub use convergence_suite::convergence_rules;
+
+// The watermark family (#143), declared after the others so their lines do
+// not move. `watermark_suite.rs` for `sync_suite.rs`'s reason.
+mod watermark_suite;
+pub use watermark_suite::watermark_rules;
 
 /// Generates the ingest conformance suite for a store adapter.
 ///
