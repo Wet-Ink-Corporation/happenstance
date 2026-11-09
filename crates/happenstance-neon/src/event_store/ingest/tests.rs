@@ -34,6 +34,7 @@ use crate::transport::{
 };
 use crate::wire::ResultSet;
 
+mod bulk;
 mod claims;
 mod endpoint;
 mod family;

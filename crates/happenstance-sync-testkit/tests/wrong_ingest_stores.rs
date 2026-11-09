@@ -156,6 +156,20 @@ enum Mistake {
     /// written into an adapter, and its peers lose the per-direction rule the
     /// runner is required to permit.
     AdjudicatesOnIngest,
+    /// SY-14's, the serial peel's cousin at scale: consult what the store
+    /// holds for the first [`LOOKUP_CHUNK`] foreign events of a call only, as
+    /// a store does that sends one `IN (…)` list of identities under a
+    /// parameter budget and forgets to loop. A held event past the chunk is
+    /// written again, so only a pulled batch longer than the chunk, holding
+    /// a re-delivery behind it, sees it: SY-12's three-event call cannot.
+    LooksUpOneChunkOfIdentities,
+    /// VT-24's on the ingest path: refuse a call of more than
+    /// [`CALL_CAP_BELOW_THE_FLOOR`] events, compensation included, as
+    /// `ExceedsStoreLimit { limit: EventsPerBatch, .. }`, before writing. The
+    /// refusal is well formed and states its class; the number is below the
+    /// floor every store owes a call, so the minimum peer's 128-event push is
+    /// refused at the far side.
+    CapsTheCallBelowTheFloor,
     /// Not a mistake in the write: a store whose identity read fails, as a
     /// SQL store's does when its meta row is gone or its server is not
     /// reachable. Every rule that asks the store who it is must report the
@@ -227,6 +241,15 @@ impl Classify for WrongError {
 
 /// How many rows [`Mistake::ChunksWithoutATransaction`] commits at a time.
 const CHUNK: usize = 2;
+
+/// How many of a call's foreign events [`Mistake::LooksUpOneChunkOfIdentities`]
+/// checks against what it holds: half of VT-24's floor, and far above any call
+/// another rule makes.
+const LOOKUP_CHUNK: usize = 64;
+
+/// The most events [`Mistake::CapsTheCallBelowTheFloor`] takes in one call:
+/// half of VT-24's floor, and above any call another rule makes.
+const CALL_CAP_BELOW_THE_FLOOR: usize = 64;
 
 /// One stored row, and the identity the store dedupes and watermarks it by.
 ///
@@ -318,6 +341,18 @@ impl WrongIngestStore {
     /// is decided: every one, foreign and compensation, or the ones the
     /// mistake checks.
     fn check_ceilings(&self, groups: &[IngestGroup<'_>]) -> Result<(), IngestError<WrongError>> {
+        if self.mistake == Mistake::CapsTheCallBelowTheFloor {
+            let len: usize = groups
+                .iter()
+                .map(|group| group.events.len() + group.compensation.len())
+                .sum();
+            if len > CALL_CAP_BELOW_THE_FLOOR {
+                return Err(IngestError::exceeds_store_limit(
+                    StoreLimit::EventsPerBatch,
+                    len,
+                ));
+            }
+        }
         let foreign = if self.mistake == Mistake::ChecksOnlyEachGroupsHead {
             1
         } else {
@@ -424,9 +459,14 @@ impl WrongIngestStore {
         groups: &[IngestGroup<'_>],
     ) -> Result<Written, IngestError<WrongError>> {
         let held: BTreeSet<EventId> = rows.iter().map(|row| row.origin).collect();
+        // What [`Mistake::LooksUpOneChunkOfIdentities`] knows past its chunk.
+        let nothing_held = BTreeSet::new();
+        let start = rows.len();
         let mut working = rows.clone();
         let mut counts = Ingested::default();
         let mut marks = Vec::new();
+        // Each foreign event's index in the call, across its groups.
+        let mut in_call = 0_usize;
         for (group_index, group) in groups.iter().enumerate() {
             // What a group-by-group commit has kept when this group begins.
             let committed =
@@ -437,7 +477,16 @@ impl WrongIngestStore {
             let group_head = group.events.first().map(|head| head.recorded_at);
             for (event_index, shipped) in group.events.iter().enumerate() {
                 let head_of_batch = group_index == 0 && event_index == 0;
-                match self.verdict(&held, &working, shipped, head_of_batch) {
+                let looked_up =
+                    self.mistake != Mistake::LooksUpOneChunkOfIdentities || in_call < LOOKUP_CHUNK;
+                in_call += 1;
+                // Past its chunk the mistake knows only what this call wrote.
+                let (held_here, seen) = if looked_up {
+                    (&held, working.as_slice())
+                } else {
+                    (&nothing_held, working.get(start..).unwrap_or_default())
+                };
+                match self.verdict(held_here, seen, shipped, head_of_batch) {
                     Verdict::Skip => counts.skipped += 1,
                     Verdict::Land => {
                         // Inside the loop the group has a head, so the
@@ -958,6 +1007,7 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
         ),
         ("only_the_adjudicator_compensates", "SY-7"),
         ("directional_merge_rules_compose", "SY-10"),
+        ("bulk_ingest_is_idempotent_in_bounded_round_trips", "SY-14"),
     ];
     assert_eq!(all.len(), clauses.len(), "a rule was added: {all:?}");
     for (name, verdict) in all {
@@ -1317,5 +1367,31 @@ fn directional_merge_rules_compose_fails_a_store_that_adjudicates_on_ingest() {
             .message()
             .starts_with("a claim pulled from the far end was counted as"),
         "the rule failed for another reason: {violation}"
+    );
+}
+
+/// A held event past the store's one chunk of identity lookups is written
+/// again. Only a call longer than the chunk, holding a re-delivery behind it,
+/// sees it, which is why SY-14's rule batches by VT-24's floor.
+#[test]
+fn bulk_ingest_is_idempotent_in_bounded_round_trips_fails_a_store_that_looks_up_one_chunk_of_identities()
+ {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::LooksUpOneChunkOfIdentities)),
+        "bulk_ingest_is_idempotent_in_bounded_round_trips",
+        "SY-14",
+    );
+}
+
+/// A store whose ingest refuses a call of 65 events refuses the minimum
+/// peer's 128-event push, and the rule reports that refusal under VT-24, the
+/// floor it breaks, rather than SY-14.
+#[test]
+fn bulk_ingest_is_idempotent_in_bounded_round_trips_fails_a_store_that_caps_the_call_below_the_floor()
+ {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::CapsTheCallBelowTheFloor)),
+        "bulk_ingest_is_idempotent_in_bounded_round_trips",
+        "VT-24",
     );
 }

@@ -132,6 +132,8 @@ pub mod ingest_rules {
     mod adjudication;
     // SY-10's two topologies and the per-direction runner the rule plays.
     mod topology;
+    // SY-14's call at VT-24's floor, and the first delivery scattered over it.
+    mod bulk;
 
     const SHIPPED: EventType = EventType::from_static("Shipped");
     const LOCAL: EventType = EventType::from_static("Local");
@@ -1383,6 +1385,57 @@ pub mod ingest_rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-14: a pulled batch lands in **one** ingest call, however many of
+    /// its events the store already holds, and the same call again changes
+    /// nothing. With VT-24 on the ingest path: the call is
+    /// [`MIN_SUPPORTED_EVENTS_PER_BATCH`](happenstance_core::MIN_SUPPORTED_EVENTS_PER_BATCH)
+    /// foreign events, the push the minimum peer declares it takes, and every
+    /// store takes it.
+    ///
+    /// One origin numbers 128 events 1 to 128, each with bytes of its own and
+    /// no tags, in seven groups of 1, 3, 4, 8, 16, 32 and 64. A first call
+    /// delivers every third event and the last, 44 in all, each in its own
+    /// group: the first group whole, every other in part, and held events past
+    /// the first half of the call. Then the whole batch arrives in one call. It
+    /// must land, counted 84 appended and 44 skipped, leaving each event held
+    /// once, found by its bytes, every row the first call wrote still held
+    /// with its identity, time and bytes, and the origin's watermark at 128. The same call again is 128 skips
+    /// and leaves the log, head and watermark as they were.
+    ///
+    /// The round trip the clause bounds is the `ingest` call: one per pulled
+    /// batch, which is all the port can see. How many requests an adapter
+    /// spends inside one call is its own to pin, and CF-33 leaves request
+    /// counting to it: `happenstance-neon` pins one request per push.
+    ///
+    /// # Rejects
+    ///
+    /// A store that consults what it holds for the first 64 foreign events of
+    /// a call only, as one that sends one chunk of identities and forgets to
+    /// loop does, and writes a held event past the chunk again; SY-12's
+    /// three-event call cannot see it. And a store whose ingest refuses a
+    /// call of more than 64 events as over its batch limit, which refuses
+    /// the minimum peer's push. `tests/wrong_ingest_stores.rs` carries both.
+    ///
+    /// # Does not reject
+    ///
+    /// An adapter that spends one request per event inside one `ingest`
+    /// call. No port method sees a request, so that is the adapter's own
+    /// test, as `happenstance-neon`'s scripted request count is.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-14 if the store refuses a call or miscounts it,
+    /// or holds other than each event once with the first call's rows
+    /// unchanged, or if the re-delivery changes anything; of VT-24 if a call
+    /// is refused as over a capacity limit.
+    pub async fn bulk_ingest_is_idempotent_in_bounded_round_trips<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        let fixture = open().await;
+        bulk::the_floor_lands_once(&fixture.connect().await).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What a refused or skipped ingest must leave as it found it.
     #[derive(Debug, PartialEq)]
     struct Observed {
@@ -1686,6 +1739,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- Each direction of an edge keeps its own merge rule (SY-10) -
             directional_merge_rules_compose,
+
+            // --- A pulled batch at VT-24's floor lands in one call (SY-14) --
+            bulk_ingest_is_idempotent_in_bounded_round_trips,
         }
     };
 }

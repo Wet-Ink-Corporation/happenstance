@@ -35,6 +35,29 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- `happenstance-sync-testkit`: the ingest rule
+  `bulk_ingest_is_idempotent_in_bounded_round_trips` (SY-14, VT-24, #139).
+  One call of VT-24's floor, 128 foreign events in seven groups, after a
+  first call delivered every third of them and the last: it must land
+  counted 84 appended and 44 skipped, with each event held once and every
+  earlier row kept, and the same call again is 128 skips that change
+  nothing. A capacity refusal of that call is reported under VT-24: on the
+  ingest path the call is the batch, as VT-36 already says of tags, and a
+  push of 128 events is what `PeerLimits::minimum` declares a peer takes.
+  Two new wrong stores fail it and nothing else: one that looks up the
+  first 64 identities of a call only, and one that caps a call at 64. Every
+  mounted ingest family runs it, so an adapter whose ingest refuses a
+  128-event call now fails (behaviour; CF-32). The SY-14 marker stays
+  `[DEFERRED]` until the live Neon measurement below is recorded.
+- `happenstance-neon`: SY-14's bound counted on the peer it was deferred for
+  (#139). `rotors_ingest_is_one_request_per_push_however_much_is_held` pushes
+  Kestrel Rotor's 1,840 events, 46 write groups of 40, through
+  `NeonSyncPeer` over the scripted transport: 16 pushes at the minimum
+  peer's 128 events, 16 requests, each the same five statements, and the
+  replay 16 again. `rotors_bulk_ingest_through_the_live_neon_peer_is_bounded`
+  is its `#[ignore]`d live twin, which `live-neon`'s library trio runs. It
+  seeds every third event first, asserts the counts and the 34-minute window,
+  and prints `SY14-MEASURE` lines. Tests only; no API change.
 - `happenstance-neon`: `NeonSyncPeer` and `NeonPeerError`, behind `sync`
   (#131). A `SyncPeer` whose far side is a Neon store reached over its HTTP
   endpoint, in **one SQL request per pull and one per push**: a pull is the

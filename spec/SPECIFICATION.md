@@ -1713,7 +1713,7 @@ and MUST refuse beyond it with `AppendError::ExceedsStoreLimit`.
 `[PROVISIONAL — falsified by a domain whose smallest indivisible unit of work
 exceeds 128 events; Kestrel Cold Chain's largest single conditioned group is
 under forty]`
-`Rule:` `store_accepts_the_guaranteed_minimum_batch_size`
+`Rule:` `store_accepts_the_guaranteed_minimum_batch_size`; and on the ingest path, where the call is the batch as VT-36 says of tags, `bulk_ingest_is_idempotent_in_bounded_round_trips` (`happenstance-sync-testkit`, #139), whose one call of 128 foreign events a store refusing it as over a capacity limit fails under this clause (`CapsTheCallBelowTheFloor`)
 `Cases:` E2E-35, E2E-36, E2E-39
 `Rejects:` an adapter that builds a multi-row `INSERT` with one parameter set per
 event and per tag and discovers `SQLITE_MAX_VARIABLE_NUMBER` at write time — that
@@ -7447,8 +7447,8 @@ the Kestrel Rotor bulk-ingest measurement: 1,840 events over one-shot HTTP insid
 a 34-minute window, against a store-level `EventId` uniqueness guarantee versus a
 per-event conditional append. Owning phase: the phase that builds the two peer
 adapters.]`
-Rule: `bulk_ingest_is_idempotent_in_bounded_round_trips` (new,
-`happenstance-sync-testkit`).
+Rule: `bulk_ingest_is_idempotent_in_bounded_round_trips` (`happenstance-sync-testkit`, #139, ingest family), which ingests VT-24's floor of 128 foreign events in seven groups as **one** call after a first call delivered every third of them and the last: the call must land counted 84 appended and 44 skipped, each event held once and every earlier row kept, and the same call again is 128 skips that change nothing. It fails a store that consults what it holds for the first 64 events of a call only (`LooksUpOneChunkOfIdentities`) and, under VT-24, one that refuses a call of more than 64 (`CapsTheCallBelowTheFloor`), both in `crates/happenstance-sync-testkit/tests/wrong_ingest_stores.rs`.
+The round trip a port can see is the `ingest` call; the requests an adapter spends inside it are its own to pin (CF-33): `happenstance-neon`'s `rotors_ingest_is_one_request_per_push_however_much_is_held` counts Rotor's 1,840 events at the minimum peer's 128 a push as 16 pushes of one request each, replay included, and `rotors_bulk_ingest_through_the_live_neon_peer_is_bounded` measures the same against the live endpoint.
 Cases: E2E-36, E2E-35.
 
 *Rejects:* all three shapes available against the port as it stands, which is why
@@ -10435,7 +10435,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-21 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_payload`, `append_reports_exceeded_store… | E2E-42 |
 | VT-22 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tag_count` | E2E-40 |
 | VT-23 | PROVISIONAL | `store_evaluates_a_query_at_the_guaranteed_minimum_item_count` | E2E-36, E2E-40 |
-| VT-24 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_batch_size` | E2E-35, E2E-36, E2E-39 |
+| VT-24 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_batch_size`, `bulk_ingest_is_idempotent_… | E2E-35, E2E-36, E2E-39 |
 | VT-25 | FROZEN | `append_reports_exceeded_store_limits` | E2E-35, E2E-42 |
 | VT-26 | FROZEN | compile test `query_items_is_not_constructible_downstream`; `condition_without… | E2E-40 |
 | VT-27 | FROZEN | compile-level; enforced by the wire tests, which would otherwise have a positi… | E2E-04, E2E-05, E2E-37, E2E-38 |
@@ -10575,7 +10575,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-11 | FROZEN | `redelivery_of_an_accepted_group_is_a_no_op` | E2E-33, E2E-34, E2E-36 |
 | SY-12 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-34, E2E-36 |
 | SY-13 | FROZEN | `identity_survives_a_tag_reordering_peer` † | E2E-33, E2E-34 |
-| SY-14 | DEFERRED | `bulk_ingest_is_idempotent_in_bounded_round_trips` † | E2E-36, E2E-35 |
+| SY-14 | DEFERRED | `bulk_ingest_is_idempotent_in_bounded_round_trips`, `rotors_ingest_is_one_requ… | E2E-36, E2E-35 |
 | SY-15 | FROZEN | `peer_conformance!` is invoked against a fixture peer whose transport asserts … | E2E-35, E2E-36 |
 | SY-16 | FROZEN | `resume_survives_a_dropped_peer_handle` † | E2E-35, E2E-36, E2E-44 |
 | SY-17 | FROZEN | the existing CLAUDE.md rule 4, checked by `happenstance-sync-testkit` compilin… | E2E-52, E2E-30 |
