@@ -555,3 +555,18 @@ fn reset_refusal_reasons_name_their_store_and_hold_no_whitespace_runs() {
         );
     }
 }
+
+/// SY-31's watermark rule (#143) on the buffered store: a runner's watermark
+/// kept under its reserved `sync/` id in one commit with a read-model row, and
+/// read back through a fresh connection.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn watermark_advances_transactionally_with_a_read_model()
+-> Result<(), happenstance_sync_testkit::Violation> {
+    happenstance_sync_testkit::watermark_rules::watermark_advances_transactionally_with_a_read_model(
+        async || PostgresProjectionFixture::new(),
+    )
+    .await?
+    .report("watermark_advances_transactionally_with_a_read_model");
+    Ok(())
+}

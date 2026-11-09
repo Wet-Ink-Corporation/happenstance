@@ -1207,7 +1207,7 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 /// module takes its own detector with it, and only a list written down
 /// elsewhere notices.
 ///
-/// The seven groups, and what each is the last guard on:
+/// The eight groups, and what each is the last guard on:
 ///
 /// * the `!Send` twins, including the positive control, which are the only
 ///   assertions that run on a target where `wasm-bindgen`'s
@@ -1227,12 +1227,18 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 ///   module that stopped compiling would leave that permission resting on
 ///   nothing;
 /// * the ingest store (#108, part F; behind `sync` since part E, which is why
-///   this row's selector passes `--features sync`): the seven ingest rules and
+///   this row's selector passes `--features sync`): the eight ingest rules and
 ///   the fixture's capability check, mounted in a `--lib` module, so it has no
 ///   `WASM_TARGETS` row to be held to the enumeration by; the unit cases the
 ///   store's atomicity rests on — the settle table, the throw that takes the
 ///   counter, one transaction per call, and the two claims refused before a
-///   row is written; and the public constructors from the object's state.
+///   row is written; and the public constructors from the object's state;
+/// * write groups (#420, SY-39): the six write-group rules on the same
+///   fixture, mounted beside the ingest family for the same reason; the
+///   migration that adds the two columns to a log from before them, once and
+///   to completion; a row from before them reading as a group of its own; and
+///   an ingested group named by its first landed row, which alone holds the
+///   guard.
 ///
 /// # Why the stamp needs four names rather than two
 ///
@@ -1286,6 +1292,7 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::ingest::tests::family::ingest_conformance::ingest_group_is_atomic_under_a_mid_group_fault",
     "event_store::ingest::tests::family::ingest_conformance::ingest_holds_the_call_to_its_tags_per_batch_ceiling",
     "event_store::ingest::tests::family::ingest_conformance::ingest_preserves_origin_identity",
+    "event_store::ingest::tests::family::ingest_conformance::ingest_preserves_the_recorded_time",
     "event_store::ingest::tests::family::ingest_conformance::ingest_validates_every_event_not_the_head",
     "event_store::ingest::tests::family::ingest_conformance::ingested_events_land_above_the_local_head",
     "event_store::ingest::transaction::tests::every_transaction_outcome_is_settled",
@@ -1297,6 +1304,38 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::ingest::tests::construction::a_store_from_object_state_ingests",
     "event_store::ingest::tests::construction::a_namespaced_store_from_object_state_ingests_into_its_namespace",
     "event_store::ingest::tests::construction::from_object_state_refuses_a_storage_without_transaction_sync",
+    "event_store::ingest::tests::family::write_group_conformance::an_append_reads_back_as_one_group",
+    "event_store::ingest::tests::family::write_group_conformance::an_ingested_group_keeps_its_boundary_and_guard",
+    "event_store::ingest::tests::family::write_group_conformance::compensation_joins_its_group",
+    "event_store::ingest::tests::family::write_group_conformance::a_group_after_a_redelivery_is_named_by_its_first_landed_row",
+    "event_store::ingest::tests::family::write_group_conformance::a_read_never_cuts_a_group",
+    "event_store::ingest::tests::family::write_group_conformance::pages_chain_on_first_and_end_with_nothing",
+    "event_store::write_group::tests::migrate_adds_both_columns_to_a_log_from_before_write_groups_once",
+    "event_store::write_group::tests::a_half_applied_migration_is_completed_by_the_next",
+    "event_store::write_group::read::tests::a_row_from_before_the_columns_reads_as_its_own_group",
+    "event_store::ingest::tests::groups::an_ingested_group_is_named_by_its_first_landed_row_and_holds_its_guard_there",
+    // The object as a sync peer over HTTP (#130): the request path, and the
+    // sync family mounted through it.
+    "sync_http::tests::sync_route_names_exactly_the_two_paths",
+    "sync_http::tests::every_class_round_trips_through_its_status",
+    "sync_http::tests::a_status_no_class_maps_to_reads_as_transient_or_stop",
+    "sync_http::tests::the_request_cap_is_the_batch_plus_the_allowance_and_saturates",
+    "event_store::ingest::tests::served::a_push_and_a_pull_through_requests_round_trip_byte_identical",
+    "event_store::ingest::tests::served::a_request_that_is_not_a_post_is_refused_with_405",
+    "event_store::ingest::tests::served::a_body_over_the_cap_is_refused_as_split_before_the_store",
+    "event_store::ingest::tests::served::a_declared_length_over_the_cap_is_refused_before_the_body_is_read",
+    "event_store::ingest::tests::served::a_post_with_no_body_answers_400",
+    "event_store::ingest::tests::served::a_foreign_token_answers_400_and_reads_back_as_stop",
+    "event_store::ingest::tests::served::sync_conformance::ingest_never_rejects",
+    "event_store::ingest::tests::served::sync_conformance::compensation_is_atomic_with_the_losing_event",
+    "event_store::ingest::tests::served::sync_conformance::event_id_order_is_identical_on_every_peer",
+    "event_store::ingest::tests::served::sync_conformance::peer_declares_its_own_limits",
+    "event_store::ingest::tests::served::sync_conformance::peer_takes_a_batch_at_its_declared_limits",
+    "event_store::ingest::tests::served::sync_conformance::every_refusal_states_its_class",
+    "event_store::ingest::tests::served::sync_conformance::nothing_waiting_means_the_next_pull_is_empty",
+    "event_store::ingest::tests::served::sync_conformance::ack_never_confirms_a_non_durable_event",
+    "event_store::ingest::tests::served::sync_conformance::push_envelope_preserves_group_boundaries",
+    "event_store::ingest::tests::served::sync_conformance::round_trip_preserves_the_whole_log",
 ];
 
 /// The runner that executes a `wasm-bindgen-test` harness.

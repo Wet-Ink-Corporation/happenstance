@@ -141,7 +141,7 @@ strength.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0001 | [`kb-decision-0001`](../decisions/0001-async-port-flavours.md) | Async ports in two flavours, Send and !Send | accepted | 0 | — |
 | ADR-0002 | [`kb-decision-0002`](../decisions/0002-crate-naming.md) | Prefixed crate names, with a parallel claim on eventum | **superseded** | 0 | superseded by `kb-decision-0005` |
-| ADR-0003 | [`kb-decision-0003`](../decisions/0003-opaque-payloads.md) | Opaque payloads in the contract crate | accepted (provisional) | 0 | — |
+| ADR-0003 | [`kb-decision-0003`](../decisions/0003-opaque-payloads.md) | Opaque payloads in the contract crate | accepted (provisional lifted by ADR-0106) | 0 | — |
 | ADR-0004 | [`kb-decision-0004`](../decisions/0004-edition-and-msrv.md) | Rust 2024 edition, MSRV 1.85 | accepted (amended, not superseded) | 0 | amended by `kb-decision-0029`, `kb-decision-0037` |
 | ADR-0005 | [`kb-decision-0005`](../decisions/0005-rename-to-happenstance.md) | Rename the project to happenstance, and make it the contract crate | accepted (partly superseded) | 0 | supersedes `kb-decision-0002`; partly superseded by `kb-decision-0006` |
 | ADR-0006 | [`kb-decision-0006`](../decisions/0006-bare-name-to-the-typed-layer.md) | The bare name goes to the typed layer; the contract becomes happenstance-core | accepted (partly superseded) | 0 | partly superseded by `kb-decision-0007` |
@@ -951,6 +951,68 @@ adapter clears with `TRUNCATE`. It supersedes nothing.
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
 | ADR-0102 | [`kb-decision-0102`](../decisions/0102-phase-18s-clauses-are-frozen.md) | Phase 18's eight clauses are frozen, and PS-9's and PS-24's evidence is repaired | accepted | 18 | — |
+
+## 2026-11-08: the `ProjectionStore` freeze accepts the async-flavour axis (#125), accepted
+
+ADR-0103 is written straight here with no intake step, and is **accepted** (owner, 2026-11-08,
+project thread). CF-25's portfolio check found `ProjectionStore`'s async-flavour row undischarged.
+This record accepts the risk by axis and port until a `!Send` projection adapter passes the
+projection suite. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0103 | [`kb-decision-0103`](../decisions/0103-projection-store-async-flavour-risk-accepted.md) | The ProjectionStore freeze accepts the Async flavour axis with no !Send adapter at its far end | accepted | 13 | — |
+
+## 2026-11-08: every answer names its responder, wire format 3 (#244), accepted
+
+ADR-0104 is written straight here with no intake step. The owner chose the mechanism on the
+2026-11-08 project-thread card, and accepted the record on another card the same day. `Pulled` and `Ack`
+gain a last `responder: Option<StoreId>`, `StoreSyncPeer` stamps its store's identity on every
+answer, and `wire::FORMAT_VERSION` goes from 2 to 3. It amends ADR-0097's message set and supersedes
+nothing. ADR-0103 is taken on another branch.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0104 | [`kb-decision-0104`](../decisions/0104-every-pull-and-ack-names-its-responder.md) | Every pulled and ack message names the store that answered, and the wire format is version 3 | accepted | 13 | — |
+
+## 2026-11-08: write groups are recorded per row (#420), accepted 2026-11-09
+
+ADR-0105 is written straight here with no intake step, and is **accepted 2026-11-09** (`wi-73ab4f`):
+the owner approved the shape (option A) on 2026-11-08 and accepted the record on 2026-11-09, after
+#420's three parts landed on every adapter. Every row records the lowest position its write put in and an ingested
+group's guard; `WriteGroupStore` reads them back, and SY-39 is minted provisional. It
+supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0105 | [`kb-decision-0105`](../decisions/0105-write-groups-are-recorded-per-row.md) | A store records each write's group on its rows, and a peer reads and pushes in those groups | accepted | 13 | — |
+
+## 2026-11-09: phase 13's clauses are frozen or re-dispositioned (#124, #128), accepted
+
+ADR-0107 is written straight here with no intake step, and is **accepted 2026-11-09** (`wi-164211`
+for sections 1 to 4, `wi-56271e` for section 5). Fourteen clauses freeze (VT-6, VT-9, VT-21, VT-24, SY-14, SY-18, SY-20, SY-22,
+SY-23, SY-27, SY-28, SY-30, SY-31, CF-40); SY-7 and SY-10 are renewed to `freeze-by-14` on the
+runner's adjudication hook; SY-29, SY-32 and WF-1 are confirmed against their experiments; VT-36
+moves to `freeze-by-14`; SY-35's Rule line is scoped (#431). SY-36, SY-37, SY-38 and CF-42 are
+frozen in section 5, each on the owner's separate yes, and SY-39 in section 6 with ADR-0105
+accepted (`wi-73ab4f`). It supersedes nothing.
+ADR-0103 and ADR-0106 are taken on other branches.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0107 | [`kb-decision-0107`](../decisions/0107-phase-13s-clauses-are-frozen.md) | Phase 13's clauses are frozen or re-dispositioned, and every deferred SY clause is settled or renewed | accepted | 13 | — |
+
+## 2026-11-08: ADR-0003 is no longer provisional (#126), accepted 2026-11-09
+
+ADR-0106 is written straight here with no intake step, and is **proposed** until the owner
+accepts it. ADR-0003's lift condition is met: a native SQLite store round-trips every payload
+byte for byte through two unlike real peers (the Durable Object over HTTP, `NeonSyncPeer`) and
+through Postgres, on CI. It supersedes nothing; ADR-0003's decision stands and its body is
+unchanged.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0106 | [`kb-decision-0106`](../decisions/0106-adr-0003-is-no-longer-provisional.md) | ADR-0003 is no longer provisional, because two unlike peers round-trip a payload byte for byte | accepted | 13 | — |
 
 ## Adding a row
 

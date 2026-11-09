@@ -19,7 +19,7 @@ one writer, the object's own turn is the transaction, and the consistency
 boundary a DCB query describes fits inside an object rather than across a
 cluster.
 
-> **Status: released since `0.2.0`, in the `0.5.1` release set, and the release
+> **Status: released since `0.2.0`, in the `0.6.0` release set, and the release
 > with the thinnest evidence of the four adapters.** Every
 > [`EventStore`](https://docs.rs/happenstance-core) body is real — `migrate`,
 > `append`, `head`, `contains_event_id` and `read` all execute SQL against the
@@ -196,9 +196,52 @@ built from the object's raw `DurableObjectState` rather than from `SqlStorage`:
 `CloudflareEventStore` first, as before the first append. The identity an ingest
 checks claims against is read from `store_meta` on every call. It turns on
 `happenstance-core`'s `serde` feature through `happenstance-sync`. The ingest
-family runs on `wasm32` under the gate's Node host, not yet under `workerd`.
-There is no runner (issue #244) and no network peer yet, so this is the port,
-not replication.
+family runs on `wasm32` under the gate's Node host and under `workerd`.
+
+`CloudflareIngestStore` also implements `WriteGroupStore` (#420, SY-39): it
+reads the log back in the writes that made it, one group per append and per
+ingested group with its compensation, each with the guard it arrived under,
+which is what a runner pushes and a store peer serves. `migrate` records them
+in two columns it adds to the event table where they are missing,
+`write_group` and `group_guard`; a row written before them reads as a group of
+its own. There is no schema marker, so an older build keeps opening a migrated
+object and writes rows that read as groups of one: deploy this build to every
+writer and peer of an object before it serves replication. The write-group
+family runs where the ingest family does.
+
+### The object as a sync peer over HTTP
+
+`happenstance_cloudflare::sync_http` (#130) is the object's side of a network
+peer: `serve_sync_request` answers a `POST` on `/sync/pull` or `/sync/push`
+by handing its body to `happenstance-sync`'s `serve_sync` over a
+`CloudflareSyncPeer`, a `StoreSyncPeer` whose two halves are the object's
+`CloudflareIngestStore`. Mount it in the object's `fetch`:
+
+```rust,ignore
+use happenstance_cloudflare::happenstance_sync::StoreSyncPeer;
+use happenstance_cloudflare::sync_http::{serve_sync_request, sync_route};
+
+// Inside `fetch`, after `migrate`, with `store` built by `from_object_state`.
+if let Some(route) = sync_route(&request.path()) {
+    let peer = StoreSyncPeer::new(store.clone(), store);
+    return serve_sync_request(&peer, route, request).await;
+}
+```
+
+A client is any HTTP library behind an `Exchange`, under a `RemoteSyncPeer`,
+sending postcard envelopes as `POST` bodies. The wire carries no error
+message, so a refusal travels as a status, and `status_for` and `class_for` are
+the one table both ends read: `Transient` 503, `Split` 413, `Park` 422, `Stop`
+400, with any other 5xx, 408 and 429 read back as `Transient` and every other
+status as `Stop`. A body longer than the peer's `max_batch_bytes` plus 1 MiB of
+envelope is refused with 413 before it is buffered. The limits are not on the
+wire either (ADR-0097): configure both ends alike.
+
+The sync conformance family runs against this handler on the gate's Node host
+and under `workerd`, local and deployed, and `harness/workerd` replicates a
+native SQLite store through a real object over HTTP in the same CI job. A
+Durable Object that is reset answers under a new `StoreId`, which the runner's
+incarnation check turns into a stopped edge.
 
 ## The limits this store declares
 

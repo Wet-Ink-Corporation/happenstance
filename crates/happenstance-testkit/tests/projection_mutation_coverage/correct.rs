@@ -53,7 +53,7 @@ use happenstance_core::{
     Authority, Checkpoint, CommitError, ProjectionId, ProjectionProbe, ProjectionStore, ResetError,
     SequencePosition,
 };
-use happenstance_testkit::{Capability, ProjectionFixture};
+use happenstance_testkit::{Capability, ProjectionFixture, Reopened};
 
 use crate::harness::ProjectionSubject;
 
@@ -452,6 +452,20 @@ pub(crate) trait Defect: 'static + Sized {
     fn release_the_connection(connection: &Cell<bool>) {
         connection.set(false);
     }
+
+    /// What survives a reopen of the medium.
+    ///
+    /// The durability seam, reached only from
+    /// [`ProjectionFixture::reopen`](happenstance_testkit::ProjectionFixture::reopen)
+    /// — which no rule calls except
+    /// `committed_rows_and_checkpoint_survive_a_reopen`, the one gated on
+    /// `REOPEN`. In this binary [`State`] *is* the medium: it outlives every
+    /// handle, and what a reopen discards is the process-level state around it
+    /// (the modelled connection and any armed fault, which
+    /// [`MutantFixture`]'s `reopen` resets itself). So the correct answer keeps
+    /// everything, and a defect that held part of its committed state in process
+    /// memory rather than on the medium says so by discarding it here.
+    fn survive_reopen(_state: &mut State) {}
 }
 
 // =====================================================================
@@ -839,6 +853,27 @@ impl<D: Defect> ProjectionFixture for MutantFixture<D> {
     // flag `commit` consults in place of its write, which is this binary's model
     // of the trigger or `CHECK` a real adapter would arm.
     const COMMIT_FAULT: Capability = Capability::SUPPORTED;
+
+    // Supported, for the reason the two above are: a fixture that declined it
+    // would make `committed_rows_and_checkpoint_survive_a_reopen` *skip*
+    // against every store here, and the stores written to lose a commit across
+    // a reopen could never be shown to fail it.
+    //
+    // CF-17 asks a fixture that declares it to discard process-level state over
+    // a medium that outlives it, and to state the mechanism. The medium is the
+    // shared `State` cell, which every handle and every reopen leaves in place;
+    // the process-level state is the modelled connection, released as a drained
+    // pool releases it, and any armed fault, which a restart disarms. What a
+    // defect held in process memory rather than on the medium it discards
+    // through `Defect::survive_reopen`.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
+    fn reopen(&self) -> impl Future<Output = Reopened> {
+        self.0.connection.set(false);
+        self.0.fault.set(false);
+        D::survive_reopen(&mut self.0.state.borrow_mut());
+        core::future::ready(Reopened::Discarded)
+    }
 
     fn arm_commit_fault(&self) -> impl Future<Output = ()> {
         self.0.arm();

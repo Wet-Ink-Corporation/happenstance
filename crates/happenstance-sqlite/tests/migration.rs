@@ -773,3 +773,197 @@ fn settings_report_what_the_connection_answered() {
     assert_eq!(settings.synchronous(), SYNCHRONOUS);
     assert!(settings.busy_timeout_ms() > 0);
 }
+
+/// A file as a version-1 build left it: migration 1's tables, the marker at 1,
+/// an identity, and one row written before write groups existed.
+///
+/// Written out here, rather than produced by the crate, because no build of the
+/// crate under test writes a version-1 file any more; the text is migration 1
+/// as published at `0.2.0`, which is frozen.
+fn version_1_file(path: &Path) {
+    raw(path)
+        .execute_batch(
+            "CREATE TABLE event (
+                position        INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type      TEXT    NOT NULL,
+                data            BLOB    NOT NULL,
+                metadata        BLOB,
+                tags            BLOB    NOT NULL,
+                origin_store    BLOB,
+                origin_position INTEGER,
+                recorded_at     INTEGER NOT NULL,
+                UNIQUE (origin_store, origin_position)
+            );
+            CREATE INDEX event_type_idx ON event(event_type, position);
+            CREATE TABLE event_tag (
+                tag        TEXT    NOT NULL,
+                position   INTEGER NOT NULL REFERENCES event(position),
+                event_type TEXT    NOT NULL,
+                PRIMARY KEY (tag, position)
+            ) WITHOUT ROWID;
+            CREATE TABLE tag_cardinality (
+                tag    TEXT    PRIMARY KEY,
+                events INTEGER NOT NULL
+            ) WITHOUT ROWID;
+            CREATE TABLE store_meta (
+                k TEXT PRIMARY KEY,
+                v BLOB NOT NULL
+            ) WITHOUT ROWID;
+            INSERT INTO store_meta (k, v) VALUES ('schema_version', 1);
+            INSERT INTO store_meta (k, v) VALUES ('store_id', X'0123456789ABCDEF0123456789ABCDEF');
+            INSERT INTO event (event_type, data, metadata, tags, origin_store, origin_position, recorded_at)
+                VALUES ('Legacy', X'7B7D', NULL, X'1F', X'0123456789ABCDEF0123456789ABCDEF', 1, 0);",
+        )
+        .unwrap();
+}
+
+/// The marker the file carries, read through a raw connection.
+fn marker(path: &Path) -> i64 {
+    raw(path)
+        .query_row(
+            "SELECT CAST(v AS INTEGER) FROM store_meta WHERE k = 'schema_version'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap()
+}
+
+/// #420 — migration 2 adds the write-group columns to a version-1 file, raises
+/// its marker to 2 in the same transaction, and leaves the rows it held alone.
+///
+/// A second open is the half that fails if the `ALTER` is not gated on the
+/// marker: `ADD COLUMN` has no `IF NOT EXISTS`, so running it again refuses
+/// with a duplicate column.
+#[test]
+fn migration_2_adds_write_groups_to_a_version_1_file() {
+    let db = TempDb::new("migration-2");
+    version_1_file(db.path());
+
+    let store = SqliteEventStore::open(db.path()).unwrap();
+    drop(store);
+    let reopened = SqliteEventStore::open(db.path())
+        .expect("a second open of the migrated file must not run the ALTER again");
+
+    assert_eq!(
+        reopened.store_id().to_bytes()[0],
+        0x01,
+        "the identity survives"
+    );
+    let names: Vec<String> = columns(&raw(db.path()), "event")
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert!(
+        names.iter().any(|name| name == "write_group")
+            && names.iter().any(|name| name == "group_guard"),
+        "migration 2 did not add the write-group columns; got {names:?}"
+    );
+    assert_eq!(marker(db.path()), 2, "the marker was not raised to 2");
+    assert_eq!(SCHEMA_VERSION, 2);
+    let legacy: (i64, Option<i64>) = raw(db.path())
+        .query_row(
+            "SELECT count(*), max(write_group) FROM event WHERE event_type = 'Legacy'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        legacy,
+        (1, None),
+        "the legacy row must survive with no write group: nothing recorded which rows one call wrote"
+    );
+}
+
+/// #420 — `new` never migrates, so on a version-1 file it refuses with a
+/// typed error naming both versions, rather than wrapping the file and failing
+/// the first append with `no such column: write_group`. The file is left as it
+/// was, and `open_on`, the documented remedy, then migrates it.
+///
+/// The wrong implementation it rejects is the check `new` had: only
+/// `version > SCHEMA_VERSION`, which accepts every older file.
+#[test]
+fn new_refuses_a_version_1_file_until_it_is_migrated() {
+    let db = TempDb::new("new-v1");
+    version_1_file(db.path());
+
+    let refused = SqliteEventStore::new(raw(db.path()))
+        .expect_err("`new` must refuse a file migration 2 has not reached");
+    assert!(
+        matches!(
+            refused,
+            SqliteEventStoreError::SchemaNeedsMigration {
+                found: 1,
+                required: SCHEMA_VERSION,
+                ..
+            }
+        ),
+        "expected SchemaNeedsMigration {{ found: 1, required: {SCHEMA_VERSION} }}, got {refused:?}"
+    );
+    assert_eq!(marker(db.path()), 1, "`new` must not migrate the file");
+
+    let migrated = SqliteEventStore::open_on(raw(db.path()))
+        .expect("`open_on` migrates the file `new` refused");
+    drop(migrated);
+    assert_eq!(marker(db.path()), 2);
+    SqliteEventStore::new(raw(db.path())).expect("`new` accepts the migrated file");
+}
+
+/// #420 — a fresh file takes the same path as an old one and lands at 2.
+#[test]
+fn a_fresh_file_is_created_at_version_2_with_write_groups() {
+    let db = TempDb::new("fresh-v2");
+    let store = SqliteEventStore::open(db.path()).unwrap();
+    drop(store);
+
+    assert_eq!(marker(db.path()), 2);
+    let names: Vec<String> = columns(&raw(db.path()), "event")
+        .into_iter()
+        .map(|(name, _)| name)
+        .collect();
+    assert!(
+        names.iter().any(|name| name == "write_group"),
+        "got {names:?}"
+    );
+}
+
+/// #420 — every row of one append carries the position of the append's first
+/// row as its write group, and only that first row may carry a guard, which a
+/// local append never has.
+#[tokio::test]
+async fn an_append_stamps_its_rows_with_one_write_group() {
+    let db = TempDb::new("append-stamps");
+    let store = SqliteEventStore::open(db.path()).unwrap();
+
+    let last = store
+        .append(&[event("One"), event("Two"), event("Three")], None)
+        .await
+        .unwrap();
+    store.append(&[event("Four")], None).await.unwrap();
+
+    let stamped: Vec<(i64, Option<i64>, Option<Vec<u8>>)> = {
+        let connection = raw(db.path());
+        let mut statement = connection
+            .prepare("SELECT position, write_group, group_guard FROM event ORDER BY position")
+            .unwrap();
+        let rows = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap();
+        rows.map(Result::unwrap).collect()
+    };
+    let positions: Vec<i64> = stamped.iter().map(|(position, ..)| *position).collect();
+    let [first, _, third, fourth] = positions[..] else {
+        panic!("four rows were appended; the file holds {stamped:?}");
+    };
+    assert_eq!(i64::try_from(last.get()).unwrap(), third);
+    let groups: Vec<Option<i64>> = stamped.iter().map(|(_, group, _)| *group).collect();
+    assert_eq!(
+        groups,
+        [Some(first), Some(first), Some(first), Some(fourth)]
+    );
+    let guards: Vec<Option<&[u8]>> = stamped.iter().map(|(.., guard)| guard.as_deref()).collect();
+    assert_eq!(
+        guards,
+        [None, None, None, None],
+        "a local append stored a guard"
+    );
+}

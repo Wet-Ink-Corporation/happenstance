@@ -65,7 +65,7 @@ use happenstance_sqlite::projection_store::{
 };
 use happenstance_sqlite::rusqlite;
 use happenstance_sqlite::rusqlite::types::Value;
-use happenstance_testkit::{Capability, ProjectionFixture};
+use happenstance_testkit::{Capability, ProjectionFixture, Reopened};
 
 /// One fixture instance is **one temporary SQLite file**; each `connect` is one
 /// more real connection onto it; two instances share nothing.
@@ -173,6 +173,13 @@ impl ProjectionFixture for SqliteProjectionFixture {
     /// against the first adapter in this workspace able to answer it.
     const COMMIT_FAULT: Capability = Capability::SUPPORTED;
 
+    /// Supported, and the medium is a real file: a SQLite database outlives
+    /// every connection onto it, so discarding every handle and connecting
+    /// again reads back exactly what was committed. The mechanism, which CF-17
+    /// asks the fixture to state, is [`reopen`](ProjectionFixture::reopen)'s,
+    /// and it is the event-store fixture's in `tests/support/mod.rs`.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
     /// One more real connection onto this fixture's file.
     ///
     /// Genuinely `async` work rather than a refcount bump: it opens a file,
@@ -187,6 +194,37 @@ impl ProjectionFixture for SqliteProjectionFixture {
             .expect("the fixture's handle list was poisoned")
             .push(store.clone());
         store
+    }
+
+    /// Closes every connection this fixture opened, and leaves the file.
+    ///
+    /// Two steps, and only the first is the reopen:
+    ///
+    /// 1. **Every parked handle is dropped**, which closes its
+    ///    `rusqlite::Connection`. The rule drops its own handle before calling
+    ///    this, so afterwards nothing in the process holds the database open,
+    ///    and the next `connect` starts from what is on disk.
+    /// 2. **The write-ahead log is checkpointed and truncated.** This is
+    ///    housekeeping, not part of the evidence: frames in the `-wal` sidecar
+    ///    are already committed state, and a fresh connection would read them
+    ///    either way. Folding them into the main file only tidies the sidecar,
+    ///    so the reopen starts from one file.
+    ///
+    /// The file itself is never deleted or recreated: a reopen that did would
+    /// make `committed_rows_and_checkpoint_survive_a_reopen` fail for the wrong
+    /// reason, and one that recreated it *with* the rows would make it vacuous.
+    async fn reopen(&self) -> Reopened {
+        self.handles
+            .lock()
+            .expect("the fixture's handle list was poisoned")
+            .clear();
+
+        let connection = self.raw_connection();
+        connection
+            .pragma_update(None, "wal_checkpoint", "TRUNCATE")
+            .expect("the write-ahead log could not be checkpointed");
+        drop(connection);
+        Reopened::Discarded
     }
 
     /// Arms a trigger that aborts the **checkpoint** half of the next commit.
@@ -664,4 +702,18 @@ async fn a_newer_projection_schema_is_refused() {
             }
         ),
     }
+}
+
+/// SY-31's watermark rule (#143), over the same fixture the projection suite
+/// runs on: a runner's watermark kept under its reserved `sync/` id, in one
+/// commit with a read-model row, and read back through a fresh connection.
+#[tokio::test]
+async fn watermark_advances_transactionally_with_a_read_model()
+-> Result<(), happenstance_sync_testkit::Violation> {
+    happenstance_sync_testkit::watermark_rules::watermark_advances_transactionally_with_a_read_model(
+        async || SqliteProjectionFixture::new(),
+    )
+    .await?
+    .report("watermark_advances_transactionally_with_a_read_model");
+    Ok(())
 }

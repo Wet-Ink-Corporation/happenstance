@@ -238,13 +238,13 @@
 //!
 //! ```toml
 //! [dependencies]
-//! happenstance-core = "0.5"
+//! happenstance-core = "0.6"
 //!
 //! [features]
 //! conformance = ["happenstance-core/conformance"]
 //!
 //! [dev-dependencies]
-//! happenstance-testkit = "=0.5.1"
+//! happenstance-testkit = "=0.6.0"
 //! tokio = { version = "1", features = ["macros", "rt"] }
 //! ```
 //!
@@ -387,7 +387,7 @@
 //! | Concurrency | racing appends with overlapping conditions — exactly one wins. The **opt-in** third family adds contention on real threads: one winner of N contenders, K disjoint boundaries admitting exactly K commits, positions unique under concurrent appends, `append` returning the caller's own last position rather than the head, and a reader that never sees a partial batch |
 //! | Re-entrancy | two `append` futures on one handle both complete and exactly one wins; a live read stream does not block an append |
 //! | Position visibility | two `append` futures interleaved by hand on one thread: nothing becomes visible below a position a reader has already observed |
-//! | Projections (a second port, a fourth family) | a commit advances the projection's checkpoint to the position it was given, read back through a fresh handle; and the read-model write and the checkpoint write become durable **together or not at all**, never one — the invariant `ProjectionStore` exists for. All eighteen rules §4.11 assigns to an adapter's own suite, including `fresh_projection_has_no_checkpoint` — PS-38's second sentence, which ADR-0030 minted rather than widening `[FROZEN]` PS-19 to reach it — and `projection_ids_round_trip_by_bytes`, PS-39's, which holds a store to keying a checkpoint on the id's exact bytes |
+//! | Projections (a second port, a fourth family) | a commit advances the projection's checkpoint to the position it was given, read back through a fresh handle; and the read-model write and the checkpoint write become durable **together or not at all**, never one — the invariant `ProjectionStore` exists for — and, behind `REOPEN`, that both survive every handle being dropped and the storage reopened. All nineteen rules §4.11 assigns to an adapter's own suite, including `fresh_projection_has_no_checkpoint` — PS-38's second sentence, which ADR-0030 minted rather than widening `[FROZEN]` PS-19 to reach it — and `projection_ids_round_trip_by_bytes`, PS-39's, which holds a store to keying a checkpoint on the id's exact bytes |
 //!
 //! [spec]: https://dcb.events/specification/
 //!
@@ -482,9 +482,9 @@ mod suite;
 
 pub use contract::{
     Armed, Capability, Fixture, NO_BATCH_READ_PATH, NO_BATCH_READ_PATH_REASON, NO_CEILING_REASON,
-    NO_STORE_LIMITS, ProjectionFixture, RuleOutcome, Settled, UNSTATED_COMMIT_FAULT,
-    UNSTATED_HELD_ABOVE_FRONTIER, UNSTATED_MID_BATCH_FAULT, UNSTATED_PROJECTION_SECOND_HANDLE,
-    UNSTATED_READ_FAULT, UNSTATED_RESET_REFUSAL,
+    NO_STORE_LIMITS, ProjectionFixture, Reopened, RuleOutcome, Settled, UNSTATED_COMMIT_FAULT,
+    UNSTATED_HELD_ABOVE_FRONTIER, UNSTATED_MID_BATCH_FAULT, UNSTATED_PROJECTION_REOPEN,
+    UNSTATED_PROJECTION_SECOND_HANDLE, UNSTATED_READ_FAULT, UNSTATED_RESET_REFUSAL,
 };
 pub use faulty::{FaultyStore, FaultyStoreError, SendFaultyStore};
 #[cfg(feature = "memory")]

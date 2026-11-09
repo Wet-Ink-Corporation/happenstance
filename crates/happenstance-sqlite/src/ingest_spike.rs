@@ -83,6 +83,22 @@ impl happenstance_sync::SendIngestStore for SqliteEventStore {
     }
 }
 
+/// The log in the writes that made it (SY-39), from the columns migration 2
+/// added: what a runner pushes from and a `StoreSyncPeer` serves a pull from.
+/// The `Send` flavour, for the reason the impl above gives.
+#[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
+impl happenstance_sync::SendWriteGroupStore for SqliteEventStore {
+    type Error = SqliteEventStoreError;
+
+    async fn read_groups(
+        &self,
+        after: Option<happenstance_core::SequencePosition>,
+        max_events: core::num::NonZeroUsize,
+    ) -> Result<happenstance_sync::GroupPage, Self::Error> {
+        self.read_write_groups(after, max_events)
+    }
+}
+
 /// SY-36's class for each way this adapter fails.
 ///
 /// Exhaustive over this crate's own enum, with no wildcard, so a new variant
@@ -110,10 +126,13 @@ impl Classify for SqliteEventStoreError {
             | Self::StoredEventType(_)
             | Self::StoredTag(_)
             | Self::UnsupportedSchemaVersion { .. }
+            | Self::SchemaNeedsMigration { .. }
             | Self::MissingIdentity
             | Self::MalformedIdentity { .. }
             | Self::IdentityMoved { .. }
             | Self::UnstampedEvent { .. }
+            | Self::StoredGuard { .. }
+            | Self::GroupOrder(_)
             | Self::CorruptTags => FailureClass::Stop,
         }
     }
@@ -1037,6 +1056,13 @@ mod tests {
 
         happenstance_sync_testkit::ingest_store_conformance!(
             mod_name = ingest_conformance,
+            fixture = super::SqliteIngestFixture::new()
+        );
+
+        // The write-group family (SY-39) on the same fixture: the store a
+        // runner pushes from and a `StoreSyncPeer` pulls from.
+        happenstance_sync_testkit::write_group_store_conformance!(
+            mod_name = write_group_conformance,
             fixture = super::SqliteIngestFixture::new()
         );
     }

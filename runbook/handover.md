@@ -12,7 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/project-thread-m9xoqd`, cut from `main` at `301d8213`. 2026-11-08.
+`claude/p13-release`, cut from `claude/p13-exit` at `48af8178`, with `origin/main` (#456)
+and `claude/p13-exit`'s `353eea88` merged in. 2026-11-09.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -20,35 +21,40 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.5.1` is released** (2026-11-08; tag `v0.5.1` on `68baaecc`, all nine crates on
-crates.io and docs.rs). It changes no public API: the
-testkit's rustdoc builds under its default features again (#396) and neon's with
-`--no-default-features` (#409), the gate builds the testkit's docs that way (#412), and
-the rest is documentation, tests and an experiment (#381, #389, #397, #398, #400, #401).
+**Phase 13 is done** on `phase-13`, and this branch is its `0.6.0` release commit:
+`[Unreleased]` becomes `[0.6.0] — 2026-11-09` under a summary that marks it breaking from
+`0.5.x`, with a `0.6.0` trace of eleven hand rows (wire format 3 and `responder`, the three
+schema moves, the two identity refusals, and the new rules in both testkits). All nine
+crates, the workspace requirements, the sync-testkit's pin, the testkit's recipe pins and
+the six examples are at `0.6.0`; `Cargo.lock` and the three off-workspace lockfiles move
+only the path crates. Status lines, install lines (`"0.6"`), SECURITY's table, the site's
+roadmap card and reference table, and the `0.6.0` status row follow.
 
-**`0.5.0` is released** (2026-11-07; all nine crates on crates.io and docs.rs). Phases
-0–12, 15–17b and 18 are done. [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md)
-froze phase 18's clauses; `cargo xtask spec-trace` is the authority on the counts. What
-remains is sequenced in [`roadmap.md`](roadmap.md): sync (13) and retention (14), then
-`1.0.0` (21).
+**`0.5.1` is the latest on crates.io** (2026-11-08). Phases 0–13, 15–17b and 18 are done.
+What remains is sequenced in [`roadmap.md`](roadmap.md): retention (14), then `1.0.0` (21).
 
-**Tag the release PR's merge commit on `main`**, not a later `main`. Cloud sessions
-cannot push tags; the owner pushes them.
+**`0.6.0` is tagged on `main`, at `phase-13` → `main`'s merge commit**, as `0.5.0` was at
+#403's: the release PR merges into `phase-13`, and `release.yml` publishes only a tag on
+`main`, then creates the GitHub release from the tag's `## [0.6.0]` section
+(`scripts/release-notes.sh`, #456). Cloud sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
-The `0.5.1` release PR, from `claude/project-thread-m9xoqd` into `main`.
+`claude/p13-exit` (#459) and the `0.6.0` release PR (#460) are merged into `phase-13`.
+`claude/p13-upgrade-guide` adds `docs/upgrading-to-0-6.md`, the owner's request of
+2026-11-09, on the `0.5.0` precedent; its PR into `phase-13` is not opened yet.
 
 ## Next action
 
-1. The owner merges the `0.5.1` release PR. Before tagging, run `cargo semver-checks
-   check-release --workspace --baseline-version 0.5.0 --release-type minor` on its merge
-   commit (a `0.x` patch is checked as a minor); it should report nothing. Then tag that
-   merge commit (`git tag -a v0.5.1 <merge-sha> -m "0.5.1"`, then push the tag);
-   `release.yml` publishes from the tag.
-2. Phase 13 (#64). It inherits SY-21's `convergent_projection_cannot_observe_local_position`,
-   declared `Scheduled` in `UNRESOLVABLE_RULE_NAMES`; write it beside #141, and the entry
-   goes stale on purpose.
+1. The owner merges the upgrade guide PR into `phase-13`.
+2. `phase-13` → `main`. On its merge commit run `cargo semver-checks check-release
+   --workspace --baseline-version 0.5.1 --release-type minor`; any lint no trace row
+   covers becomes a **T** row in the `0.6.0` trace before the tag.
+3. Tag `v0.6.0` on that merge commit. Check that the GitHub release job read the
+   `## [0.6.0]` section.
+4. On the merge, close #64, #108, #117, #130, #131 and #244, whose PRs merged into
+   `phase-13` and so closed nothing.
+5. Phase 14 (#65). It owns SY-7 and SY-10 (#450 first, then #441), SY-32 and VT-36.
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
@@ -56,15 +62,24 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- The `0.5.1` release PR and the `v0.5.1` tag.
-- Protected files agent sessions may not edit: `CLAUDE.md`'s gate enumeration omits the
-  testkit default-features doc build #412 added, and `CLAUDE.md:440-443` and
-  `.github/ISSUE_TEMPLATE/bug_report.yml:32-33` still describe `unstable-projection` as
-  current.
+- #459, the `0.6.0` release PR, `phase-13` → `main`, the semver-checks run and the
+  `v0.6.0` tag.
+- No `docs/upgrading-to-0-6.md` was written: the `0.5` guide's precedent registers it in
+  `xtask/src/narrative.rs`, which the release commit does not touch. The CHANGELOG
+  summary and trace carry the upgrade steps. Write the guide in a follow-up, or confirm
+  the trace is enough for a release whose breaks are wire and schema rather than code.
+- SY-21's `convergent_projection_cannot_observe_local_position` was not written at phase
+  13: its Rule line says "phase 13 adds" it and `spec_trace.rs` still declares it
+  `Scheduled` for phase 13. Write it, or reschedule it with a follow-up issue.
+- Ten `[FROZEN]` `SY` clauses name a † rule that exists nowhere in the tree (SY-3, SY-6,
+  SY-9, SY-13, SY-16, SY-19, SY-26, SY-33, SY-34, SY-35), and `spec-trace`'s check 4 reads
+  no sync suite, so nothing fails on it. A follow-up decides whether check 4 reads
+  `happenstance-sync-testkit` now that it exists.
+- §1.6 now reads `SyncPeer` as **Frozen at phase 13**, which is what `spec-trace`'s CF-25
+  walk already treated it as. Confirm or reword.
 - Calls taken *as recommended* while the owner was asked, still unconfirmed: #101 O1–O3,
-  #103 O1(a), #118's schema call, and #123 O1(B)/O2. No freeze depends on them (ADR-0102).
-- #123 left phase 13 a crate-boundary call: `happenstance-sync-testkit` depending on
-  `happenstance` for #141.
+  #103 O1(a), #118's schema call, and #123 O1(B)/O2.
+- Follow-ups filed overnight and not yet scheduled: #441, #448, #450–#455.
 - Defaults in force: `trait-variant` keeps its caret (ADR-0092); new CI jobs are not
   required checks.
 
@@ -86,6 +101,8 @@ record, and the owner.
 - GitHub Issues is the tracker; exit criteria stay in the phase files — ADR-0088, D-5.
 - Unattended sessions self-merge on green unless `door:one-way` — `wi-1fde8c`.
 - Ingest is unconditional, with compensation — SY-1 – SY-7.
+- Phase 13's nineteen clauses are frozen; SY-7 and SY-10 wait on the adjudication hook —
+  ADR-0107, ADR-0105, ADR-0106.
 - The projection port is frozen — ADR-0063.
 - Phase 18's eight clauses are frozen, and the fan-out runner catches nothing —
   ADR-0102, ADR-0101.

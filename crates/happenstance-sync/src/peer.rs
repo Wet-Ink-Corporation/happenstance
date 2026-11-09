@@ -52,7 +52,7 @@
 use alloc::boxed::Box;
 use alloc::vec::Vec;
 
-use happenstance_core::{AppendCondition, EventId};
+use happenstance_core::{AppendCondition, EventId, StoreId};
 
 use crate::identity::{ReplicatedEvent, Watermark};
 
@@ -164,20 +164,20 @@ pub trait SyncPeer {
 /// worth naming at the call site, and a tuple of a batch and a token invites
 /// exactly the transposition it cannot catch.
 ///
-/// [`new`](Self::new) says [`Waiting::Unknown`], which costs a runner one more
-/// pull and is never a lie. A peer that can tell, inside the same round trip,
-/// whether anything lies past its token says so with
-/// [`with_waiting`](Self::with_waiting).
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+/// [`new`](Self::new) says [`Waiting::Unknown`] and names no responder, neither a lie;
+/// [`with_waiting`](Self::with_waiting) and [`with_responder`](Self::with_responder) say more.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[non_exhaustive]
 pub struct Pulled<R> {
     /// The events, in the far side's forwarding order.
     pub batch: PushBatch,
     /// Where to resume the next `pull` from.
     pub resume: R,
-    /// What the far side still holds past `resume` (SY-37). Declared last:
-    /// postcard is positional, and the two fields above keep their places.
+    /// What the far side still holds past `resume` (SY-37). After the two
+    /// fields above: postcard is positional, and they keep their places.
     pub waiting: Waiting,
+    /// The store incarnation that answered, if the far side has one (ADR-0104). Declared last.
+    pub responder: Option<StoreId>,
 }
 
 /// A batch of events crossing the boundary, decomposed into the groups that
@@ -251,24 +251,24 @@ impl EventGroup {
 }
 
 /// What the far side did with a [`push`](SyncPeer::push).
-#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 #[non_exhaustive]
 pub struct Ack {
     /// How many events the far side appended, excluding ones it already held.
     pub appended: u64,
     /// How many events the far side already held and skipped.
     ///
-    /// Re-delivery is a no-op, not an error: a peer *will* see the same event
-    /// more than once, and the count is here so a runner can tell a healthy
-    /// overlap from a resume token that is not advancing.
+    /// Re-delivery is a no-op, not an error: a peer *will* see the same event more than
+    /// once, and the count lets a runner tell a healthy overlap from a stuck resume token.
     pub skipped: u64,
     /// What the far side has now durably seen, per origin store.
     ///
-    /// A confirmation, deliberately **not** an event. Writing "peer X has seen
-    /// up to Y" into the log would make every confirmation replicable, and two
-    /// peers confirming each other's confirmations is a log that grows without
-    /// anyone doing anything.
+    /// A confirmation, deliberately **not** an event. Writing "peer X has seen up to Y" into
+    /// the log would make every confirmation replicable, and two peers confirming each other's
+    /// confirmations is a log that grows without anyone doing anything.
     pub confirmed: Watermark,
+    /// The store incarnation that answered, if the far side has one (ADR-0104). Declared last.
+    pub responder: Option<StoreId>,
 }
 
 /// What a peer can accept.
@@ -525,13 +525,14 @@ impl Waiting {
 // keep their numbers.
 impl<R> Pulled<R> {
     /// Pairs a batch with the token that follows it, saying
-    /// [`Waiting::Unknown`].
+    /// [`Waiting::Unknown`] and naming no [`responder`](Self::responder).
     #[must_use]
     pub const fn new(batch: PushBatch, resume: R) -> Self {
         Self {
             batch,
             resume,
             waiting: Waiting::Unknown,
+            responder: None,
         }
     }
 
@@ -545,13 +546,126 @@ impl<R> Pulled<R> {
         self.waiting = waiting;
         self
     }
+
+    /// Names the store incarnation that answered this pull (ADR-0104).
+    ///
+    /// A peer that answers from a store of its own — a
+    /// [`StoreSyncPeer`](crate::StoreSyncPeer) — says which, so a runner that
+    /// sees the name change between two answers on one relationship knows the
+    /// far side was restored or re-minted under a new
+    /// [`StoreId`] (VT-6). A peer with no store of its own keeps calling
+    /// [`new`](Self::new), and says nothing rather than something false.
+    #[must_use]
+    pub const fn with_responder(mut self, responder: StoreId) -> Self {
+        self.responder = Some(responder);
+        self
+    }
+}
+
+// `Ack`'s builder, declared here for the reason `Pulled`'s constructors are:
+// the lines above keep their numbers.
+impl Ack {
+    /// Names the store incarnation that took this push (ADR-0104).
+    ///
+    /// [`Ack::default`] names none, which is what a peer with no store of its
+    /// own says. A peer that ingests into a store says which, so a runner can
+    /// tell that the far side's [`confirmed`](Self::confirmed) marks were
+    /// written by a different incarnation from the last answer's: confirmations
+    /// alone cannot say that, because the next push raises them again.
+    #[must_use]
+    pub const fn with_responder(mut self, responder: StoreId) -> Self {
+        self.responder = Some(responder);
+        self
+    }
+}
+
+// The read side of `Pulled` and `Ack`, written out rather than derived, for
+// one field and below the lines the specification cites.
+//
+// A derived `Deserialize` reads a missing `Option` key as `None`. For
+// `responder` that would read a body with no key, in JSON, as "the far side
+// has no store of its own" — a claim nobody made — so the key is required:
+// `null` when there is no responder, present always (ADR-0104). Postcard is
+// positional and requires the trailing bytes already. Each shadow struct keeps
+// its type's field order, which postcard reads by, and its name, which errors
+// report.
+
+/// Reads `responder` as an ordinary `Option`. Naming a function at all is the
+/// point: a field with `deserialize_with` and no `default` is a missing-field
+/// error when its key is absent, rather than `None`.
+fn required_responder<'de, D>(deserializer: D) -> Result<Option<StoreId>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    <Option<StoreId> as serde::Deserialize>::deserialize(deserializer)
+}
+
+/// [`Pulled`]'s fields as the wire carries them.
+#[derive(serde::Deserialize)]
+#[serde(rename = "Pulled")]
+struct PulledFields<R> {
+    batch: PushBatch,
+    resume: R,
+    waiting: Waiting,
+    #[serde(deserialize_with = "required_responder")]
+    responder: Option<StoreId>,
+}
+
+impl<'de, R> serde::Deserialize<'de> for Pulled<R>
+where
+    R: serde::Deserialize<'de>,
+{
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let PulledFields {
+            batch,
+            resume,
+            waiting,
+            responder,
+        } = PulledFields::deserialize(deserializer)?;
+        Ok(Self {
+            batch,
+            resume,
+            waiting,
+            responder,
+        })
+    }
+}
+
+/// [`Ack`]'s fields as the wire carries them.
+#[derive(serde::Deserialize)]
+#[serde(rename = "Ack")]
+struct AckFields {
+    appended: u64,
+    skipped: u64,
+    confirmed: Watermark,
+    #[serde(deserialize_with = "required_responder")]
+    responder: Option<StoreId>,
+}
+
+impl<'de> serde::Deserialize<'de> for Ack {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let AckFields {
+            appended,
+            skipped,
+            confirmed,
+            responder,
+        } = AckFields::deserialize(deserializer)?;
+        Ok(Self {
+            appended,
+            skipped,
+            confirmed,
+            responder,
+        })
+    }
 }
 
 #[cfg(test)]
 mod waiting_tests {
     use core::num::NonZeroU64;
 
-    use super::{Pulled, PushBatch, Waiting};
+    use happenstance_core::StoreId;
+
+    use super::{Ack, Pulled, PushBatch, Waiting};
 
     #[test]
     fn counted_zero_is_nothing() {
@@ -585,6 +699,44 @@ mod waiting_tests {
                 batch: PushBatch::empty(),
                 resume: 7_u8,
                 waiting: Waiting::Nothing,
+                responder: None,
+            }
+        );
+    }
+
+    /// A peer that did not say which store answered names none; a default
+    /// that named one would be a claim nobody made.
+    #[test]
+    fn pulled_new_and_ack_default_name_no_responder() {
+        assert_eq!(Pulled::new(PushBatch::empty(), 7_u8).responder, None);
+        assert_eq!(Ack::default().responder, None);
+    }
+
+    #[test]
+    fn with_responder_replaces_only_responder() {
+        let store = StoreId::from_bytes([9; 16]);
+        let pulled = Pulled::new(PushBatch::empty(), 7_u8)
+            .with_waiting(Waiting::Nothing)
+            .with_responder(store);
+        let ack = Ack {
+            appended: 3,
+            ..Ack::default()
+        };
+
+        assert_eq!(
+            pulled,
+            Pulled {
+                batch: PushBatch::empty(),
+                resume: 7_u8,
+                waiting: Waiting::Nothing,
+                responder: Some(store),
+            }
+        );
+        assert_eq!(
+            ack.clone().with_responder(store),
+            Ack {
+                responder: Some(store),
+                ..ack
             }
         );
     }

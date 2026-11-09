@@ -8,7 +8,8 @@ use happenstance_core::{
     Event, EventId, EventStore, EventType, RecordedAt, SequencePosition, StoreId, StoreLimit, Tag,
     Tags,
 };
-use happenstance_sync::{Classify, FailureClass, IngestStore, ReplicatedEvent};
+use happenstance_sync::write_group::{GroupOrderError, GroupPageBuilder, GuardCodecError};
+use happenstance_sync::{Classify, FailureClass, IngestStore, ReplicatedEvent, WriteGroupStore};
 
 use super::{CloudflareIngestStore, StoredOrigin};
 use crate::event_store::{Ceilings, CloudflareEventStore, CloudflareEventStoreError};
@@ -262,10 +263,45 @@ fn cloudflare_errors_state_their_class() {
             CloudflareEventStoreError::StoredPosition { raw: 0 },
             FailureClass::Stop,
         ),
+        // The write-group read's two (#420): a guard column no build of the
+        // codec wrote, and groups stored out of order, each a damaged object
+        // that fails the same way again.
+        (
+            CloudflareEventStoreError::StoredGuard {
+                first: position,
+                source: GuardCodecError::Empty,
+            },
+            FailureClass::Stop,
+        ),
+        (
+            CloudflareEventStoreError::GroupOrder(misordered()),
+            FailureClass::Stop,
+        ),
     ];
     for (error, class) in rows {
         assert_eq!(error.class(), class, "{error:?}");
     }
+}
+
+/// The refusal a page builder gives for a group offered after a later one,
+/// which is the only way to make one: the type is `#[non_exhaustive]`.
+fn misordered() -> GroupOrderError {
+    let row = |position: u64| {
+        let position = SequencePosition::new(position).expect("nonzero");
+        let event = Event::new("Grouped", &b""[..]).expect("a valid event type");
+        let id = EventId::new(StoreId::from_bytes([0x33; 16]), position);
+        (
+            position,
+            ReplicatedEvent::new(id, RecordedAt::from_millis(0), event),
+        )
+    };
+    let mut page = GroupPageBuilder::new(core::num::NonZeroUsize::MIN.saturating_add(7));
+    let (later, at_later) = row(2);
+    let (earlier, at_earlier) = row(1);
+    assert!(page.offer(later, None, at_later).is_continue());
+    assert!(page.offer(earlier, None, at_earlier).is_break());
+    page.finish(happenstance_sync::Waiting::Nothing)
+        .expect_err("a group offered after a later one is refused")
 }
 
 /// The ingest store binds the **bare** ports, the only ones a `!Send` store
@@ -279,6 +315,9 @@ fn cloudflare_errors_state_their_class() {
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
 fn ingest_store_satisfies_the_bare_bounds() {
     fn bare<S: EventStore + IngestStore>() {}
+    // What a runner and a `StoreSyncPeer` bind (#420): the log read back in
+    // write groups, beside ingest.
+    fn replicates<S: WriteGroupStore + IngestStore>() {}
     // The constructor's signature, pinned: an owned store (the wrapper keeps
     // it) and the storage object, and no identity, which `store_id` reads
     // every time.
@@ -292,6 +331,7 @@ fn ingest_store_satisfies_the_bare_bounds() {
     }
 
     bare::<CloudflareIngestStore>();
+    replicates::<CloudflareIngestStore>();
     built_by(CloudflareIngestStore::open);
     assert!(
         !Probe::<CloudflareIngestStore>(PhantomData).is_send(),
@@ -311,8 +351,14 @@ mod construction;
 #[cfg(target_arch = "wasm32")]
 mod family;
 #[cfg(target_arch = "wasm32")]
+mod groups;
+#[cfg(target_arch = "wasm32")]
 mod reads;
 #[cfg(target_arch = "wasm32")]
 mod support;
 #[cfg(target_arch = "wasm32")]
 mod writes;
+// The object as a sync peer over HTTP (#130), below the others so no line
+// above moves.
+#[cfg(target_arch = "wasm32")]
+mod served;

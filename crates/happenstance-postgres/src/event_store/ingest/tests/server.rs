@@ -123,7 +123,22 @@ async fn start_container() -> Server {
 }
 
 /// A pool onto a fresh schema, with `search_path` set on every connection and
-/// migration 1 applied.
+/// the event log's migrations applied.
+///
+/// # Panics
+///
+/// On any failure to reach or prepare the server, naming the environment.
+pub(super) async fn fresh_pool() -> PgPool {
+    let pool = empty_pool().await;
+    migration::apply(&pool).await.unwrap_or_else(|error| {
+        panic!("a broken test environment: the event log's migrations failed ({error})")
+    });
+    pool
+}
+
+/// A pool onto a fresh, empty schema, with `search_path` set on every
+/// connection and nothing applied: for a test that arranges a schema an older
+/// build left.
 ///
 /// The schema is `hsi_<pid>_<n>`, a prefix neither of `tests/support`'s
 /// fixtures uses. The pool is small and built on the calling test's runtime,
@@ -133,7 +148,7 @@ async fn start_container() -> Server {
 /// # Panics
 ///
 /// On any failure to reach or prepare the server, naming the environment.
-pub(super) async fn fresh_pool() -> PgPool {
+pub(super) async fn empty_pool() -> PgPool {
     static NEXT: AtomicU64 = AtomicU64::new(1);
     let schema = format!(
         "hsi_{}_{}",
@@ -171,8 +186,5 @@ pub(super) async fn fresh_pool() -> PgPool {
         .unwrap_or_else(|error| {
             panic!("a broken test environment: could not create schema `{schema}` ({error})")
         });
-    migration::apply(&pool).await.unwrap_or_else(|error| {
-        panic!("a broken test environment: migration 1 failed in schema `{schema}` ({error})")
-    });
     pool
 }

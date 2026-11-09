@@ -10,6 +10,47 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-09 — `0.6.0`, sync over the network (phase 13)
+
+*Committed on `claude/p13-release`, cut from `claude/p13-exit` at `48af8178`, with
+`origin/main` (#456) and `claude/p13-exit`'s `353eea88` merged in.* `[Unreleased]` becomes
+`[0.6.0] — 2026-11-09` under a summary that marks it breaking from `0.5.x`, in the
+`## [X.Y.Z]` heading `scripts/release-notes.sh` reads. The breaking entries are labelled in
+place (wire format 3, the sqlite, postgres and neon migrations, the postgres and neon
+identity refusals, the testkit's `REOPEN`), and a `0.6.0` trace follows the `0.5.0` one:
+eleven hand rows, no tool rows, since cargo-semver-checks is not installed here. The trace
+records two non-breaks the brief asked about: `Stopped(StopCause)` changed before any
+release carried the runner, and `IngestStore::store_id` became async and fallible in
+`0.4.4`. All nine crates move to `0.6.0` with the workspace requirements, the sync-testkit's
+pin, the testkit's recipe pins (`=0.6.0` and `"0.6"`) and the six examples; `Cargo.lock`
+and the benchmarks', `apply-shape`'s and `polling-cost`'s lockfiles move only the path
+crates. Status and install lines, the README's rule counts (123; projection 19), the
+adapter READMEs' stale "the runner is unfinished" sentences, SECURITY's table, the site's
+roadmap card and reference table, the `0.6.0` status row and the handover follow. No
+upgrade guide: see the handover.
+
+**Verified.** See the release commit's body.
+
+---
+
+## 2026-11-09 — phase 13 closes: the exit reconciliation (#64)
+
+*Committed on `claude/p13-exit`, cut from `origin/phase-13` at `a4a25ab4`.* Docs only. The
+phase file's last boxes are ticked on evidence in the tree — #108, #111, #113, #114, #116,
+#117 and four exit criteria — and the status row reads `done`, pending `phase-13` → `main`
+and the `0.6.0` tag. The specification is reconciled line-neutrally (§1.6's `SyncPeer` row,
+§1.3, §1.5, §1.7, §5's preamble, SY-6's narrative). README, both sync crates' READMEs and
+crate roots, the site's reference table and roadmap card say what phase 13 built and that
+it is unreleased; one `[Unreleased]` entry repoints SY-7's hook to #450. `CLAUDE.md`'s
+stale lines are proposed, not edited, in `/mnt/project-files/notes/0.6.0-claude-md-proposal.md`.
+Detail, and what is left for the owner, in [phase 13's session log](phases/13-sync.md).
+
+**Verified.** `cargo xtask spec-trace`, `lints`, `lint-kb`, `lint-constitution`,
+`narrative`, `lint-pages`, and `cargo doc` of both sync crates with `-D warnings`. Not run:
+the gate's test steps (no code changed) and `cargo xtask site` (no zola here).
+
+---
+
 ## 2026-11-08 — `0.5.1`, documentation and tooling
 
 *Committed on `claude/project-thread-m9xoqd`, cut from `origin/main` at `301d8213`.*

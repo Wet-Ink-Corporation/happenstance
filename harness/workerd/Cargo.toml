@@ -29,5 +29,37 @@ happenstance-sync-testkit = { path = "../../crates/happenstance-sync-testkit" }
 futures-core.workspace = true
 worker.workspace = true
 
+# The native half of the round trip (#130, `tests/sqlite_round_trip/`): a
+# SQLite store replicating through the object over real HTTP. Host-only, and
+# dev-only, so `worker-build`'s wasm32 build and every `--no-dev-deps` step
+# never see any of it.
+#
+# The HTTP client is the `hyper` stack `happenstance-neon`'s live transport
+# already uses, with the same features and the same reasons (that manifest's
+# LICENCE VERDICT): `hyper-util` for the IO adapter and the client,
+# `http-body-util` for a buffered and capped body, `hyper-rustls` over `ring`
+# with the platform's roots for the deployed leg's HTTPS, never
+# `webpki-roots`. Every crate here is already a node in `Cargo.lock`, so this
+# adds edges and no node.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite", features = ["sync"] }
+bytes.workspace = true
+tokio = { workspace = true, features = ["macros", "rt", "time", "test-util"] }
+hyper = { version = "1.11", default-features = false, features = ["client", "http1"] }
+hyper-util = { version = "0.1", default-features = false, features = [
+  "client",
+  "client-legacy",
+  "http1",
+  "tokio",
+] }
+hyper-rustls = { version = "0.27", default-features = false, features = [
+  "http1",
+  "native-tokio",
+  "ring",
+  "tls12",
+] }
+http-body-util = "0.1"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+
 [lints]
 workspace = true

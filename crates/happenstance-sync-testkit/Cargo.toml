@@ -39,7 +39,18 @@ happenstance-sync = { workspace = true, features = ["memory"] }
 # ADR-0057 is about, so this line spells its own path rather than inheriting.
 # `RuleOutcome` is part of this crate's public API through every rule's
 # signature, which is the decision publishing it took (#108 part E, D4).
-happenstance-testkit = { version = "0.5.1", path = "../happenstance-testkit" }
+happenstance-testkit = { version = "0.6.0", path = "../happenstance-testkit" }
+# The typed layer, for the convergence family (#141): SY-20's rule bounds on
+# `happenstance::ConvergentProjection` and drives `run_projection`, because a
+# convergence claim is a claim about a typed fold, and the fold lives one crate
+# up from the contract. `happenstance` is not an adapter, so the rule that no
+# adapter depends on another is untouched, and it depends on no sync crate, so
+# the graph has no cycle. `postcard` is the reference fixtures' codec, chosen
+# because `happenstance-sync` already brings `postcard` in: the only node this
+# line adds is `happenstance` itself. `memory` is not named: the in-memory
+# stores are reached through `happenstance-core`, which `happenstance-sync`'s
+# `memory` above already switches on.
+happenstance = { workspace = true, features = ["std", "postcard"] }
 
 [features]
 # The model family (`sync_model`): seeded peer topologies driven through push

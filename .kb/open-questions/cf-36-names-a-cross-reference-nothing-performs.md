@@ -74,7 +74,7 @@ SY-10, SY-24, SY-25, SY-34.
 
 - **Nine are one fact.** The `SY` family names rules that would live in
   `happenstance-sync-testkit` — the crate CF-36's own `Rejects` paragraph names
-  as their home, at `crates/happenstance-sync/src/lib.rs:23-24`, and which does
+  as their home, at `crates/happenstance-sync/src/lib.rs:25-26`, and which does
   not exist. That is one question asked nine times.
 - **Two cite the wrong case.** VT-21 and WF-9 name *live* rules in `suite.rs`
   (`store_accepts_the_guaranteed_minimum_payload`,
@@ -138,7 +138,7 @@ discount buys, and it is the case `kb-decision-0045` and
 ## Phase 16 — 2026-09-29
 
 **Classification: additive** — specification text and `xtask`; no signature. `CF36_UNDISCHARGED`
-(`xtask/src/spec_trace.rs:1556`) still holds the thirteen: VT-21, WF-9, PS-29, PS-30 and nine SY
+(`xtask/src/spec_trace.rs:1553`) still holds the thirteen: VT-21, WF-9, PS-29, PS-30 and nine SY
 clauses. Each group now has an owner, per `runbook/ledgers.md`, *The 1.0 dispositions* and `kb-decision-0066`:
 
 - **The nine SY clauses → phase 13**, which builds `happenstance-sync-testkit`

@@ -47,12 +47,12 @@ use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 ///
 /// # What bumping it means
 ///
-/// Carried on every message, never negotiated per connection, and version 2 is
-/// this envelope and the message set below it (ADR-0097). It is bumped whenever
-/// the **shape** of any wire type changes: a field added, removed, retyped or
-/// moved between types — per-type versioning cannot say VT-30's move of `after`
-/// into `Guard`, which changed no single type. The set this version names
-/// includes [`Pulled::waiting`](crate::Pulled::waiting) on the pulled message.
+/// Carried on every message, never negotiated per connection, and version 3 is
+/// this envelope and the message set below it (ADR-0097, ADR-0104). It is bumped
+/// whenever the **shape** of any wire type changes: a field added, removed,
+/// retyped or moved between types — per-type versioning cannot say VT-30's move
+/// of `after` into `Guard`, which changed no single type. Version 3 added a last
+/// `responder` to [`Pulled`](crate::Pulled::responder) and [`Ack`](crate::Ack::responder).
 ///
 /// # What must never bump it
 ///
@@ -63,7 +63,7 @@ use serde::de::{self, Deserialize, Deserializer, MapAccess, SeqAccess, Visitor};
 /// them raises a limit — the raiser bumps the version, and every peer that has
 /// not been redeployed refuses every message from it, including the ones well
 /// inside the old bound.
-pub const FORMAT_VERSION: u16 = 2;
+pub const FORMAT_VERSION: u16 = 3;
 
 /// The field names `Envelope`'s `Deserialize` announces to the format, in
 /// declaration order.
@@ -82,7 +82,7 @@ const FIELDS: &[&str] = &["format_version", "message"];
 /// assert_eq!(envelope.format_version(), FORMAT_VERSION);
 ///
 /// let json = serde_json::to_string(&envelope)?;
-/// assert_eq!(json, r#"{"format_version":2,"message":"hello"}"#);
+/// assert_eq!(json, r#"{"format_version":3,"message":"hello"}"#);
 ///
 /// let decoded: Envelope<String> = serde_json::from_str(&json)?;
 /// assert_eq!(decoded.message(), "hello");
@@ -428,6 +428,11 @@ impl ResumeToken {
 /// present (SY-37, WF-2): what the far side still holds, so a
 /// runner told [`Nothing`](crate::Waiting::Nothing) skips the empty pull.
 ///
+/// Pulled and ack both end with [`responder`](crate::Pulled::responder), always
+/// present and `null` when the far side has no store of its own (ADR-0104): the
+/// store incarnation that answered, so a runner sees a restore under a new
+/// identity on the next answer rather than never.
+///
 /// # A mis-routed buffer
 ///
 /// A buffer does not say which message it holds, so a transport that routes one
@@ -448,7 +453,7 @@ impl ResumeToken {
 /// let first = Envelope::new(PullRequest::from_start());
 /// assert_eq!(
 ///     serde_json::to_string(&first)?,
-///     r#"{"format_version":2,"message":{"from":null}}"#
+///     r#"{"format_version":3,"message":{"from":null}}"#
 /// );
 ///
 /// let next = PullRequest::after(ResumeToken::new("group:42"));
@@ -476,3 +481,51 @@ impl PullRequest {
         Self { from: Some(token) }
     }
 }
+
+// ===========================================================================
+// Routes, and the codec the network peers share (#117)
+//
+// Below the message set, so every line above keeps its number.
+// ===========================================================================
+
+/// Which of [`SyncPeer`](crate::SyncPeer)'s two exchanges a buffer belongs to.
+///
+/// A buffer does not say which message it holds (ADR-0097), so the transport
+/// says it: an HTTP path, a Durable Object method name, or a header. This is
+/// that statement, typed. A request on [`Pull`](Self::Pull) holds a
+/// [`PullRequest`] and its reply a [`Pulled<ResumeToken>`](crate::Pulled); a
+/// request on [`Push`](Self::Push) holds a [`PushBatch`](crate::PushBatch) and
+/// its reply an [`Ack`](crate::Ack).
+///
+/// `#[non_exhaustive]`, because a fifth message is additive (ADR-0097) and a
+/// route for it must not break a transport's `match`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Route {
+    /// [`SyncPeer::pull`](crate::SyncPeer::pull)'s exchange.
+    Pull,
+    /// [`SyncPeer::push`](crate::SyncPeer::push)'s exchange.
+    Push,
+}
+
+impl Route {
+    /// The route's name, lower case: `"pull"` or `"push"`. Stable, so a
+    /// transport may use it as a path segment.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Pull => "pull",
+            Self::Push => "push",
+        }
+    }
+}
+
+impl fmt::Display for Route {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
+mod codec;
+pub use codec::{CodecError, PostcardError};
+pub(crate) use codec::{decode, encode};

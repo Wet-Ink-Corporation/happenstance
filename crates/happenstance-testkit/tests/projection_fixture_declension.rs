@@ -17,7 +17,7 @@
 //! is exactly the kind that rots silently: nothing in a passing test suite
 //! notices that a `const` acquired or lost a default. [`Silent`] below is that
 //! notice. It implements `ProjectionFixture` and writes **not one** capability
-//! constant, so it stops compiling the moment any of the three goes back to
+//! constant, so it stops compiling the moment any of the four goes back to
 //! being required — with `error[E0046]: not all trait items implemented`, which
 //! is the diagnostic an adapter author on a minor bump would have met.
 //!
@@ -54,8 +54,8 @@ struct Silent(MemoryProjectionFixture);
 impl ProjectionFixture for Silent {
     type Store = MemoryProjectionHandle;
 
-    // Deliberately no `SECOND_HANDLE`, no `RESET_REFUSAL`, no `COMMIT_FAULT`.
-    // The absence is the assertion; see the module documentation.
+    // Deliberately no `SECOND_HANDLE`, no `RESET_REFUSAL`, no `COMMIT_FAULT`,
+    // no `REOPEN`. The absence is the assertion; see the module documentation.
 
     fn connect(&self) -> impl Future<Output = Self::Store> {
         self.0.connect()
@@ -65,7 +65,7 @@ impl ProjectionFixture for Silent {
 /// Every capability on `ProjectionFixture` is defaulted, and every default is a
 /// declension carrying a reason.
 ///
-/// The *compile* is half the test — an impl naming none of the three has to be
+/// The *compile* is half the test — an impl naming none of the four has to be
 /// accepted — and the assertions are the other half: a default that was
 /// `SUPPORTED` would let a fixture claim a capability by saying nothing, which
 /// is the one answer worse than the testkit writing its reason for it.
@@ -81,6 +81,7 @@ fn a_projection_fixture_may_answer_nothing_and_declines_everything() {
             <Silent as ProjectionFixture>::RESET_REFUSAL,
         ),
         ("COMMIT_FAULT", <Silent as ProjectionFixture>::COMMIT_FAULT),
+        ("REOPEN", <Silent as ProjectionFixture>::REOPEN),
     ] {
         let reason = capability.reason();
         assert!(
@@ -195,10 +196,10 @@ fn a_fixture_that_says_nothing_is_rejected_by_the_emitted_check() {
         .map_or("", String::as_str)
         .to_owned();
 
-    // All three, in one message. A fixture that inherited one declension has
+    // All four, in one message. A fixture that inherited one declension has
     // usually inherited the rest, and reporting them a build at a time turns one
-    // edit into three red runs.
-    for capability in ["SECOND_HANDLE", "RESET_REFUSAL", "COMMIT_FAULT"] {
+    // edit into four red runs.
+    for capability in ["SECOND_HANDLE", "RESET_REFUSAL", "COMMIT_FAULT", "REOPEN"] {
         assert!(
             message.contains(capability),
             "the refusal names no `{capability}`, so an author fixing it learns \
@@ -241,6 +242,11 @@ fn a_fixture_that_states_its_own_reasons_is_accepted() {
                 "this store applies the read model and the checkpoint under one \
                  write lock, so it has no write that can be made to fail",
             );
+
+        const REOPEN: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+            "this store is two maps in process memory, so a reopen would find \
+                 nothing to read back",
+        );
 
         fn connect(&self) -> impl Future<Output = Self::Store> {
             self.0.connect()

@@ -899,6 +899,86 @@ jobs:
             exit 1
           fi
 
+      # `remint_identity` and the append that has to see it (#104, ADR-0086),
+      # with the restore negative control. Its own `--test` target, so no run
+      # above executes it; its own list/run/assert, STRICT, for the
+      # runtime-seam trio's reasons.
+      - name: Every gated re-mint test is present in the binary
+        if: ${{ !cancelled() }}
+        run: |
+          cargo test -p happenstance-postgres --all-features \
+            --test remint -- --ignored --list | tee gated-remint.txt
+
+      - name: The re-mint tests against a live Postgres
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-postgres --all-features \
+            --test remint -- --ignored --show-output --test-threads=1 \
+            | tee remint-run.txt
+
+      - name: The re-mint run executed and passed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' remint-run.txt; then
+            echo "::error::no test result line; the re-mint tests did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-remint.txt)
+          result=$(grep -E '^test result:' remint-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
+      # A native SQLite store through the Postgres sync peer (#131): payload
+      # bytes identical both ways, and a replay that changes nothing. The
+      # instrument crate `harness/sync-round-trip` holds it, because the round
+      # trip needs two adapters in one build and no adapter depends on
+      # another. Filtered to its `postgres::` cases; the `neon::` ones run in
+      # `live-neon`. Its own list/run/assert, STRICT, as the trios above.
+      - name: Every gated SQLite round trip through Postgres is present in the binary
+        if: ${{ !cancelled() }}
+        run: |
+          cargo test -p happenstance-sync-round-trip-harness --test round_trip \
+            -- --ignored --list postgres:: | tee gated-round-trip.txt
+
+      - name: The SQLite round trip through the Postgres peer
+        if: ${{ !cancelled() }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-sync-round-trip-harness --test round_trip \
+            -- --ignored --show-output --test-threads=1 postgres:: \
+            | tee round-trip-run.txt
+
+      - name: The SQLite round trip executed and passed every gated test
+        if: always()
+        run: |
+          if ! grep -qE '^test result:' round-trip-run.txt; then
+            echo "::error::no test result line; the SQLite round trip did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-round-trip.txt)
+          result=$(grep -E '^test result:' round-trip-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
       # The suite must be green, and the failure list is empty on purpose.
       #
       # An earlier draft of this step asserted that two rules
@@ -1319,6 +1399,86 @@ jobs:
             exit 1
           fi
 
+      # `remint_identity` and the append's refusal without an identity row,
+      # against the endpoint (#104, ADR-0086), with the restore negative control.
+      # Its own `--test` target, so nothing above runs it; its own list/run/
+      # assert, STRICT, as the library trio is.
+      - name: Every gated re-mint test is present in the binary
+        if: ${{ !cancelled() && env.NEON_CONNECTION != '' }}
+        run: |
+          cargo test -p happenstance-neon --all-features \
+            --test remint -- --ignored --list | tee gated-remint.txt
+
+      - name: The re-mint tests against a live Neon endpoint
+        if: ${{ !cancelled() && env.NEON_CONNECTION != '' }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-neon --all-features \
+            --test remint -- --ignored --show-output --test-threads=1 \
+            | tee remint-run.txt
+
+      - name: The re-mint run executed and passed every gated test
+        if: always() && env.NEON_CONNECTION != ''
+        run: |
+          if ! grep -qE '^test result:' remint-run.txt; then
+            echo "::error::no test result line; the re-mint tests did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-remint.txt)
+          result=$(grep -E '^test result:' remint-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
+      # A native SQLite store through `NeonSyncPeer` (#131): payload bytes
+      # identical both ways, and a replay that changes nothing. The instrument
+      # crate `harness/sync-round-trip` holds it, because the round trip needs
+      # two adapters in one build and no adapter depends on another. Filtered
+      # to its `neon::` cases; the `postgres::` ones run in `live-postgres`.
+      # Its own list/run/assert, STRICT, as the trios above.
+      - name: Every gated SQLite round trip through Neon is present in the binary
+        if: ${{ !cancelled() && env.NEON_CONNECTION != '' }}
+        run: |
+          cargo test -p happenstance-sync-round-trip-harness --test round_trip \
+            -- --ignored --list neon:: | tee gated-round-trip.txt
+
+      - name: The SQLite round trip through the Neon peer
+        if: ${{ !cancelled() && env.NEON_CONNECTION != '' }}
+        run: |
+          set -o pipefail
+          cargo test -p happenstance-sync-round-trip-harness --test round_trip \
+            -- --ignored --show-output --test-threads=1 neon:: \
+            | tee round-trip-run.txt
+
+      - name: The SQLite round trip executed and passed every gated test
+        if: always() && env.NEON_CONNECTION != ''
+        run: |
+          if ! grep -qE '^test result:' round-trip-run.txt; then
+            echo "::error::no test result line; the SQLite round trip did not run"
+            exit 1
+          fi
+
+          expected=$(grep -c ': test$' gated-round-trip.txt)
+          result=$(grep -E '^test result:' round-trip-run.txt | tail -1)
+          passed=$(grep -oE '[0-9]+ passed' <<<"$result" | grep -oE '[0-9]+')
+          failed=$(grep -oE '[0-9]+ failed' <<<"$result" | grep -oE '[0-9]+')
+          ignored=$(grep -oE '[0-9]+ ignored' <<<"$result" | grep -oE '[0-9]+')
+          echo "expected $expected; passed $passed, failed $failed, ignored $ignored"
+
+          if [ "$expected" -eq 0 ] || [ "$ignored" -ne 0 ] || [ "$failed" -ne 0 ] \
+            || [ "$passed" -ne "$expected" ]; then
+            echo "::error::passed $passed of $expected listed, $failed failed, $ignored ignored"
+            exit 1
+          fi
+
       # The suites must be green, and the failure list is empty on purpose.
       #
       # KEPT STRICT, and there is one rule that makes that a real cost.
@@ -1575,6 +1735,77 @@ jobs:
             exit 1
           fi
 
+      # The write-group family (#420, SY-39; harness/workerd/src/write_group.rs):
+      # every rule of `for_each_write_group_rule!`, each on its own object,
+      # against `CloudflareIngestStore` on the ingest family's fixtures, so the
+      # columns are added by the adapter's own `migrate` (its PRAGMA probe and
+      # ALTERs under the object's authoriser) and each ingest is one real
+      # `transactionSync`. The names come from `/write-group-rules`, the
+      # testkit's own enumeration. Strict, with the ingest steps' vacuity guard:
+      # every rule must answer `ran` (the family gates none on a capability).
+      - name: The write-group family under local workerd
+        if: always()
+        run: |
+          npx vitest run test/write-group.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-write-group.json
+          test -f vitest-write-group.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq -e '.numTotalTests | numbers' vitest-write-group.json) || { echo "::error::the report has no test count"; exit 1; }
+          passed=$(jq -e '.numPassedTests | numbers' vitest-write-group.json) || { echo "::error::the report has no pass count"; exit 1; }
+          pending=$(jq -e '.numPendingTests + .numTodoTests | numbers' vitest-write-group.json) || { echo "::error::the report has no skip count"; exit 1; }
+          echo "write group: collected $total, passed $passed, not run $pending"
+          # 6 rules + the enumeration check + the unknown rule.
+          if [ "$total" -lt 8 ] || [ "$pending" -ne 0 ] || [ "$passed" -ne "$total" ]; then
+            echo "::error::the write-group run did not execute and pass every cell"
+            jq -r '.testResults[].assertionResults[] | select(.status == "failed") | .fullName' vitest-write-group.json
+            exit 1
+          fi
+
+      # The same family on a primed and evicted object, as the cold ingest step:
+      # the columns were added by a previous instance, so each rule's `migrate`
+      # must find both and add neither. Each rule must run in a new instance.
+      - name: The write-group family on a cold-started object under local workerd
+        if: always()
+        run: |
+          npx vitest run test/write-group-cold.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-write-group-cold.json
+          test -f vitest-write-group-cold.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq -e '.numTotalTests | numbers' vitest-write-group-cold.json) || { echo "::error::the report has no test count"; exit 1; }
+          passed=$(jq -e '.numPassedTests | numbers' vitest-write-group-cold.json) || { echo "::error::the report has no pass count"; exit 1; }
+          pending=$(jq -e '.numPendingTests + .numTodoTests | numbers' vitest-write-group-cold.json) || { echo "::error::the report has no skip count"; exit 1; }
+          echo "cold write group: collected $total, passed $passed, not run $pending"
+          # 6 rules + the enumeration check.
+          if [ "$total" -lt 7 ] || [ "$pending" -ne 0 ] || [ "$passed" -ne "$total" ]; then
+            echo "::error::the cold write-group run did not execute and pass every cell"
+            jq -r '.testResults[].assertionResults[] | select(.status == "failed") | .fullName' vitest-write-group-cold.json
+            exit 1
+          fi
+
+      # The sync family (#130; harness/workerd/src/sync_peer.rs): every rule of
+      # `for_each_sync_peer_rule!`, each on its own object, against the object
+      # as a remote peer. Each rule's client sends real requests to the handler
+      # the object mounts at /sync/pull and /sync/push
+      # (`happenstance_cloudflare::sync_http::serve_sync_request`), served over
+      # `CloudflareIngestStore` on the ingest family's fixtures, so each push is
+      # one real `transactionSync`. The names come from `/sync-peer-rules`, the
+      # testkit's own enumeration. Strict, with the ingest steps' vacuity
+      # guard: every rule must answer `ran` (no skip is tolerated).
+      - name: The sync peer family under local workerd
+        if: always()
+        run: |
+          npx vitest run test/sync-peer.test.ts \
+            --reporter=verbose --reporter=json --outputFile.json=vitest-sync-peer.json
+          test -f vitest-sync-peer.json || { echo "::error::no report; the run did not happen"; exit 1; }
+          total=$(jq -e '.numTotalTests | numbers' vitest-sync-peer.json) || { echo "::error::the report has no test count"; exit 1; }
+          passed=$(jq -e '.numPassedTests | numbers' vitest-sync-peer.json) || { echo "::error::the report has no pass count"; exit 1; }
+          pending=$(jq -e '.numPendingTests + .numTodoTests | numbers' vitest-sync-peer.json) || { echo "::error::the report has no skip count"; exit 1; }
+          echo "sync peer: collected $total, passed $passed, not run $pending"
+          # 10 rules + the enumeration check + the unknown rule + the routes check.
+          if [ "$total" -lt 13 ] || [ "$pending" -ne 0 ] || [ "$passed" -ne "$total" ]; then
+            echo "::error::the sync peer run did not execute and pass every cell"
+            jq -r '.testResults[].assertionResults[] | select(.status == "failed") | .fullName' vitest-sync-peer.json
+            exit 1
+          fi
+
       # F's D7 classes, revisited (harness/workerd/src/ingest/classes.rs): each
       # reachable ingest failure provoked through the production store, the
       # identical call retried on the same object, and the class judged by the
@@ -1765,6 +1996,45 @@ jobs:
         if: always()
         run: npx vitest run test/platform-miss.test.ts --reporter=verbose
 
+      # The SQLite round trip against local workerd (#130;
+      # harness/workerd/tests/sqlite_round_trip/): a native SQLite store
+      # replicating through the object's /sync/pull and /sync/push over a real
+      # socket, `wrangler dev` serving this commit's Worker, with `hyper` as the
+      # client. Byte-identical payloads both ways, a replayed batch that changes
+      # nothing, a reset object that stops the edge (the incarnation check),
+      # and a refused token that is `Stop`. `round-trip.sh` is strict: every
+      # listed live test executed and passed, none left ignored, and a floor
+      # under the list. The test binary is built before `wrangler dev` starts,
+      # so its readiness wait is not spent compiling.
+      - name: The SQLite round trip against local workerd
+        if: always()
+        timeout-minutes: 10
+        env:
+          WRANGLER_SEND_METRICS: "false"
+        run: |
+          cargo test --locked -p happenstance-workerd-harness --test sqlite_round_trip --no-run
+          token=$(openssl rand -hex 16)
+          # Its own process group, so the trap stops wrangler and the workerd
+          # it spawns together; killing `npx` alone orphans both.
+          setsid npx wrangler dev --ip 127.0.0.1 --port 8787 --var "HARNESS_TOKEN:$token" \
+            > wrangler-dev.log 2>&1 &
+          dev=$!
+          trap 'kill -- "-$dev" 2>/dev/null || true' EXIT
+          ready=""
+          for attempt in $(seq 1 30); do
+            status=$(curl -s --max-time 5 -o /dev/null -w '%{http_code}' \
+              -H "authorization: Bearer $token" http://127.0.0.1:8787/do/ready/sync-peer-rules || true)
+            if [ "$status" = "200" ]; then ready=yes; break; fi
+            sleep 2
+          done
+          if [ -z "$ready" ]; then
+            echo "::error::wrangler dev never answered 200; last: $status"
+            tail -n 50 wrangler-dev.log
+            exit 1
+          fi
+          HARNESS_TOKEN="$token" ./round-trip.sh local http://127.0.0.1:8787 \
+            "local-${{ github.run_id }}-${{ github.run_attempt }}"
+
       # The deployed leg. The same rule for the secret as live-neon: a fork PR
       # cannot see it and is told so; a same-repository run without it is an
       # error, because a green tick over a skipped leg proves nothing.
@@ -1834,10 +2104,13 @@ jobs:
           test -n "$url" || { echo "::error::wrangler printed no workers.dev URL"; exit 1; }
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
-      # `deployed.mjs` runs both families, the event-store rules and the
-      # ingest rules (#108 part E3), each listed by the harness and each
-      # strict: every listed rule executed, none failed. An ingest rule's
-      # violation answers 422, a failure and never a platform miss.
+      # `deployed.mjs` runs four families, the event-store rules, the ingest
+      # rules (#108 part E3), the write-group rules (#420) and the sync peer
+      # rules (#130), each listed by the harness and each strict: every listed
+      # rule executed, none failed, and no family listed fewer than its floor
+      # (the count guard the local steps carry, kept in `deployed.mjs`'s
+      # `FAMILIES`). An ingest, write-group or sync rule's violation answers
+      # 422, a failure and never a platform miss.
       - name: The conformance rules on a deployed Durable Object
         if: always() && steps.deploy.outputs.url != ''
         run: |
@@ -1863,6 +2136,17 @@ jobs:
           fi
           node deployed.mjs "${{ steps.deploy.outputs.url }}" \
             "run-${{ github.run_id }}-${{ github.run_attempt }}"
+
+      # The SQLite round trip again, against the deployed object over HTTPS
+      # (#130): the same live tests and the same strict `round-trip.sh` as the
+      # local leg, the bearer token the deploy step minted, and each test's
+      # object emptied before and after it. Covered by the delete step's `if:`.
+      - name: The SQLite round trip against a deployed Durable Object
+        if: always() && steps.deploy.outputs.url != ''
+        timeout-minutes: 10
+        run: |
+          ./round-trip.sh deployed "${{ steps.deploy.outputs.url }}" \
+            "deployed-${{ github.run_id }}-${{ github.run_attempt }}"
 
       # The hibernation cells again, over `wss://` on the deployed object, waiting
       # for Cloudflare's own inactivity timer. RECORD-ONLY: the script prints

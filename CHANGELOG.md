@@ -33,6 +33,675 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-09
+
+Replication runs over the network. Phase 13 built `happenstance-sync`'s
+runner, `runner::Edge`, which drives one edge a step at a time or through a
+caller-owned backoff loop, acts on each failure class, keeps its watermark
+through the projection port, and stops when the far side answers as a new
+store incarnation. It built the network peer's two halves, `StoreSyncPeer`,
+`serve_sync` and `RemoteSyncPeer`, and three real peers that pass the peer
+suite: `happenstance-neon`'s `NeonSyncPeer`, `happenstance-cloudflare`'s
+Durable Object served over HTTP, and a `StoreSyncPeer` over
+`happenstance-postgres`. Every adapter reads its log back in write groups
+(ADR-0105), so a push carries the writes the log was made of. Nineteen more
+clauses are `[FROZEN]` (ADR-0107), and ADR-0003, opaque payloads, is no longer
+provisional (ADR-0106).
+
+**This is a breaking release from `0.5.x`.** If you replicate, **every peer in
+a deployment upgrades together**: the wire format is version 3, a version-2
+buffer is refused, and `Pulled` and `Ack` carry a `responder` whose JSON key is
+required (ADR-0104). **Every event store's schema moves**, for write groups:
+`happenstance-postgres` and `happenstance-neon` **migrate, then deploy** (apply
+migration 3 to every schema before this build writes to it, or its first
+append fails); `happenstance-sqlite` migrates a file to schema version 2 when
+this build opens it, after which an older build refuses the file, so stop
+every older process before the first open; `happenstance-cloudflare` adds two
+columns in `migrate` and an older build keeps working. On Postgres and Neon an
+append against a schema whose identity row is gone now refuses with
+`MissingIdentity`. An adapter author takes new rules in both testkits, and a
+projection fixture must state its new `REOPEN` capability. `happenstance` and
+`happenstance-core` do not change: an application on the in-memory store, with
+no `sync` feature, changes nothing. The
+[`0.6.0` trace](#060-trace) at the end of this section lists every break with
+the decision behind it, and [`docs/upgrading-to-0-6.md`](docs/upgrading-to-0-6.md)
+walks them. All nine crates move to `0.6.0` together.
+
+### Added
+
+- `happenstance-sync-testkit`: the ingest rule
+  `bulk_ingest_is_idempotent_in_bounded_round_trips` (SY-14, VT-24, #139).
+  One call of VT-24's floor, 128 foreign events in seven groups, after a
+  first call delivered every third of them and the last: it must land
+  counted 84 appended and 44 skipped, with each event held once and every
+  earlier row kept, and the same call again is 128 skips that change
+  nothing. A capacity refusal of that call is reported under VT-24, whose
+  body now says so: on the ingest path the batch is the call, as VT-36 already
+  says of tags, and a push of 128 events is what `PeerLimits::minimum`
+  declares a peer takes.
+  Two new wrong stores fail it and nothing else: one that looks up the
+  first 64 identities of a call only, and one that caps a call at 64. Every
+  mounted ingest family runs it, so an adapter whose ingest refuses a
+  128-event call now fails (behaviour; CF-32). The live Neon measurement below
+  is recorded in ADR-0107, which freezes SY-14.
+- `happenstance-neon`: SY-14's bound counted on the peer it was deferred for
+  (#139). `rotors_ingest_is_one_request_per_push_however_much_is_held` pushes
+  Kestrel Rotor's 1,840 events, 46 write groups of 40, through
+  `NeonSyncPeer` over the scripted transport: 16 pushes at the minimum
+  peer's 128 events, 16 requests, each the same five statements, and the
+  replay 16 again. `rotors_bulk_ingest_through_the_live_neon_peer_is_bounded`
+  is its `#[ignore]`d live twin, which `live-neon`'s library trio runs. It
+  seeds every third event first, asserts the counts and that each push
+  averages under one event's share of the 34-minute window, and prints `SY14-MEASURE` lines. Tests only; no API change.
+- `happenstance-sync`: `runner::Watermark` and `runner::LoadWatermarkError`,
+  and `Edge::watermark` and `Edge::restored` (#143, SY-31). The runner half of
+  SY-31: an edge's confirmation watermark, its far side's identity and
+  `SyncStatus::confirmed`, is kept through `ProjectionStore` under
+  `ProjectionId::sync_watermark`, never as an event. `Watermark::commit` takes
+  the caller's batch, so whatever read model the caller wrote into it through
+  its adapter's own API lands in the same commit, or neither does; PS-9 gives
+  the port no write vocabulary, so the runner writes no rows of its own.
+  `Watermark::load` reads it back, answering `None` for a peer never synced
+  and `LoadWatermarkError::NotLive` for a rebuilding checkpoint under the id,
+  which `commit` never writes, and `Edge::restored` resumes an edge from it.
+  `Edge::watermark` is `None` until the far side has named its store and
+  acknowledged a push. The pull token is not kept: an edge restored without it
+  pulls from the start, and ingest skips what it holds. Additive.
+- `happenstance-sync-testkit`: the watermark family (#143), one rule,
+  `watermark_rules::watermark_advances_transactionally_with_a_read_model`
+  (SY-31), over a `happenstance_testkit::ProjectionFixture`, called directly
+  as the convergence family's are. It plays the shipped runner: a real `Edge`
+  to an in-memory far side, its `Watermark` committed with a probe row, read
+  back through a fresh handle, an edge restored from it pushing nothing, a
+  second peer's watermark kept apart, and a stale one refused as
+  `CommitError::CheckpointRegression` with its row left out. It detects a
+  projection store that refuses the reserved `sync/` prefix, one that keeps a
+  watermark in its handle rather than its store, one that keys every peer's
+  watermark alike, and one that upserts it beside the batch around the port's
+  regression check: each is in `tests/wrong_watermark_stores.rs` with the
+  message it fails on, beside a faithful wrapper that passes. Mounted against
+  `MemoryProjectionFixture`, `happenstance-sqlite`'s projection fixture, both
+  of `happenstance-postgres`'s (`live-postgres`) and `happenstance-neon`'s
+  (`live-neon`), in test targets those jobs already run.
+- `happenstance-testkit`: `append_reports_exceeded_store_limits` gains CF-40's
+  budget-unit branch (#143). Where a fixture states both `MAX_EVENT_DATA_LEN`
+  and `MAX_METADATA_LEN`, one event at both ceilings at once must be accepted,
+  because each byte ceiling bounds its own field: `data` plus metadata,
+  `ReplicatedEvent::payload_len`, is the replication port's unit, never a
+  store's, and SY-18 holds a peer's one budget to both field ceilings. It
+  detects `SharedPayloadBudgetStore`, which states both and holds their sum to
+  the payload's ceiling, so each field at its ceiling alone fits and no other
+  branch saw it. Every store in the workspace that states both,
+  `happenstance-cloudflare` (ADR-0093's carving fits one row at all four) and
+  `GappedPositionFixture`, already accepts it.
+- `harness/sync-round-trip` and `harness/workerd`: the runner's push through
+  the two unlike real peers keeps the local log's write groups (#143, SY-30).
+  The shipped `Edge` pushes a SQLite log of appends of 2, 3 and 1 events and a
+  guarded ingested group of 2 through a peer declaring 4 events a batch, so it
+  takes several pushes, and the far side's pull hands back the four writes
+  whole, the ingested one with its guard. Run against `NeonSyncPeer`
+  (`live-neon`), the Postgres `StoreSyncPeer` (`live-postgres`) and the
+  Durable Object over HTTP (`workerd`, local and deployed), each picked up by
+  the job's existing strict list/run/assert; a gate test shows the pre-#420
+  push, cut at the batch limit, failing the same check on the same log.
+- `happenstance-neon`: `NeonSyncPeer` and `NeonPeerError`, behind `sync`
+  (#131). A `SyncPeer` whose far side is a Neon store reached over its HTTP
+  endpoint, in **one SQL request per pull and one per push**: a pull is the
+  write-group read and the identity read in one read-only `REPEATABLE READ`
+  batch, so `waiting` (SY-37) and the responder (ADR-0104) come from the
+  page's own snapshot; a push is the ingest's statements, the watermark and
+  the identity in one `REPEATABLE READ` batch, so the ack confirms what that
+  transaction wrote. The alternative that lost is `StoreSyncPeer` over
+  `NeonEventStore`, which works and meets SY-37 but costs two HTTP round trips
+  a pull and three a push. The token is `StoreResume`, pages are whole write
+  groups, a push writes no compensation, and `new` declares
+  `PeerLimits::minimum`. Its own error type because `StorePeerError`'s limit
+  variants cannot be built outside `happenstance-sync`; the classes match
+  (SY-36). `NeonError` gains `ResultSets { expected, actual }`, class `Stop`,
+  for a batch answered with a different number of result sets than it sent
+  statements. `sync_peer_conformance!`, a replay, and a byte-identical round trip
+  against an in-memory near store are mounted in the library target, which
+  `live-neon` already runs. No new SQL: the store's group read, ingest,
+  watermark and identity statements, shared with its ports.
+- `happenstance-postgres`: the Postgres sync peer is
+  `StoreSyncPeer<PostgresEventStore, PostgresEventStore>`, with no type of its
+  own (#131): over a pool the extra queries are cheap and `read_groups`
+  already decides `waiting` in its statement. `sync_peer_conformance!`, a
+  replay and a byte-identical round trip are mounted in the library target,
+  which `live-postgres` already runs.
+- `harness/sync-round-trip` (`happenstance-sync-round-trip-harness`), an
+  unpublished instrument crate (#131): a native SQLite store through
+  `NeonSyncPeer` and through `StoreSyncPeer` over Postgres, payload bytes
+  identical both ways, and a replayed batch that changes nothing. A crate of
+  its own because the round trip needs two adapters in one build and no
+  adapter depends on another; `harness/workerd` is the precedent (#130).
+  `live-neon` runs its `neon::` cases and `live-postgres` its `postgres::`
+  cases, each as a strict list/run/assert trio.
+- `happenstance-sync-testkit`: the restore family (#133), VT-6's restore
+  half. `restore_rules::restored_peer_does_not_reissue_identities` writes an
+  event, takes a backup, writes a second, restores the backup and runs the
+  adapter's documented post-restore procedure, writes a third, and fails a
+  peer that hands back one `EventId` for two different events: the defect
+  VT-6's `Rejects:` line names, a store whose identity survives a restore and
+  so gives a new event the identity a lost one was issued, which every peer
+  that pulled the lost one then dedupes away. It also fails a restore that
+  restores nothing and a store that stamps its current incarnation on what it
+  reads back, so a re-mint rewrites restored history; no position is compared.
+  Mounted with `restore_conformance!` over a new `RestoreFixture` trait
+  (`connect`, `append_local`, `back_up`, `restore`), with
+  `emit_restore_tokio!`, `emit_restore_blocking!` and
+  `for_each_restore_rule!`. A family of its own rather than a capability on
+  `SyncFixture`, because `MemorySyncPeer` issues no identity to reissue and
+  every peer-family mutant is built on it. `MemoryRestoreFixture` is the
+  reference: a `StoreSyncPeer` over `MemoryIngestStore`, restored by ingesting
+  the backed-up groups into a fresh incarnation. `tests/wrong_restores.rs`
+  pins each wrong peer to its exact failing set.
+- `happenstance-postgres`: the restore family is mounted on the Postgres
+  sync peer (#133), in the library target `live-postgres` already runs. A
+  restore is simulated in place (rows deleted, `event_position_seq` set back,
+  the identity row put back) and followed by `remint_identity`, the procedure
+  ADR-0086 documents; the same sequence with the re-mint skipped is the
+  negative control, and reissues the identity the lost event was given.
+- `happenstance-sync-testkit`: the convergence family (#141), and with it a
+  dependency on `happenstance`, the typed layer, with its `postcard` codec.
+  `convergence_rules::convergent_projection_is_interleaving_independent`
+  (SY-20) runs a projection declared `happenstance::ConvergentProjection`
+  under two interleavings of one set of events from two origins — origin
+  one's first, then origin two's — and fails it when the two read models are
+  not byte-identical. The defect it detects is a declared fold whose answer
+  depends on arrival order: `unit-ledger`, which keeps whatever arrived last
+  per serial, a first-arrival-wins fold, an arrival rank kept as an order,
+  and FIFO cost layers declared convergent, each failed in
+  `tests/wrong_projections.rs` beside a control ordered by `EventId`. It also
+  refuses, rather than passes, a case with one origin empty and a run that
+  applied fewer events than it was handed, because either makes the two
+  interleavings one log.
+  `convergence_rules::non_convergent_projections_are_excluded_not_failed`
+  (SY-22) is the cost-layers test: FIFO cost layers, which does not declare
+  convergence, must commit two read models under those interleavings where
+  stock-on-hand over the same events commits one, and handing it to the
+  SY-20 rule is a `compile_fail` fence beside a compiling control. The defect
+  it detects is a convergence check with no exclusion, which fails an honest
+  projection, and a check that replays one interleaving twice, which passes
+  every projection. A projection author writes a `ConvergenceFixture` (the
+  projection, its store, the two origins' events, and its read model as
+  bytes); `StockOnHandFixture` and `CostLayersFixture` are the reference
+  cases. ADR-0107 freezes SY-20 and SY-22 on these rules.
+- `happenstance-sync`: the `runner` module, the first half of the runner
+  (#244). `runner::Edge` drives one edge — a local store that is both
+  `EventStore` and `IngestStore`, against one `SyncPeer` — one caller-driven
+  `step` at a time: pull and ingest, then push the local log above the
+  confirmed watermark, as much as the peer's `limits()` admit. Nothing is
+  spawned, and the bounds are the bare flavours, so a `!Send` Durable Object
+  store and peer drive an edge unchanged; for `Send`-flavour ports with a
+  `Send + Sync` resume token the step's future is `Send`, so it spawns.
+  `Edge::status` returns a `SyncStatus` without a round trip: the confirmed
+  local position, how many local events sit above it (`runner::Pending`,
+  exact or a lower bound, because a step reads at most one batch plus one),
+  what the last pull said is waiting, the far side's last acknowledged
+  watermark, and the phase and class of the last failure. A `Stop`-class
+  failure stops the edge, and later steps return `StepError::Stopped` without
+  I/O. A refused push leaves the local log as it was (SY-34).
+  `Edge::resuming` takes back a watermark and a resume token a caller kept,
+  since where they are stored is SY-31's; one edge belongs to one peer for
+  its whole life. A push carries the local log in the writes it was made of
+  (SY-30, SY-39, #420): one group per local append, one per ingested group
+  with its guard and compensation, never a group split across two pushes; a
+  first group larger than the peer's limits is offered alone, so the peer's
+  refusal states its class. The confirmed watermark is the first position of
+  the last group acknowledged. The local store is bound on `IngestStore` and
+  `WriteGroupStore`, not `EventStore`.
+  The next entry is the runner's second half.
+- `happenstance-sync`: the runner's second half (#244). **The incarnation
+  check** (ADR-0104): an edge pins the far side's store from the first
+  `Pulled::responder` or `Ack::responder` whose answer took effect, and an
+  answer naming another store stops the edge before it is acted on — a pulled
+  batch is not ingested, an ack does not move the watermark — and leaves the
+  local log alone (SY-34). The step returns `runner::StepError::Incarnation`
+  and the status reads `EdgeState::Stopped(StopCause::Incarnation(_))`; both
+  carry a `runner::IncarnationChanged` naming the phase, the store the edge
+  knew and the one that answered. An answer naming no store is no evidence.
+  `SyncStatus::responder` exposes the pin and `Edge::with_responder` restores
+  it on a resumed edge. **The four classes** (SY-36): `Transient` changes
+  nothing; a `Split` of a push of several write groups halves the events the
+  edge offers per push, for the rest of its life; a `Split` of one group, or
+  outside the push, and any `Park`, park the edge (`EdgeState::Parked`, and
+  `StepError::Parked` on every later step, without I/O); `Stop` stops it.
+  **A bounded outbound buffer**: a push carries at most `Edge::with_buffer`
+  events (`Edge::DEFAULT_BUFFER`, 1,024), whatever the peer's `limits()`
+  declare, so a step reads at most one more than that. **A caller-owned
+  loop**: `Edge::run` steps until the edge is synced, quiet or halted, and
+  waits out each transient failure through a `runner::Sleep` (with a
+  `SendSleep` flavour) the caller supplies, paced by `runner::Backoff` —
+  seeded, equal-jittered, exponential, capped, and spent after a number of
+  attempts (`BackoffError` refuses a base above the cap). A spent backoff
+  returns the error with the edge still running; a Durable Object reset is
+  `Transient`, and stops the edge only through the incarnation check once it
+  answers under a new `StoreId`. Nothing is spawned and no runtime is named.
+  Changed before release, so no published version carried the earlier shape
+  and nothing here breaks a `0.5.x` caller: `EdgeState::Stopped` and
+  `StepError::Stopped` carry a `StopCause` rather than a `Failure`, and a
+  single-group `Split` now parks the edge where it left it running.
+- `happenstance-sync`: a network peer's transport-free halves (#117), with no
+  feature and on wasm32. `StoreSyncPeer` is a `SyncPeer` over a store the
+  caller holds — pull reads it above a `StoreResume` token (the store's own
+  position), within the declared `PeerLimits`, and says `Waiting::Nothing` only
+  when the read reached the end of the log; push ingests each group atomically
+  through `IngestStore`. `serve_sync` answers a postcard envelope, given the
+  `wire::Route` it arrived on, through a `StoreSyncPeer`. `Exchange` (and its
+  `Send` flavour `SendExchange`) is the one-method transport, and
+  `RemoteSyncPeer` the client peer over it, whose resume token is the wire's
+  `ResumeToken`. Every new error states its class (SY-36): a version mismatch or
+  undecodable bytes is `wire::CodecError`, `Stop`; a token no store peer minted
+  is `ForeignToken`, `Stop`; a transport failure keeps the `Exchange` error's
+  own class. `postcard` becomes a normal dependency of the crate. A pull hands
+  its page back in the store's write groups (#420), each with the guard it was
+  ingested under, and never cuts one; the token names the first position of
+  the last group served. A head group larger than the page budget stalls the
+  pull on one token, the rule an oversized event already had. The store is
+  bound on `WriteGroupStore`, and a push stores each group's guard with it.
+  `StoreSyncPeer` ingests
+  with no compensation, so it cannot be SY-7's adjudicator; that hook is
+  planned with SY-7 (#450, after #136). Both peers pass
+  `sync_peer_conformance!`, and `StoreSyncPeer` the model family too.
+- `happenstance-postgres` and `happenstance-neon`: a re-mint for after a
+  restore or a copy (#104, ADR-0086, VT-6). `PostgresEventStore::remint_identity`
+  and `NeonEventStore::remint_identity` replace the store's persisted
+  `StoreId` with a freshly minted one and return it, refusing with
+  `MissingIdentity`, and creating nothing, on a schema migration 1 never ran
+  on. `happenstance_neon::migration::remint_statement` is the same statement
+  as text, for the tooling that makes Neon branches. Run it after a
+  `pg_restore`, a point-in-time recovery, or on every Neon branch that is
+  created, reset or restored, with every writer stopped: the crate roots and
+  READMEs carry the procedure. Events already written keep their identity.
+  No schema change and no new migration: the re-mint updates the row
+  migration 1 already writes.
+- `happenstance-testkit`: a projection conformance rule,
+  `committed_rows_and_checkpoint_survive_a_reopen` (PS-1, CF-17, #422). It
+  commits a read-model row and a checkpoint through the port, drops every
+  handle, reopens the fixture's storage and reads both back. It fails a
+  projection store that keeps its committed state in process memory — an
+  in-memory database shared behind one handle, or a write-back cache never
+  flushed — and one whose checkpoint is durable while its read model is a
+  process-local cache, which comes back claiming rows it no longer has. Every
+  other projection rule reads back through a handle onto the same live
+  process, so both passed the suite until now.
+- **Breaking (CF-32): `happenstance-testkit`: `ProjectionFixture::REOPEN` and
+  `ProjectionFixture::reopen`, the capability that rule is gated on, with the
+  `Reopened` answer `reopen` returns and `UNSTATED_PROJECTION_REOPEN`, the
+  default declension.** A fixture that declines `REOPEN` gets the rule as a
+  reported skip carrying its own reason. **This can turn a passing adapter's CI
+  red without a code change in the adapter**: the suite's
+  `every_declined_capability_is_stated_by_this_fixture` now also fails a
+  fixture that inherits `REOPEN`'s default reason, so a projection fixture
+  written against `0.5.1` states `REOPEN` — declined with its own reason, or
+  supported with an override of `reopen` that answers `Reopened::Discarded`.
+- `happenstance-sync`: write groups (#420, SY-39, ADR-0105, accepted 2026-11-09). The
+  `write_group` module's `WriteGroupStore` (and its `Send` flavour
+  `SendWriteGroupStore`) reads a store's log back in the writes that made it:
+  `read_groups(after, max_events)` returns whole `WriteGroup`s above `after`,
+  each named by the lowest position it wrote and carrying the guard an
+  ingested group arrived under, at most `max_events` events of them except
+  that a first group is whole however large, and `Waiting::Nothing` only when
+  the read reached the end. A group's name is the cursor. `GroupPageBuilder`
+  is the paging every adapter shares, and checks the order it is fed rather
+  than trusting it: a row naming a group at or below one already passed stops
+  the builder, and its `finish` returns `GroupOrderError` (class `Stop`)
+  instead of a page with a group torn in two. `encode_guard` and
+  `decode_guard` are the stored form of a guard, one format byte and postcard.
+  `IngestGroup` gains a `guard` field and `with_guard`, so an ingest records
+  the guard a group arrived under. `MemoryIngestStore` implements the trait,
+  with `GroupOrderError` as its error; it is additive, and the ingest port is
+  unchanged.
+- `happenstance-sqlite`: `SqliteEventStore` implements `WriteGroupStore`
+  behind `sync`, over migration 2's columns, and stores an ingested group's
+  guard. `SqliteEventStoreError::StoredGuard`, behind `sync`, is a guard the
+  codec cannot write or read back, and `SqliteEventStoreError::GroupOrder`,
+  behind `sync`, a stored `write_group` naming a group the read had already
+  passed, which only a damaged file holds; both are classed `Stop`.
+- `happenstance-postgres`: `PostgresEventStore` implements
+  `SendWriteGroupStore` behind `sync`, over migration 3's columns, in one
+  statement that orders rows by group so writers whose positions interleave
+  still read back whole; an ingested group's guard is stored on its first row.
+  `PostgresEventStoreError::StoredGuard` and `PostgresEventStoreError::GroupOrder`,
+  both behind `sync` and classed `Stop`. Additive: the enum is
+  `#[non_exhaustive]`.
+- `happenstance-neon`: `NeonEventStore` implements the bare `WriteGroupStore`
+  behind `sync`, in one read-only round trip, and stores an ingested group's
+  guard. `NeonError::StoredGuard` (a stored guard that does not decode),
+  `NeonError::UnstorableGuard` (one that does not encode, refused before the
+  request is sent) and `NeonError::GroupOrder`, all behind `sync` and classed
+  `Stop`; additive.
+- `happenstance-cloudflare`: `CloudflareIngestStore` implements
+  `WriteGroupStore` behind `sync`, the bare flavour, over the two columns
+  `migrate` now adds, and stores an ingested group's guard on the group's
+  first landed row. `CloudflareEventStoreError::StoredGuard` and
+  `CloudflareEventStoreError::GroupOrder`, both behind `sync` and classed
+  `Stop`, are SQLite's two (additive; the enum is `#[non_exhaustive]`). The
+  write-group family runs on the Node shim in the gate and, through
+  `harness/workerd`'s `/write-group-rule/<name>`, under local `workerd` warm
+  and cold and on a deployed object.
+- `happenstance-sync-testkit`: SY-30's rule, `push_envelope_preserves_group_boundaries`,
+  in the peer family. It pushes three groups in one batch, two events under
+  one guard, one event with no guard, and two events under a second guard, and
+  pulls them back expecting the same three: it fails a peer
+  that serves a page as one group, merging writes a store kept apart, and one
+  that drops the guard a group was pushed with, so a relay forwards it
+  without the evidence SY-6 makes travel.
+- `happenstance-sync-testkit`: the write-group family (SY-39),
+  `write_group_store_conformance!`, mounted on an `IngestFixture` whose store
+  also implements `WriteGroupStore`, with its six rules:
+  `an_append_reads_back_as_one_group`, which fails a store that records no
+  groups or merges adjacent appends; `an_ingested_group_keeps_its_boundary_and_guard`,
+  which fails one that drops an ingested guard or merges one call's groups;
+  `compensation_joins_its_group`, which fails one that records a compensation
+  as a group of its own, which a relay would forward apart from its losing
+  event (SY-2); `a_group_after_a_redelivery_is_named_by_its_first_landed_row`,
+  which fails one that names a group by the first position it allocated
+  rather than the first row it wrote, which a sequence that burns a value per
+  skipped re-delivery makes a position no row of the group holds;
+  `a_read_never_cuts_a_group`, which fails a page filled by
+  event, a first group skipped for being larger than the page, and a resume
+  above a row position; and `pages_chain_on_first_and_end_with_nothing`, which
+  fails a page its budget cut that says nothing is waiting. Each is pinned
+  against its wrong stores in `tests/wrong_write_group_stores.rs`.
+  `MemoryIngestFixture`, `happenstance-sqlite`, `happenstance-postgres`,
+  `happenstance-neon` and `happenstance-cloudflare` mount it;
+  `emit_write_group_wasm!` is the Durable Object's emitter, the twin of
+  `emit_ingest_wasm!`.
+- `happenstance-sync-testkit`: a sync conformance rule,
+  **`round_trip_preserves_the_whole_log`** (SY-28, SY-27, #140). The defect it
+  detects is a peer that replicates a slice: it stores and acknowledges every
+  push, and withholds from its counterpart the events a type or tag filter
+  matches, by tag, by type, or both (a filter on something the rule's log never
+  carries passes) — the scoped hub, or the filtered spoke, that ADR-0027
+  kept off the 1.0 port. Every other sync rule passed such a peer. The rule
+  pushes a log spanning origins, types, regions, an untagged event and
+  metadata, pulls it back to an empty batch, and holds every `EventId` to its
+  push byte for byte, comparing no position. A new rule is a minor of this
+  crate, and it can turn a passing peer adapter's CI red.
+- `happenstance-sync-testkit`: an ingest rule of VT-9's own,
+  `ingest_preserves_the_recorded_time` (#134). After one local append, it
+  ingests two groups whose events were recorded before 1970, off a whole
+  second, earlier than the event their origin numbered before them, and in
+  2200, and
+  requires each held event to carry exactly the `RecordedAt` its origin sent.
+  It compares a held time with the sent one and nothing else: never two held
+  times, never a time with a position, never the harness's clock. It fails a
+  store that restamps an ingested event with its arrival time, one that keeps
+  whole seconds, one that holds a time before 1970 as the epoch, one that
+  holds recorded times non-decreasing with position, one that binds one
+  time per group, and one that clamps a future time to its own clock;
+  `tests/wrong_ingest_stores.rs` carries all six, each
+  failing this rule alone. `ingest_preserves_origin_identity` no longer
+  compares the recorded time, which was VT-9's half of it, so the restamping
+  store fails VT-9's rule rather than VT-5's. Every adapter that mounts
+  `ingest_store_conformance!` runs it with no edit. **This can turn a passing
+  ingest adapter's CI red** without a code change in the adapter, as any new
+  rule can.
+
+- `happenstance-sync-testkit`: two rules (#136). `only_the_adjudicator_compensates`
+  (SY-7) joins the ingest family: two stores take one conflicting pair in
+  opposite orders, the rule plays the runner and holds a one-adjudicator
+  assignment, and the adjudicator's log must hold one reversal filed under its
+  own identity and the other store's none. It fails a store that mints a
+  compensation under an incarnation it never read. It opens **two** stores, so
+  **this can turn a passing adapter's CI red without a code change in the
+  adapter**: an `IngestFixture` must give every store it opens a fresh
+  incarnation, and the rule fails one that hands it the same store twice.
+  `event_id_order_is_identical_on_every_peer` (SY-23) joins the peer family:
+  events from three origins, numbered with gaps and arriving out of `EventId`
+  order, must come back from the peer in the same `EventId` order, byte for
+  byte, as their origins wrote them. It fails a peer that dedupes by the highest
+  origin position it has seen from each origin. SY-7's falsification test runs
+  beside the rule with two adjudicator configurations and records the
+  divergence ADR-0027 predicted: after two adjudicators meet, their logs hold
+  the same events, two reversals with two identities for one conflict,
+  reversing opposite claims. No runner in `happenstance-sync` authors a
+  compensation yet, so the rule cannot be handed one; the configuration SY-7
+  forbids is that test's, not a mount's.
+- `happenstance-sync-testkit`: `directional_merge_rules_compose` (SY-10, #137)
+  joins the ingest family. It walks one edge as hub and spoke and one as peer
+  to peer, two stores each, and plays a runner that holds a merge rule per
+  direction. The hub adjudicates what the spoke pushes. The spoke takes what
+  the hub sends unjudged, after the hub has refused its push once, and keeps
+  its own claim. Both peers of the symmetric edge take each other's claim
+  unjudged. Every count must be what the runner handed the store, and both
+  logs must end holding the same facts. It fails a **store with the merge rule
+  built in**: one that answers a group whose travelling guard its log breaks
+  with a reversal of its own, and so, as a spoke, judges what the hub sends.
+  Like SY-7's rule it opens two stores per walk, so **this can turn a passing
+  adapter's CI red without a code change in the adapter**: a store that
+  evaluates the guard it is sent, or a fixture that hands one store out twice,
+  fails it. SY-10's falsification test runs beside it: with the hub's rule run
+  on the spoke too, the spoke reverses the claim that reached the hub first,
+  the hub reverses the spoke's, and once the logs meet no claim to the seat
+  stands. `happenstance-sync`'s runner tests drive the shipped `Edge` over both
+  topologies: its pull never compensates, and a hub's push handler
+  adjudicates. The crate documentation now describes both topologies by the
+  merge rule each direction takes.
+- `happenstance-sync`: `SendPeer`, the `Send` flavour of the network peer's
+  two halves (#421). `StoreSyncPeer` and `RemoteSyncPeer` implement only the
+  bare `SyncPeer`, so a `!Send` store or transport stays a valid half, and
+  coherence refuses them a `SendSyncPeer` impl beside it (RS-20-4).
+  `SendPeer::new(peer)` wraps either one and implements `SendSyncPeer` (and so
+  `SyncPeer`) by delegation: `SendPeer<StoreSyncPeer<S, I>>` for
+  `S: SendWriteGroupStore + Sync` and `I: SendIngestStore + Sync`, and
+  `SendPeer<RemoteSyncPeer<X>>` for `X: SendExchange + Sync`. Code generic over
+  `SendSyncPeer` — `runner::Edge::step` or `Edge::run` inside `tokio::spawn` —
+  now takes them. It is not a wrapper for any peer: a bare peer's futures
+  promise nothing about `Send`, so the impl is written per peer. Additive; the
+  two peers' own types and impls are unchanged.
+
+- `happenstance-cloudflare`: the Durable Object as a sync peer over HTTP
+  (#130), the `sync_http` module behind `sync` (additive).
+  `serve_sync_request` answers one `POST` on `/sync/pull` or `/sync/push`
+  through a `CloudflareSyncPeer`, a `StoreSyncPeer` whose two halves are the
+  object's `CloudflareIngestStore`, by handing the body to
+  `happenstance_sync::serve_sync`. A method other than `POST` answers 405; a
+  body over `max_request_bytes` (the peer's `max_batch_bytes` plus a 1 MiB
+  `ENVELOPE_ALLOWANCE`) answers 413 on its declared length or as soon as the
+  bytes read pass the cap, so it is never buffered whole; a refusal answers
+  the status its class maps to. `status_for` and `class_for` are the one
+  table both ends read (`Transient` 503, `Split` 413, `Park` 422, `Stop`
+  400; any other 5xx, 408 and 429 read back as `Transient`, and every other
+  status as `Stop`), and `sync_route` names the two paths. A client behind
+  Cloudflare's edge reads the platform's own pages (a 404 "There is nothing
+  here yet", say) as `Transient` before it consults the table, as
+  `class_for`'s documentation says. A refusal's body is the store's whole
+  error chain, so a public mount belongs behind authentication. The sync family
+  runs against it on the Node shim in the gate, through real
+  `worker::Request`s, and under local `workerd` and on a deployed object in
+  the `workerd` job (`harness/workerd`'s `/sync-peer-rule/<name>`), where
+  every rule must answer `ran`. A native SQLite store replicates through
+  the harness object over real HTTP in the same job, against `wrangler dev`
+  and against the deployed Worker: payload bytes come back byte-identical in
+  both directions, a batch replayed at the object or into SQLite changes
+  nothing, and an object reset to nothing answers under a new identity,
+  which stops the runner's edge before it acts on the answer and leaves the
+  local log alone.
+
+### Changed
+
+- **`happenstance-sqlite` moves to `rusqlite` 0.41**, was 0.40, which bundles
+  `libsqlite3-sys` 0.39 and SQLite 3.54. 0.40's bundled SQLite is affected by
+  [RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459): a
+  database file opened with a crafted `-wal` of a different page size can make
+  queries return uninitialised page-cache memory. `rusqlite` is re-exported and
+  on the crate's public signatures, so a consumer that names `rusqlite` itself
+  moves to `0.41` with it (H12). No code in the adapter changed.
+
+- **Nineteen specification clauses are `[FROZEN]`** (#124, #128,
+  [ADR-0107](.kb/decisions/0107-phase-13s-clauses-are-frozen.md), accepted
+  2026-11-09). No code changed. VT-6 (a restore never
+  reissues an `EventId`), VT-9 (ingest keeps the recorded time), VT-21 and
+  VT-24 (the payload and batch floors, the ingest call being the batch), SY-14
+  (bulk ingest in one round trip a pulled batch, measured on live Neon: Kestrel
+  Rotor's 1,840 events in 16 one-request pushes, 1,583 ms), SY-18 (a peer
+  declares its limits before the push), SY-20 and SY-22 (convergence, and the
+  exclusion of a non-convergent projection), SY-23 (`EventId` order), SY-27 and
+  SY-28 (whole-log replication and its round-trip rule), SY-30 (the push keeps
+  write groups), SY-31 (the watermark goes through `ProjectionStore`) and CF-40
+  (a store's byte ceilings are per field; data plus metadata is the replication
+  port's unit). From `1.0.0`, loosening any of them is a major release. SY-7 and
+  SY-10 stay `[PROVISIONAL]` until the runner has an adjudication hook; SY-29,
+  SY-32 and WF-1 are renewed against their named experiments, so SY-32 is the only
+  `[DEFERRED]` SY clause left. VT-36 is rescheduled to phase 14. SY-35's rule line
+  no longer claims the convergence family (#431). Four more are frozen on the
+  owner's separate yes for each (ADR-0107 §5): SY-36 (every peer error states its
+  class), SY-37 (a pull says whether anything is waiting), SY-38 (an unheld own
+  identity stops ingest) and CF-42 (a fixture that declines read-your-writes
+  settles the frontier). SY-39 (a store reads its log back in write groups)
+  freezes with ADR-0105, accepted the same day.
+- ADR-0003 (opaque payloads) is no longer provisional (#126). ADR-0106,
+  accepted 2026-11-09, lifts the marker on three byte-identical SQLite round
+  trips through unlike peers: the Durable Object under workerd, `NeonSyncPeer`
+  on a live endpoint, and the Postgres peer. No code changes.
+
+- **Breaking (behaviour): `happenstance-postgres`: a handle no longer caches
+  the store's identity** (#104). Every append, and every ingest, reads `store_meta` inside its own
+  transaction, so a re-mint is seen by the next append on every handle and
+  clone, with no restart; it costs one primary-key read per append. An append
+  or an ingest on a schema whose identity row is gone now refuses with
+  `MissingIdentity`, where a handle that had read the row before went on
+  stamping it.
+- **Breaking (behaviour): `happenstance-neon`: an append on a schema whose
+  identity row is gone inserts nothing and refuses with
+  `NeonError::MissingIdentity`** (#104), where
+  it used to commit rows with a NULL origin that every later read refused as
+  `UnstampedEvent`. An ingest on such a schema now writes nothing and
+  refuses with `IngestError::Store(NeonError::MissingIdentity)`, where its
+  compensation used to commit with a NULL origin.
+  `NeonError::MissingIdentity` is no longer behind `sync` (additive: the enum
+  is `#[non_exhaustive]`).
+- **`happenstance-sync`: every pull and push answer names its responder, and
+  the wire format is version 3** (#244, ADR-0104). **Breaking.**
+  `Pulled` and `Ack` gain a last field, `responder: Option<StoreId>`: the
+  store incarnation that answered, so a runner can tell that a peer was
+  restored or re-minted under a new `StoreId` (VT-6). `Pulled::new` and
+  `Ack::default()` say `None`; `Pulled::with_responder` and
+  `Ack::with_responder` say more. Code that builds either type through its
+  constructor compiles unchanged; both were already `#[non_exhaustive]`.
+  `StoreSyncPeer` stamps its store's `store_id()` on every answer, read on each
+  call and never cached, which costs one more store read per pull and per push
+  (on Neon, one more read-only round trip to the database; none on the sync
+  wire). `StorePeerError` gains `Identity`, for an identity that could not be
+  read, classed by the store's error. `serve_sync` and `RemoteSyncPeer` carry
+  the field through the envelope. The field is a shape change, so
+  `wire::FORMAT_VERSION` is now 3, and a version-2 buffer is refused as
+  `WireError::UnsupportedFormatVersion`: **every peer in a deployment upgrades
+  together**. The key is required: a JSON pulled or ack without `responder`
+  is refused as a missing field, rather than read as naming none.
+- **Breaking (schema): `happenstance-sqlite`: migration 2** (#420). `open`, `open_on` and
+  `open_in_memory` add `write_group` and `group_guard` to `event` on a file
+  whose marker reads 1, and raise the marker to 2 in the same transaction;
+  `SCHEMA_VERSION` is `2`. Every row an append or an ingested group writes
+  records the write's first position, so a runner and a store peer read the
+  log back in whole writes. A row written
+  before the migration reads as a group of its own; there is no backfill.
+  **Upgrading:** a build before this one refuses a file this one has opened,
+  with `UnsupportedSchemaVersion`, so deploy it to every process that opens a
+  store before any of them opens it. The migration is two `ALTER TABLE … ADD
+  COLUMN`s, which do not rewrite the table. `SqliteEventStore::new` never
+  migrates, and now refuses a file still at 1 with the new
+  `SqliteEventStoreError::SchemaNeedsMigration { found, required }` (class
+  `Stop`; additive, the enum is `#[non_exhaustive]`), where it would otherwise
+  wrap the file and fail its first append with `no such column`: a caller that
+  wraps its own connection with `new` opens the file once through `open_on`
+  first.
+- **Breaking (schema): `happenstance-postgres`: migration 3** (#420), `migration::MIGRATION_3`
+  (`migrations/0003_write_group.sql`): `write_group` and `group_guard` on
+  `event`, both nullable, and the partial index `event_write_group_idx`.
+  `migration::apply` now sends migrations 1 and 3 in one batch, and
+  `SCHEMA_VERSION` is `2`. Every `INSERT` names `write_group`: an append
+  binds its lowest position on every row; an ingested group's rows are stamped
+  with the lowest position it landed, a re-delivered row's burnt position never
+  naming a group, and its compensation joins it. A row written before the
+  migration reads as a group of its own; there is no backfill. **Upgrading:
+  migrate, then deploy.** Run `migration::apply` against every schema before
+  deploying this build to any process that writes to it: this build fails its
+  first append with an undefined-column error against a schema without
+  migration 3. The `ALTER TABLE`s rewrite no row but take a brief exclusive
+  lock; the index build blocks writes while it runs, and on a large table can
+  be made first with `CREATE INDEX CONCURRENTLY` under the same name. An older
+  build keeps working against a migrated schema, writing rows that read as
+  groups of one.
+- **Breaking (schema): `happenstance-neon`: migration 3** (#420), `migration::MIGRATION_3`, with the
+  new `@write_group_idx@` placeholder `migration::render` fills: the same two
+  columns and partial index as `happenstance-postgres`'s. An append computes
+  its group inside its one `INSERT`; an ingest writes a provisional negative
+  tag per group and replaces it with the lowest position the group landed in a
+  third statement of the same request, so the request is now the write, the
+  refusal and the stamp, and no tag outlives the commit. **Upgrading: migrate,
+  then deploy**, as for `happenstance-postgres`: send
+  `migration::request(MIGRATION_3, &config)` after migration 1 before this build
+  writes to the schema.
+- **Schema: `happenstance-cloudflare`: write groups** (#420). `migrate` asks `PRAGMA
+  table_info` for the log's event table and adds `write_group INTEGER` and
+  `group_guard BLOB` where they are missing, each on its own, per namespace;
+  a second `migrate` adds nothing. The append's identity stamp now also names
+  the batch's first position as its write group, and ingest's foreign stamp
+  names the group's first landed row and puts the guard on it, so no row is
+  written twice for it. A row written before the columns existed reads as a
+  group of its own; there is no backfill. **Upgrading:** there is no schema
+  marker, so a build before this one keeps opening an object this one has
+  migrated, and the rows it writes read as groups of one. Deploy this build
+  to every writer and peer of an object before it serves replication.
+
+### `0.6.0` trace
+
+Every break `0.6.0` carries, each with the decision that caused it, written on
+2026-11-09 against `claude/p13-exit` at `48af8178` merged with `main`. It has
+**hand** rows only. Each was found by reading every entry above for a changed
+signature, a removed or renamed item, a changed value or a changed refusal, and
+by diffing the nine crates' `src/` against `v0.5.1` for removed `pub` lines:
+the only ones are the three constants H1, H3 and H4 change. `happenstance` and
+`happenstance-core` have no change in `src/` beyond one doc comment.
+
+**Not run here:** `cargo semver-checks` is not installed on the machine that
+wrote this table. Before tagging, run `cargo semver-checks check-release
+--workspace --baseline-version 0.5.1 --release-type minor` on `phase-13` →
+`main`'s merge commit. Any lint it reports that no row below covers becomes a
+**T** row.
+
+| # | Crate | Break | Source | Decided by | Entry above |
+|---|---|---|---|---|---|
+| H1 | `happenstance-sync` | `wire::FORMAT_VERSION` is `3`, was `2`, and a version-2 buffer is refused as `WireError::UnsupportedFormatVersion`, so every peer in a deployment upgrades together (behaviour) | hand | [ADR-0104](.kb/decisions/0104-every-pull-and-ack-names-its-responder.md), [ADR-0097](.kb/decisions/0097-the-sync-message-set-and-a-version-on-every-message.md) | Changed |
+| H2 | `happenstance-sync` | `Pulled` and `Ack` gain the field `responder: Option<StoreId>`; both were `#[non_exhaustive]`, so a constructor call compiles unchanged, but a JSON pulled or ack without the `responder` key is refused as a missing field (serialised shape) | hand | ADR-0104 | Changed |
+| H3 | `happenstance-sqlite` | the event store's `SCHEMA_VERSION` is `2`, was `1`: `open`, `open_on` and `open_in_memory` migrate a file at 1, after which a build before this one refuses it with `UnsupportedSchemaVersion`, and `SqliteEventStore::new` refuses a file still at 1 with `SchemaNeedsMigration` (behaviour) | hand | [ADR-0105](.kb/decisions/0105-write-groups-are-recorded-per-row.md) (SY-39, #420) | Changed |
+| H4 | `happenstance-postgres` | `SCHEMA_VERSION` is `2`, was `1`, and every `INSERT` names migration 3's `write_group`, so this build's first append against a schema without migration 3 fails with an undefined column: migrate, then deploy (behaviour) | hand | ADR-0105 (#420) | Changed |
+| H5 | `happenstance-neon` | as H4, through `migration::MIGRATION_3` and the new `@write_group_idx@` placeholder `migration::render` fills: migrate, then deploy (behaviour) | hand | ADR-0105 (#420) | Changed |
+| H6 | `happenstance-postgres` | a handle reads the identity row on every append and ingest instead of caching it, so a schema whose identity row is gone refuses with `MissingIdentity` where a warmed handle went on stamping (behaviour) | hand | [ADR-0086](.kb/decisions/0086-postgres-and-neon-keep-mint-once.md) (VT-6, #104) | Changed |
+| H7 | `happenstance-neon` | an append or ingest on a schema whose identity row is gone refuses with `NeonError::MissingIdentity`, where it committed rows with a NULL origin (behaviour) | hand | ADR-0086 (VT-6, #104) | Changed |
+| H8 | `happenstance-testkit` | a new projection rule, `committed_rows_and_checkpoint_survive_a_reopen` (PS-1, CF-17), gated on the new `ProjectionFixture::REOPEN`; `every_declined_capability_is_stated_by_this_fixture` now fails a projection fixture that inherits `REOPEN`'s default reason (behaviour; CF-32) | hand | #422 | Added |
+| H9 | `happenstance-testkit` | `append_reports_exceeded_store_limits` gains CF-40's budget-unit branch, which a store stating both byte ceilings and holding their sum to one budget now fails (behaviour; CF-32) | hand | [ADR-0107](.kb/decisions/0107-phase-13s-clauses-are-frozen.md) (CF-40, #143) | Added |
+| H10 | `happenstance-sync-testkit` | the ingest family gains `ingest_preserves_the_recorded_time` (VT-9), `bulk_ingest_is_idempotent_in_bounded_round_trips` (SY-14, a 128-event call), `only_the_adjudicator_compensates` (SY-7) and `directional_merge_rules_compose` (SY-10); the last two open two stores, so an `IngestFixture` that hands out one store twice now fails (behaviour; CF-32) | hand | ADR-0107, #134, #139, #136, #137 | Added |
+| H11 | `happenstance-sync-testkit` | the peer family gains `round_trip_preserves_the_whole_log` (SY-28), `event_id_order_is_identical_on_every_peer` (SY-23) and `push_envelope_preserves_group_boundaries` (SY-30), which a peer that filters, reorders or merges what it serves now fails (behaviour; CF-32) | hand | ADR-0107, [ADR-0027](.kb/decisions/0027-whole-log-replication-and-the-merge-rule.md), #140, #136, #420 | Added |
+| H12 | `happenstance-sqlite` | the re-exported `rusqlite` is `0.41`, was `0.40`, so a consumer that passes its own `rusqlite::Connection` to `open_on` or `new` moves its `rusqlite` requirement to `0.41` with it (API, through the re-export) | hand | [RUSTSEC-2026-0459](https://rustsec.org/advisories/RUSTSEC-2026-0459) | Changed |
+
+**Schema, and not a break:** `happenstance-cloudflare`'s `migrate` adds
+`write_group` and `group_guard` where they are missing, with no marker, and an
+older build keeps working against a migrated object, writing rows that read as
+groups of one (Changed).
+
+**Not a break, recorded so the absence is a decision:** `EdgeState::Stopped`
+and `StepError::Stopped` carrying a `StopCause` rather than a `Failure` changed
+inside the runner before any release carried it: the whole `runner` module is
+new in `0.6.0`. `IngestStore::store_id` became `async` and fallible in `0.4.4`,
+under that release's entry, and does not change here. `IngestGroup` gains
+`guard` on a `#[non_exhaustive]` struct. The new error variants
+(`SqliteEventStoreError::SchemaNeedsMigration`, `StoredGuard` and `GroupOrder`
+on the four adapters' errors, `NeonError::ResultSets` and
+`NeonError::UnstorableGuard`) are on `#[non_exhaustive]` enums, and
+`NeonError::MissingIdentity` leaving `sync` widens what builds.
+`StoreSyncPeer`, `RemoteSyncPeer`, `serve_sync`, `SendPeer`, the
+`write_group` module, `NeonSyncPeer`, the `sync_http` module and the restore,
+convergence, watermark and write-group families are new items. The
+`ProjectionFixture::REOPEN` constant and `reopen` method have defaults, so a
+fixture compiles unchanged; H8 is what it fails.
+
+**Pending:** none.
+
 ## [0.5.1] — 2026-11-08
 
 Documentation and tooling only: no public API changes, and nothing a `0.5.0`
@@ -5369,7 +6038,8 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.6...v0.5.0
 [0.4.6]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.5...v0.4.6

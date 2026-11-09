@@ -146,7 +146,6 @@ use happenstance_core::{
 use sqlx::{PgPool, Postgres, Transaction};
 use std::future::Future;
 use std::hash::{BuildHasher, Hasher, RandomState};
-use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 use tokio::runtime::Handle;
 
@@ -172,15 +171,12 @@ use crate::read_stream::PgReadStream;
 #[non_exhaustive]
 pub struct PostgresEventStore {
     pool: PgPool,
-    /// This store's identity, read from `store_meta` on first use.
-    ///
-    /// Lazy because [`new`](Self::new) is neither `async` nor fallible and must
-    /// stay that way — it is the constructor an application calls while wiring a
-    /// pool, long before it knows whether the schema exists. `OnceLock` rather
-    /// than a `tokio` cell so the crate takes no new dependency for it; the
-    /// benign race is two handles reading the same committed row and one
-    /// `set` losing, which costs a round trip and changes no value.
-    store_id: Arc<OnceLock<StoreId>>,
+    // There is deliberately no identity field. A cached copy cannot be reset
+    // through `&self`, so a handle open across a re-mint would go on stamping
+    // the retired identity onto positions a restore hands out again, the pair
+    // VT-6 forbids. Every append reads the row inside its own transaction
+    // (ADR-0086 §7.1), so the persisted row is the only copy and there is
+    // nothing stale to guard.
     /// The runtime an operation hops onto when its caller is executing on none.
     ///
     /// # Why a store needs this at all
@@ -328,7 +324,6 @@ impl PostgresEventStore {
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
-            store_id: Arc::new(OnceLock::new()),
             // `try_current` rather than `current`: `new` may legitimately be
             // called outside a runtime, and panicking there would make a library
             // out of a caller's ordering choice. The failure surfaces at the
@@ -406,40 +401,91 @@ impl PostgresEventStore {
             .map_err(PostgresEventStoreError::Worker)?
     }
 
-    /// This store's identity, read from `store_meta` and cached.
+    /// Replaces the database's persisted identity with a freshly minted one,
+    /// and returns it.
+    ///
+    /// # When a deployment invokes this
+    ///
+    /// **After a `pg_restore`, a point-in-time recovery, a promoted replica that
+    /// lost acknowledged writes, or any other copy of this store's database.**
+    /// This store mints its identity once, in migration 1, and keeps it. A copy
+    /// brings that row back together with an older position sequence, and would
+    /// then re-issue [`EventId`]s it has already issued for different events,
+    /// which a replication peer drops as already seen, with no error anywhere.
+    /// VT-6 permits mint-once only for an adapter that can detect a restore,
+    /// **or** whose deployment is documented to invoke a re-mint. Nothing
+    /// measured here can detect a restore into the same database, so this
+    /// operation is the second half of that permission rather than a
+    /// convenience (ADR-0086). Minting afresh on every open was considered and
+    /// declined there.
+    ///
+    /// Stop every writer to the copy first, call this, then resume appends.
+    /// The crate root's *After a restore, re-mint before the first append* is
+    /// the procedure in full.
+    ///
+    /// # Handles
+    ///
+    /// No handle holds a copy of the identity: every append reads the row
+    /// inside its own transaction. So a handle built or cloned before this call,
+    /// in this process or another, stamps the new identity on its next append,
+    /// and nothing has to be restarted.
+    ///
+    /// An append racing this call may stamp the retired identity. Where no
+    /// restore happened that is harmless: the re-mint does not rewind the
+    /// sequence, so the row still takes a position the retired identity never
+    /// stamped. After a restore it is not, because the restore rewound the
+    /// sequence, and such a row pairs the retired identity with a position the
+    /// original store has already issued under it. That is why every writer
+    /// must be stopped before this call, not merely before the next append.
+    ///
+    /// # What it does not change
+    ///
+    /// Events already in the database keep the identity they were stamped with,
+    /// which is correct: they were written by the incarnation being retired. A
+    /// re-mint when no restore happened breaks nothing; it only starts a new
+    /// origin for later events.
+    ///
+    /// It applies no migration. Like every other method here, it acts on
+    /// whatever schema the pool's `search_path` resolves to, and refuses
+    /// rather than minting into a schema migration 1 never ran on.
     ///
     /// # Errors
     ///
-    /// [`PostgresEventStoreError::MissingIdentity`] if the row is absent, which
-    /// means migration 1 has not been applied, and
-    /// [`PostgresEventStoreError::MalformedIdentity`] if it is not sixteen
-    /// bytes. Neither is spelled as a driver error, because "the schema is not
-    /// there" and "the server refused the query" send a reader to different
-    /// places.
-    async fn store_id(&self) -> Result<StoreId, PostgresEventStoreError> {
-        if let Some(cached) = self.store_id.get() {
-            return Ok(*cached);
-        }
-
+    /// * [`PostgresEventStoreError::MissingIdentity`] if `store_meta` has no
+    ///   `store_id` row, which means migration 1 has not been applied. No row
+    ///   is created.
+    /// * [`PostgresEventStoreError::MalformedIdentity`] if the minted row does
+    ///   not read back as sixteen bytes.
+    /// * [`PostgresEventStoreError::Driver`] if the server refuses the
+    ///   statement, and [`PostgresEventStoreError::NoRuntime`] or
+    ///   [`PostgresEventStoreError::Worker`] as for every other operation.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use happenstance_postgres::error::PostgresEventStoreError;
+    /// use happenstance_postgres::event_store::PostgresEventStore;
+    /// use happenstance_postgres::sqlx::PgPool;
+    ///
+    /// # async fn after_restore(pool: PgPool) -> Result<(), PostgresEventStoreError> {
+    /// // Every writer to the restored copy is stopped.
+    /// let store = PostgresEventStore::new(pool);
+    /// let _new_identity = store.remint_identity().await?;
+    /// // Appends may resume, through this handle or any other.
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn remint_identity(&self) -> Result<StoreId, PostgresEventStoreError> {
         let pool = self.pool.clone();
         let stored: Option<Vec<u8>> = self
             .on_runtime(async move {
-                sqlx::query_scalar("SELECT v FROM store_meta WHERE k = 'store_id'")
+                sqlx::query_scalar(REMINT_SQL)
                     .fetch_optional(&pool)
                     .await
                     .map_err(PostgresEventStoreError::from)
             })
             .await?;
-        let stored = stored.ok_or(PostgresEventStoreError::MissingIdentity)?;
-        let bytes: [u8; 16] = stored
-            .as_slice()
-            .try_into()
-            .map_err(|_| PostgresEventStoreError::MalformedIdentity { len: stored.len() })?;
-        let minted = StoreId::from_bytes(bytes);
-
-        // A losing `set` means another handle read the same committed row first.
-        // Same value, so the loser simply uses what is there.
-        Ok(*self.store_id.get_or_init(|| minted))
+        identity_from_row(stored)
     }
 
     /// Refuses a batch that exceeds one of this store's stated ceilings.
@@ -539,8 +585,6 @@ impl SendEventStore for PostgresEventStore {
         // retry", and flattening the two into a driver error destroys that.
         Self::check_ceilings(events)?;
 
-        let store_id = self.store_id().await.map_err(AppendError::Store)?;
-
         // Owned, because the future crosses onto another runtime and must be
         // `'static`. `Event` is `Bytes`-backed, so the clone is a refcount bump
         // per event rather than a copy of the payload.
@@ -551,8 +595,7 @@ impl SendEventStore for PostgresEventStore {
 
         match self
             .on_runtime(async move {
-                append_in_transaction(&pool, &owned, condition.as_ref(), recorded_at, store_id)
-                    .await
+                append_in_transaction(&pool, &owned, condition.as_ref(), recorded_at).await
             })
             .await
             .map_err(AppendError::Store)?
@@ -778,9 +821,8 @@ async fn append_in_transaction(
     events: &[Event],
     condition: Option<&AppendCondition>,
     recorded_at: RecordedAt,
-    store_id: StoreId,
 ) -> Result<AppendOutcome, PostgresEventStoreError> {
-    retry_serialisation(|| append_once(pool, events, condition, recorded_at, store_id)).await
+    retry_serialisation(|| append_once(pool, events, condition, recorded_at)).await
 }
 
 /// Runs `attempt` until it stops failing with a `40001`, at most
@@ -901,13 +943,34 @@ fn is_serialisation_failure(error: &PostgresEventStoreError) -> bool {
     database.code().as_deref() == Some(SERIALIZATION_FAILURE)
 }
 
-/// One attempt: begin, evaluate, insert, commit.
+/// One attempt: begin, read the identity, evaluate, insert, commit.
+///
+/// # Why the identity is read here, first, and not held by the handle
+///
+/// The stamp has to be the row as it stands when this transaction runs, or a
+/// re-mint is invisible to a handle that read the row before it (ADR-0086
+/// §7.1). First, before the guards, so a store with no identity refuses before
+/// it evaluates anything, and the transaction is dropped uncommitted: nothing
+/// is written, and no row with a NULL origin can be.
+///
+/// A plain `SELECT`, not `FOR SHARE`. A re-mint racing this append is harmless
+/// where no restore happened, because the re-mint does not rewind the
+/// sequence: a row stamped with the retired identity still takes a fresh
+/// position, so no pair repeats. After a restore the sequence has been rewound,
+/// and such a row would repeat a pair; the procedure prevents that by stopping
+/// every writer before the re-mint, which no lock here could enforce on a
+/// writer the operator left running. So a row lock would make every append
+/// write to the one `store_meta` tuple to buy nothing.
+/// Under `SERIALIZABLE` the read adds one predicate lock on a row no append
+/// writes, so appends do not conflict with each other through it.
+///
+/// It costs one primary-key lookup, one round trip, in a transaction the append
+/// already holds.
 async fn append_once(
     pool: &PgPool,
     events: &[Event],
     condition: Option<&AppendCondition>,
     recorded_at: RecordedAt,
-    store_id: StoreId,
 ) -> Result<AppendOutcome, PostgresEventStoreError> {
     let mut transaction = if condition.is_some() {
         pool.begin_with("BEGIN ISOLATION LEVEL SERIALIZABLE")
@@ -915,6 +978,12 @@ async fn append_once(
     } else {
         pool.begin().await?
     };
+
+    let store_id = identity_from_row(
+        sqlx::query_scalar(IDENTITY_SQL)
+            .fetch_optional(&mut *transaction)
+            .await?,
+    )?;
 
     if let Some(condition) = condition
         && let Some(conflict) = evaluate(&mut transaction, condition).await?
@@ -1000,7 +1069,7 @@ async fn evaluate(
 ///
 /// # Why one statement rather than a row at a time
 ///
-/// The batch ceiling is 256 events at eight columns — 2,048 bound parameters,
+/// The batch ceiling is 256 events at nine columns — 2,304 bound parameters,
 /// comfortably inside the extended protocol's `int16` limit of 65,535, and one
 /// round trip instead of 256.
 async fn insert_batch(
@@ -1015,7 +1084,7 @@ async fn insert_batch(
         origin: Origin::Local,
         recorded_at,
     });
-    insert_statement(store_id, rows, &positions)
+    insert_statement(store_id, rows, &positions, positions.iter().copied().min())
         .build()
         .execute(&mut **transaction)
         .await?;
@@ -1097,19 +1166,19 @@ async fn allocate_positions(
 
 /// The one multi-row `INSERT INTO event` that append and ingest both send.
 ///
-/// Eight binds per row. A [`Origin::Local`] row binds `store_id` and its own
-/// position as its origin; a foreign row binds the origin it carries. Rows are
-/// paired with `positions` in order. No I/O, so the text is testable without a
-/// server. The builder owns its binds (ADR-0080 (b)), which is why it is
-/// `'static`.
+/// Nine binds per row. A [`Origin::Local`] row binds `store_id` and its own position as its
+/// origin; a foreign row binds the origin it carries. Rows pair with `positions` in order, and
+/// each binds `group` as `write_group` (#420; the `write_group` module says which). No I/O, so
+/// the text is testable. The builder owns its binds (ADR-0080 (b)), hence `'static`.
 fn insert_statement<'r>(
     store_id: StoreId,
     rows: impl IntoIterator<Item = NewRow<'r>>,
     positions: &[i64],
+    group: Option<i64>,
 ) -> sqlx::QueryBuilder<'static, Postgres> {
     let mut builder = sqlx::QueryBuilder::<Postgres>::new(
-        "INSERT INTO event \
-         (position, event_type, data, metadata, tags, origin_store, origin_position, recorded_at) ",
+        "INSERT INTO event (position, event_type, data, metadata, tags, origin_store, \
+         origin_position, recorded_at, write_group) ",
     );
     builder.push_values(
         rows.into_iter().zip(positions),
@@ -1136,7 +1205,8 @@ fn insert_statement<'r>(
                 .push_bind(tags)
                 .push_bind(origin_store.to_bytes().to_vec())
                 .push_bind(origin_position)
-                .push_bind(recorded_at.as_millis());
+                .push_bind(recorded_at.as_millis())
+                .push_bind(group);
         },
     );
     builder
@@ -1178,6 +1248,45 @@ pub(crate) fn position_from_row(stored: i64) -> Result<SequencePosition, Postgre
         .ok_or(PostgresEventStoreError::PositionOutOfRange { value: stored })
 }
 
+/// This store's identity row, as every read of it is spelled.
+const IDENTITY_SQL: &str = "SELECT v FROM store_meta WHERE k = 'store_id'";
+
+/// The re-mint: migration 1's insert turned into an update, so the row it
+/// writes is the only row it can touch, plus the value read back.
+///
+/// An `UPDATE` rather than an upsert. A schema with no row is a schema
+/// migration 1 never ran on, and minting into it would hide that.
+const REMINT_SQL: &str =
+    "UPDATE store_meta SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id' RETURNING v";
+
+/// Decodes the `store_meta` value a read or the re-mint returned.
+///
+/// # Errors
+///
+/// [`PostgresEventStoreError::MissingIdentity`] for no row, which means
+/// migration 1 has not been applied, and
+/// [`PostgresEventStoreError::MalformedIdentity`] for a value that is not
+/// sixteen bytes. Neither is spelled as a driver error, because "the schema is
+/// not there" and "the server refused the query" send a reader to different
+/// places.
+fn identity_from_row(stored: Option<Vec<u8>>) -> Result<StoreId, PostgresEventStoreError> {
+    stored_store_id(&stored.ok_or(PostgresEventStoreError::MissingIdentity)?)
+}
+
+/// Decodes sixteen stored bytes as a [`StoreId`]: this store's own identity
+/// through [`identity_from_row`], and a stored `origin_store` on the ingest
+/// path. The one place a `StoreId` is read back from this schema.
+///
+/// # Errors
+///
+/// [`PostgresEventStoreError::MalformedIdentity`] when it is not sixteen bytes.
+fn stored_store_id(stored: &[u8]) -> Result<StoreId, PostgresEventStoreError> {
+    let bytes: [u8; 16] = stored
+        .try_into()
+        .map_err(|_| PostgresEventStoreError::MalformedIdentity { len: stored.len() })?;
+    Ok(StoreId::from_bytes(bytes))
+}
+
 /// A position as the `bigint` the schema stores.
 fn as_i64(position: SequencePosition) -> i64 {
     i64::try_from(position.get()).unwrap_or(i64::MAX)
@@ -1198,10 +1307,11 @@ fn now() -> RecordedAt {
 #[cfg(test)]
 mod tests {
     use super::{
-        AppendOutcome, PostgresEventStore, PostgresEventStoreError, SERIALISATION_ATTEMPTS,
-        SERIALIZATION_FAILURE, is_serialisation_failure, retry_serialisation,
+        AppendOutcome, NewRow, Origin, PostgresEventStore, PostgresEventStoreError, ROW_PARAMETERS,
+        SERIALISATION_ATTEMPTS, SERIALIZATION_FAILURE, insert_statement, is_serialisation_failure,
+        retry_serialisation,
     };
-    use happenstance_core::{EventStore, SequencePosition};
+    use happenstance_core::{Event, EventStore, RecordedAt, SequencePosition, StoreId};
 
     /// Constraint 4: generic code binds the *bare* flavour, and a `Send`
     /// implementer must satisfy it. Instantiating the bound at this concrete
@@ -1324,6 +1434,43 @@ mod tests {
         assert_eq!(calls, 1);
         assert!(matches!(outcome, Err(ref error) if !is_serialisation_failure(error)));
     }
+
+    /// #420: the one `INSERT` names `write_group` as its ninth column and
+    /// binds it on every row, so a write records its group in the statement
+    /// that writes it and no follow-up `UPDATE` can be forgotten.
+    ///
+    /// **Named wrong statement:** the eight-column `INSERT` this crate sent
+    /// before migration 3, which leaves every appended row `NULL` and so a
+    /// group of one; both assertions fail on it.
+    #[test]
+    fn the_insert_binds_a_write_group_on_every_row() {
+        let events = [
+            Event::new("Grouped", b"a".to_vec()).expect("a valid event type"),
+            Event::new("Grouped", b"b".to_vec()).expect("a valid event type"),
+            Event::new("Grouped", b"c".to_vec()).expect("a valid event type"),
+        ];
+        let rows = events.iter().map(|event| NewRow {
+            event,
+            origin: Origin::Local,
+            recorded_at: RecordedAt::from_millis(1),
+        });
+
+        let statement = insert_statement(StoreId::from_bytes([1; 16]), rows, &[7, 8, 9], Some(7));
+        let sql = statement.sql();
+
+        assert!(
+            sql.starts_with(
+                "INSERT INTO event (position, event_type, data, metadata, tags, origin_store, \
+                 origin_position, recorded_at, write_group) "
+            ),
+            "{sql}"
+        );
+        assert_eq!(
+            sql.matches('$').count(),
+            events.len() * ROW_PARAMETERS,
+            "every row binds all nine columns: {sql}"
+        );
+    }
 }
 
 // `happenstance-sync`'s ingest port over the writer above (#108). A child
@@ -1331,3 +1478,17 @@ mod tests {
 // behind `sync`, off by default: see its module docs.
 #[cfg(feature = "sync")]
 mod ingest;
+
+// The write-group port (#420, SY-39): the log read back in the writes that
+// made it, and the stamp an ingested group's rows take. A child for the
+// reason `ingest` is one, and behind `sync` with it; the column it reads is
+// written unconditionally, by `insert_statement`.
+#[cfg(feature = "sync")]
+mod write_group;
+
+/// Binds per row in [`insert_statement`]: eight columns before migration 3,
+/// and `write_group`. Declared down here, after the tests, so the lines above
+/// keep the numbers the decision records cite them by. Read only by `ingest`'s
+/// compile-time bind check and the tests, so it exists only where they do.
+#[cfg(any(test, feature = "sync"))]
+const ROW_PARAMETERS: usize = 9;

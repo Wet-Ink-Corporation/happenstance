@@ -48,18 +48,18 @@ last_reviewed: 2026-08-17
 CF-38 is `[FROZEN]`, and PS-27 and PS-30 are the visible symptoms named
 against it: two clauses whose rule names are never resolved by `cargo xtask
 spec-trace`. The phase-7 defect log recorded the cause as `has_suite`
-excluding the `PS` family outright, at `spec_trace.rs:694-696`. Verified
+excluding the `PS` family outright, at `spec_trace.rs:696-698`. Verified
 against this worktree, that half of the finding is now wrong: `has_suite`
-(`xtask/src/spec_trace.rs:2692-2697`) admits the `PS-` prefix as of the
+(`xtask/src/spec_trace.rs:2689-2694`) admits the `PS-` prefix as of the
 2026-08-15 wave, a change held by its own test
-(`xtask/src/spec_trace.rs:3754-3761`, asserting `has_suite("PS-1")` and
+(`xtask/src/spec_trace.rs:3791-3797`, asserting `has_suite("PS-1")` and
 `has_suite("PS-37")`), and recorded at `kb-reference-spec-trace-has-suite-001`.
 
 The guard that actually gates check 4's rule-name resolution has two terms,
 not one: the loop continues past a clause — skipping it, resolving nothing
-— on `c.schedules_new || !has_suite(&c.id)` (`xtask/src/spec_trace.rs:701`).
+— on `c.schedules_new || !has_suite(&c.id)` (`xtask/src/spec_trace.rs:703`).
 `has_suite` is now true for `PS`. `schedules_new` is not: it is set by
-`Rules::parse` (`xtask/src/spec_trace.rs:1747-1751`) whenever the clause's
+`Rules::parse` (`xtask/src/spec_trace.rs:1744-1748`) whenever the clause's
 `Rule:` line contains a bare `†`, among a few other markers. Every `PS`
 clause in section 7.2 that carries that dagger — seventeen of them, by the
 specification's own print — is therefore skipped before its rule name is

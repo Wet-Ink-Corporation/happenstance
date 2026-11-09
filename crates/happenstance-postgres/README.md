@@ -11,7 +11,7 @@ with programs you can run.
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant, and in the `0.5.1` release set.** **108 of 108** gated
+> **Status: conformant, and in the `0.6.0` release set.** **108 of 108** gated
 > tests in the event-store binary passed against a live PostgreSQL 17.10, counted at `0.4.0` — the 95
 > rules of the event-store family, the 6 of the concurrency family at 64
 > contenders, the generated model family, and this crate's own six. The
@@ -58,9 +58,9 @@ with programs you can run.
 ## Features
 
 ```toml
-happenstance-postgres = "0.5"                              # the event store
-happenstance-postgres = { version = "0.5", features = ["projection-store"] }
-happenstance-postgres = { version = "0.5", features = ["sync"] }   # + the ingest port
+happenstance-postgres = "0.6"                              # the event store
+happenstance-postgres = { version = "0.6", features = ["projection-store"] }
+happenstance-postgres = { version = "0.6", features = ["sync"] }   # + the ingest port
 
 sqlx = "0.8"                                               # only for queries of your own
 ```
@@ -82,10 +82,22 @@ it forwards nothing now, because the port needs no feature.
 implements `happenstance-sync`'s `SendIngestStore` for `PostgresEventStore`,
 so generic code bound on `IngestStore` accepts it, and re-exports the port as
 `happenstance_postgres::happenstance_sync`. The identity an ingest checks
-claims against is the one `append` stamps from, read from `store_meta` on a
-handle's first use. It turns on `event-store`, and `happenstance-core`'s
-`serde` feature through `happenstance-sync`. There is no runner (issue #244)
-and no network peer yet, so this is the port, not replication.
+claims against is the one `append` stamps from, read from `store_meta` inside
+every append's and every ingest's own transaction, never cached on the handle
+(#104). It turns on `event-store`, and `happenstance-core`'s
+`serde` feature through `happenstance-sync`. It also implements
+`SendWriteGroupStore`, which reads the log back in the writes that made it
+(#420), and stores the guard an ingested group arrived under, which makes it a
+local side for `happenstance-sync`'s runner, `runner::Edge` (#244).
+
+The sync peer over this store is `happenstance-sync`'s `StoreSyncPeer`, with
+the store as both halves: `StoreSyncPeer::new(store.clone(), store)`. There is
+no Postgres peer type, unlike `happenstance-neon`'s `NeonSyncPeer`, because
+over a pool the peer's two queries a pull and three a push are cheap, and
+`read_groups` already decides `waiting` inside its own statement (SY-37). CI's
+`live-postgres` job runs `sync_peer_conformance!` on it, with a replay and a
+byte-identical round trip, and the workspace's `harness/sync-round-trip` runs a
+native SQLite store through it (#131).
 
 ## The problem this crate is here to solve
 
@@ -126,8 +138,9 @@ let views  = PostgresProjectionStore::new(pool);
 Sharing one pool is the expected deployment, which is why neither type builds
 its own. The schema lives in `migrations/` as SQL and is compiled in, so a
 consumer needs nothing from the repository to apply it — `migration::MIGRATION_1`
-for the event log, applied by `migration::apply`, and `migration::MIGRATION_2` for
-the projection checkpoint, applied by `migration::apply_projection`.
+and `migration::MIGRATION_3` for the event log, both applied by `migration::apply`,
+and `migration::MIGRATION_2` for the projection checkpoint, applied by
+`migration::apply_projection`.
 They are applied separately on purpose: an application using only the event store
 gets no `projection_checkpoint` table.
 
@@ -170,6 +183,45 @@ writes back on either store. The trade for the live store: a pooled connection
 held for a whole chunk, and a statement the server refuses aborts the
 transaction, unless `apply` rolled back to a savepoint it set (#103). The
 buffered store stays the default.
+
+## Upgrading to schema version 2: migrate, then deploy
+
+This release adds migration 3 (`migrations/0003_write_group.sql`): two nullable
+columns on `event`, `write_group` and `group_guard`, and a partial index on the
+first. They record which rows one append, or one ingested group with its
+compensation, wrote together, so a runner and a store peer forward the log in
+whole writes (#420). Every `INSERT` this build sends names `write_group`, so
+**run `migration::apply` against the schema before deploying this build to
+any process that writes to it**. A build that runs against a schema without the
+column fails its first append with an undefined-column error from the server.
+
+`apply` is idempotent, so on a schema an older build migrated only migration 3
+does anything. Its two `ALTER TABLE … ADD COLUMN`s rewrite no row, but take a
+brief exclusive lock on `event`; its index build blocks writes while it runs. On
+a large table, build the index first with
+`CREATE INDEX CONCURRENTLY event_write_group_idx ON event (write_group) WHERE write_group IS NOT NULL`,
+and `apply` then leaves it alone. Rows written before the migration read back as
+groups of one, with no guard; nothing is backfilled. An older build keeps
+working against a migrated schema, and writes rows that read as groups of one.
+
+## After a restore, re-mint before the first append
+
+A `pg_restore`, a point-in-time recovery, a promoted replica that lost acknowledged writes, or any
+other copy of this store's database brings back its identity row together with an older position
+sequence. The copy would then re-issue event identities it has already issued, and a replication
+peer would silently drop the new events as already seen. In this order:
+
+1. Stop every process that appends to the copy.
+2. Re-mint the copy's identity: call `PostgresEventStore::remint_identity`, or run, against the
+   copy, the statement it runs:
+   ```sql
+   UPDATE store_meta SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id';
+   ```
+3. Resume appends.
+
+No restart is needed: every append reads the identity row inside its own transaction, so a
+handle opened before step 2 stamps the new identity from its next append on. Events already in
+the database keep the identity they were written with.
 
 ## Limits this store enforces
 

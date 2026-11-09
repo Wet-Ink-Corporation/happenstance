@@ -853,7 +853,7 @@ items is precisely what makes their order stop mattering. VT-31's
 ## C — Sync and convergence
 
 Every case in this group needs `happenstance-sync`, which today is a module doc
-comment and a one-variant error enum (`crates/happenstance-sync/src/lib.rs:103-112`),
+comment and a one-variant error enum (`crates/happenstance-sync/src/lib.rs:105-114`),
 and most need `happenstance-sync-testkit`, which is named at `lib.rs:9-11` and does
 not exist. They are specified anyway, because the port's shape is what they constrain.
 

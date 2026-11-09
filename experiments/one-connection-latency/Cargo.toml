@@ -43,7 +43,7 @@ futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # The same driver at the same version the workspace names, so the paged read
 # this crate reproduces is compiled against the SQLite the adapter links.
-rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
 thiserror = "2"
 # `time` is what instrument (a) is built out of — a 1 ms `tokio::time::interval`
 # whose missed ticks are the measurement. `rt-multi-thread` is only for the

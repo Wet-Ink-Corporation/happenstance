@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "examples/*", "harness/workerd", "xtask"]
+members = ["crates/*", "examples/*", "harness/workerd", "harness/sync-round-trip", "xtask"]
 exclude = ["crates/happenstance-ladybug"] # retired, ADR-0078; a frozen record, cited by line
 [workspace.package]
 # The number `happenstance`, `happenstance-core`, `happenstance-sqlite` and
@@ -21,7 +21,7 @@ exclude = ["crates/happenstance-ladybug"] # retired, ADR-0078; a frozen record, 
 # it shipped behind an off-by-default `unstable-projection` feature with a
 # written exemption — and is from the next release, ADR-0063 having lifted the
 # gate once adapters at both ends of the batch-shape axis had passed its suite.
-version = "0.5.1"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.97.1"
 license = "MIT OR Apache-2.0"
@@ -63,9 +63,9 @@ categories = ["database", "data-structures"]
 # `happenstance-sync` is the third since #108 part E: each adapter's optional
 # `sync` feature names it, so it publishes in the same `cargo publish` as the
 # adapters, ahead of them, at the same lockstep number.
-happenstance-core = { version = "0.5.1", path = "crates/happenstance-core", default-features = false }
-happenstance = { version = "0.5.1", path = "crates/happenstance", default-features = false }
-happenstance-sync = { version = "0.5.1", path = "crates/happenstance-sync", default-features = false }
+happenstance-core = { version = "0.6.0", path = "crates/happenstance-core", default-features = false }
+happenstance = { version = "0.6.0", path = "crates/happenstance", default-features = false }
+happenstance-sync = { version = "0.6.0", path = "crates/happenstance-sync", default-features = false }
 happenstance-testkit = { path = "crates/happenstance-testkit" }
 
 # --- external ---
@@ -96,8 +96,8 @@ futures-util = { version = "0.3", default-features = false }
 # `bundled` compiles the SQLite C amalgamation with the host toolchain, so no
 # system SQLite is needed on any developer machine or CI runner.
 # `default-features = false` drops `ffi-sqlite-wasm-rs`, which 0.40 turned on by
-# default and which no native adapter wants.
-rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+# default, and 0.41 still does, which no native adapter wants.
+rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
 # No longer dev-only, and the move is the point: `happenstance` ships a postcard
 # codec behind its `postcard` feature, so a published crate links this. It was
 # already here as the non-self-describing half of WF-7's two-format matrix, and

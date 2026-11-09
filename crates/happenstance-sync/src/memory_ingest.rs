@@ -35,7 +35,7 @@
 //! It is **not** built for scale. Every read snapshots under the lock, and
 //! every membership question is a set lookup over everything held.
 
-use alloc::collections::BTreeSet;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use std::sync::{PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -108,13 +108,35 @@ pub struct MemoryIngestStore {
     state: RwLock<State>,
 }
 
-/// The log, and every identity in it, under one lock.
+/// The log, every identity in it, and the write group of every row, under one
+/// lock.
 #[derive(Debug, Default)]
 struct State {
     /// Position order, dense from 1.
     log: Vec<SequencedEvent>,
     /// Every `id` in `log`, updated in the same critical section.
     held: BTreeSet<EventId>,
+    /// The write group of each row of `log`, index for index: the position of
+    /// the group's first row (#420).
+    group_of: Vec<SequencePosition>,
+    /// The guard each ingested group arrived under, by its first position.
+    guards: BTreeMap<SequencePosition, AppendCondition>,
+}
+
+/// One write group a write is about to commit: its first position, how many of
+/// the staged rows it holds, and the guard it arrived under.
+#[derive(Debug)]
+struct StagedGroup {
+    first: SequencePosition,
+    rows: usize,
+    guard: Option<AppendCondition>,
+}
+
+/// Everything one write would commit.
+#[derive(Debug, Default)]
+struct Staged {
+    rows: Vec<SequencedEvent>,
+    groups: Vec<StagedGroup>,
 }
 
 impl Default for MemoryIngestStore {
@@ -182,12 +204,14 @@ impl State {
         own: StoreId,
         groups: &[IngestGroup<'_>],
         recorded_at: RecordedAt,
-    ) -> Result<(Vec<SequencedEvent>, Ingested), IngestError<MemoryStoreError>> {
+    ) -> Result<(Staged, Ingested), IngestError<MemoryStoreError>> {
         let mut staged = Vec::new();
+        let mut staged_groups = Vec::new();
         let mut staged_ids = BTreeSet::new();
         let mut counts = Ingested::default();
         for group in groups {
             let landed_before = counts.appended;
+            let group_start = staged.len();
             for shipped in group.events {
                 // Held when the call began: a re-delivery (SY-11).
                 if self.held.contains(&shipped.id) {
@@ -225,14 +249,37 @@ impl State {
                     counts.compensated += 1;
                 }
             }
+            // A group that landed something is one write group, compensation
+            // included; a full re-delivery writes no group (SY-11). The guard is
+            // cloned once, because the store keeps it.
+            let landed = staged.len() - group_start;
+            if landed > 0 {
+                staged_groups.push(StagedGroup {
+                    first: self.next_position(group_start),
+                    rows: landed,
+                    guard: group.guard.cloned(),
+                });
+            }
         }
+        let staged = Staged {
+            rows: staged,
+            groups: staged_groups,
+        };
         Ok((staged, counts))
     }
 
-    /// Writes `rows`, which [`stage`](Self::stage) or `append` checked.
-    fn commit(&mut self, rows: Vec<SequencedEvent>) {
-        self.held.extend(rows.iter().map(|row| row.id));
-        self.log.extend(rows);
+    /// Writes what [`stage`](Self::stage) or `append` checked: the rows, the
+    /// write group of each, and each group's guard.
+    fn commit(&mut self, staged: Staged) {
+        for group in staged.groups {
+            self.group_of
+                .extend(core::iter::repeat_n(group.first, group.rows));
+            if let Some(guard) = group.guard {
+                self.guards.insert(group.first, guard);
+            }
+        }
+        self.held.extend(staged.rows.iter().map(|row| row.id));
+        self.log.extend(staged.rows);
     }
 }
 
@@ -361,7 +408,17 @@ impl SendEventStore for MemoryIngestStore {
             })
             .collect();
         let last = state.next_position(events.len().saturating_sub(1));
-        state.commit(rows);
+        // One append is one write group, carrying no guard: a local condition
+        // is position-relative, which SY-6 makes unreplicable.
+        let group = StagedGroup {
+            first: state.next_position(0),
+            rows: rows.len(),
+            guard: None,
+        };
+        state.commit(Staged {
+            rows,
+            groups: alloc::vec![group],
+        });
         Ok(last)
     }
 
@@ -395,8 +452,8 @@ impl SendIngestStore for MemoryIngestStore {
         };
 
         let mut state = self.write_guard();
-        let (rows, counts) = state.stage(self.store_id, groups, recorded_at)?;
-        state.commit(rows);
+        let (staged, counts) = state.stage(self.store_id, groups, recorded_at)?;
+        state.commit(staged);
         Ok(counts)
     }
 
@@ -427,6 +484,10 @@ impl Stream for Snapshot {
         core::task::Poll::Ready(self.get_mut().0.next().map(Ok))
     }
 }
+
+// The write-group port (#420), a file of its own because this one is long
+// enough. A child module, so it reads `State` without widening it.
+mod groups;
 
 #[cfg(test)]
 mod tests {

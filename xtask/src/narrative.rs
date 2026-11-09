@@ -199,6 +199,17 @@ mod upgrading_to_0_5 {
     #![doc = include_str!("../../docs/upgrading-to-0-5.md")]
 }
 
+// The third upgrade guide. Its `rust` fences are the sync wire format at
+// version 3 refusing a version-2 envelope, both through `check_format_version`
+// and through a JSON decode; `Pulled` and `Ack` built as 0.5 built them, naming
+// no responder, with a JSON body that omits the key refused; and a projection
+// fixture stating `REOPEN`. The database adapters' code sits in `text` fences,
+// because this target links none of them.
+#[cfg(doctest)]
+mod upgrading_to_0_6 {
+    #![doc = include_str!("../../docs/upgrading-to-0-6.md")]
+}
+
 // The first how-to. Three fences: a zero `Retry` refused at compile time
 // (E0080); the reply each exhausted or failed command gets; and two deliveries
 // of one request racing, where the loser is refused and its retry and a late

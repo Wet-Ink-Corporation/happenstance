@@ -129,9 +129,11 @@ async fn the_adapter_emits_the_chain_this_crate_transcribes() {
         SqliteEventStore::MAX_QUERY_ARMS_PER_STATEMENT,
     );
 
-    let traced_connection =
+    let mut traced_connection =
         happenstance_sqlite::connection::open_configured(&path).expect("opening must succeed");
-    traced_connection.trace_v2(TraceEventCodes::SQLITE_TRACE_STMT, Some(record));
+    traced_connection
+        .trace_v2(TraceEventCodes::SQLITE_TRACE_STMT, Some(record))
+        .expect("installing the trace callback must succeed");
     let store = SqliteEventStore::new(traced_connection).expect("the file is migrated");
 
     // ---- 1. the guard --------------------------------------------------------

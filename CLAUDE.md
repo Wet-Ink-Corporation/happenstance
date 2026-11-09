@@ -46,14 +46,22 @@ crates/happenstance-neon/        Postgres over one-shot HTTP: no connection, no 
                                  transaction, no cursor. real and conformant at phase 10b
                                  against a live endpoint — and the adapter that falsified
                                  ES-11. host + wasm32. published from `0.2.0`.
-crates/happenstance-sync/        the replication port, its wire messages (ADR-0097) and
-                                 MemorySyncPeer behind `memory`. published from `0.4.4`, and
-                                 unfinished: no runner (#244) and no network peer yet.
+crates/happenstance-sync/        the replication port, its wire messages (ADR-0097, v3 since
+                                 ADR-0104) and MemorySyncPeer behind `memory`. published from
+                                 `0.4.4`; built at phase 13: the runner over one edge (#244),
+                                 write groups (WriteGroupStore, SY-39, ADR-0105), and a network
+                                 peer's two halves — StoreSyncPeer + serve_sync, RemoteSyncPeer
+                                 over a caller's Exchange — with SendPeer for the Send flavour.
+                                 not yet: a peer set above one edge, an Exchange over a real
+                                 network in a published crate, the adjudication hook (#450).
                                  no todo!() left in src/; the stand-in peers in tests/ keep theirs.
 crates/happenstance-sync-testkit/
-                                 the sync conformance suite. `sync_peer_conformance!`, the
-                                 bar a peer adapter must clear. published from `0.4.4`, and
-                                 growing rule by rule: a consumer pins it exactly.
+                                 the sync conformance suites. `sync_peer_conformance!`, the
+                                 bar a peer adapter must clear, beside the ingest, write-group,
+                                 restore, watermark, convergence and model families. published
+                                 from `0.4.4`; green against MemorySyncPeer, NeonSyncPeer, the
+                                 Durable Object over HTTP and a Postgres StoreSyncPeer. a new
+                                 rule is a minor: a consumer pins it exactly.
 examples/course-subscriptions/   the canonical DCB worked example. in memory.
 examples/transfers-on-sqlite/    the same library on a real database — the typed layer's
                                  command loop and projection runner against
@@ -81,11 +89,19 @@ examples/tickets-over-http/      two processes over one file. an HTTP API and a 
                                  answered by 202 until the view catches up. one image, three
                                  roles, and the only lib target under examples/.
 harness/workerd/                 🔬 the runtime instrument. a real Durable Object that runs
-                                 every event-store rule and the ingest family under workerd —
-                                 locally, and on an object deployed to Cloudflare — and
-                                 measures the platform's SQLite walls and the ingest ceiling.
-                                 the `workerd` CI job, a sibling of gate.
-                                 an npm lockfile lives here. never published. phase 17.
+                                 every event-store rule, the ingest, write-group and sync peer
+                                 families under workerd — locally, and on an object deployed
+                                 to Cloudflare — measures the platform's SQLite walls and the
+                                 ingest ceiling, and round-trips a native SQLite store through
+                                 the object over real HTTP (#130). the `workerd` CI job, a
+                                 sibling of gate. an npm lockfile lives here. never published.
+                                 phase 17.
+harness/sync-round-trip/         🔬 a native SQLite store through NeonSyncPeer and through a
+                                 StoreSyncPeer over Postgres: payload bytes identical both ways,
+                                 a replayed batch changing nothing (#131, ADR-0106). a crate of
+                                 its own because the round trip needs two adapters in one build
+                                 and no adapter depends on another. run by `live-neon` and
+                                 `live-postgres`. never published. phase 13.
 xtask/                           `cargo xtask ci` — the whole gate, defined once.
 spec/                            SPECIFICATION.md — every clause that is true now.
                                  E2E-CASES.md — the cases stated as observable behaviour.
@@ -155,8 +171,8 @@ about three times.
 
 **Two kinds of `publish = false` were in this workspace, and none is left in it.**
 `happenstance-sync` and `happenstance-sync-testkit` carried the *unfinished* kind
-until `0.4.4`, which published them unfinished: they say so in their own crate
-roots now, not in a manifest key. `happenstance-ladybug` was finished and **could
+until `0.4.4`, which published them unfinished; phase 13 built them against real
+peers, and their crate roots say what is still to come, not a manifest key. `happenstance-ladybug` was finished and **could
 not** be published — `lbug` does not render on docs.rs, phase 12's bar for a
 published crate — and is now **retired** (ADR-0078, phase 17): excluded from the
 workspace, its directory kept as a frozen record because the specification, the
@@ -415,7 +431,7 @@ diverge again; ADR-0029 explains why it is kept rather than deleted.
 Do not settle these silently in passing; they need their own pass and probably
 their own ADR. Two files carry the answers, and they answer different questions.
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) says
-what is **true now** — numbered clauses (208 at the last count; §7.1's
+what is **true now** — numbered clauses (212 at the last count; §7.1's
 generated summary is the live total), each carrying a maturity marker
 (frozen, provisional, deferred, or demoted to non-normative prose) and each
 naming the conformance rule that checks it and the wrong implementation it
@@ -458,15 +474,23 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   store, so positions cannot be replicated as-is. Whether ingest re-checks
   append conditions is **no longer open**. SY-1 – SY-6 are frozen: ingest never
   refuses, a conflict is compensated by an ordinary append, and the origin's
-  condition is evidence rather than an instruction. SY-7, which assigns
-  compensation authorship to one peer, is provisional. The peer port's shape is
+  condition is evidence rather than an instruction. The peer port's shape is
   frozen too: one relationship per `SyncPeer`, and hub-ness is not a type
-  (SY-8, SY-9). SY-10, which makes hub-and-spoke and peer-to-peer both
-  first-class, is provisional. Replication is whole-log at 1.0 (SY-27, ADR-0027,
-  provisional), and the message set is four types in the envelope with the format
-  version on every message (ADR-0097). What is still open is deferred by clause:
-  bulk-ingest cost (SY-14), peer limits (SY-18) and the retention floor (SY-32).
-  Phase 13 builds against all of them.
+  (SY-8, SY-9). Phase 13 built the port against real peers and
+  [ADR-0107](.kb/decisions/0107-phase-13s-clauses-are-frozen.md) froze nineteen
+  clauses on that evidence, among them bulk ingest in one round trip a pulled
+  batch (SY-14, measured on live Neon), peer limits (SY-18), whole-log
+  replication (SY-27, SY-28), the push keeping write groups (SY-30), the
+  watermark through `ProjectionStore` (SY-31), classified peer errors (SY-36),
+  `waiting` (SY-37), the unheld own identity (SY-38) and, with ADR-0105, write
+  groups themselves (SY-39). 35 of the 39 `SY` clauses are frozen. **Still
+  open:** SY-7, which assigns compensation authorship to one peer, and SY-10,
+  which makes hub-and-spoke and peer-to-peer both first-class, are provisional
+  and `freeze-by-14`, waiting on the runner's adjudication hook (#450); SY-29 is
+  renewed past 1.0 against the first scoped-replication proposal; and the
+  retention floor (SY-32) is deferred to phase 14. The message set is four types
+  in the envelope with the format version on every message (ADR-0097), at
+  version 3 since ADR-0104.
 - ~~**How a Postgres adapter buys position visibility.**~~ `nextval()` allocates
   outside the transaction, so a Postgres store violates the visibility invariant
   by construction unless it does something about it. Settled by

@@ -62,6 +62,18 @@
 //! on the same object, and one attempt of the ingest ceiling, which the runner
 //! bisects.
 //!
+//! [`write_group`] runs the write-group family (#420, SY-39) on the same
+//! ingest fixtures: the store reads its log back in the writes that made it,
+//! through the columns its own `migrate` adds on this runtime.
+//!
+//! [`sync_peer`] runs the sync family (#130) against the object as a remote
+//! peer: each rule's client sends real requests to the handler the object
+//! mounts at `/sync/pull` and `/sync/push`, which serves them through
+//! `happenstance_cloudflare::sync_http`. The same routes, reached over a real
+//! socket by a native SQLite store, are `tests/sqlite_round_trip.rs`'s
+//! subject; `/sync-reset` empties the object between them, as a restore to
+//! nothing would.
+//!
 //! [`probe`] is the other half of the job: the platform's SQLite walls, measured
 //! on the runtime that imposes them (`experiments/durable-object-limits`).
 //!
@@ -79,3 +91,5 @@ mod object;
 pub mod probe;
 pub mod remint;
 pub mod restart;
+pub mod sync_peer;
+pub mod write_group;

@@ -450,4 +450,5 @@ first rule fails, split the statement, or otherwise accept the whole call.
 Declaring a `MAX_TAGS_PER_BATCH` below 8,192 does not get you past it: the rule
 fails that declaration before it writes anything. If your store declares a
 tags-per-call ceiling for ingest, declare the same number on your ingest fixture
-so the second rule can hold you to it.
+so the second rule can hold you to it. Both suites gain rules again in 0.6: see
+[`upgrading-to-0-6.md`](upgrading-to-0-6.md).

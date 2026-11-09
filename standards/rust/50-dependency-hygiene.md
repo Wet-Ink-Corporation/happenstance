@@ -96,14 +96,14 @@ The real fix is a workspace edit that changes what all eight crates resolve.
 
 **Why.** A default feature set is its author's decision about their median user,
 inherited transitively into yours. Two pins here turn it off for measured
-reasons: `rusqlite` 0.40's default adds `ffi-sqlite-wasm-rs`, which no native
+reasons: `rusqlite`'s default (0.40 and 0.41) adds `ffi-sqlite-wasm-rs`, which no native
 adapter wants, and `postcard`'s default reaches `heapless` and then
 `atomic-polyfill 1.0.3`.
 
 **Do**
 
 ```toml
-rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
 postcard = { version = "1", default-features = false, features = ["use-std"] }
 ```
 
@@ -112,7 +112,7 @@ postcard = { version = "1", default-features = false, features = ["use-std"] }
 which *"no safe upgrade is available"*:
 
 ```toml
-rusqlite = "0.40"
+rusqlite = "0.41"
 postcard = "1"
 ```
 
@@ -125,7 +125,7 @@ mentions.
 
 **Evidence.** `Cargo.toml:98 (ffi-sqlite-wasm-rs)` ·
 `Cargo.toml:109 (RUSTSEC-2023-0089)` ·
-`.github/workflows/ci.yml:2107 (cargo deny check advisories)` ·
+`.github/workflows/ci.yml:2391 (cargo deny check advisories)` ·
 [RUSTSEC-2023-0089](https://rustsec.org/advisories/RUSTSEC-2023-0089.html) *(checked 2026-08-09, rustc 1.97.1)*
 
 ## RS-50-4. A licence rejection is a dependency choice, and the offender is rarely the crate you expect.

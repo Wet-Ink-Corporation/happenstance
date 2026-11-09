@@ -644,6 +644,7 @@ fn projection_declines<S: ProjectionSubject>() -> Vec<(&'static str, &'static st
         S::COMMIT_FAULT
             .reason()
             .map(|reason| ("COMMIT_FAULT", reason)),
+        S::REOPEN.reason().map(|reason| ("REOPEN", reason)),
     ]
     .into_iter()
     .flatten()

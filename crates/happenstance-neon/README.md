@@ -51,8 +51,8 @@ records comes from that one sentence.
 ## The transport is yours
 
 ```toml
-happenstance-neon = "0.5"
-happenstance-neon = { version = "0.5", features = ["projection-store"] }
+happenstance-neon = "0.6"
+happenstance-neon = { version = "0.6", features = ["projection-store"] }
 ```
 
 **This crate owns no socket.** `SqlTransport` takes the whole request by value,
@@ -130,7 +130,7 @@ than tested.
 ## Replication: the `sync` feature
 
 ```toml
-happenstance-neon = { version = "0.5", features = ["sync"] }
+happenstance-neon = { version = "0.6", features = ["sync"] }
 ```
 
 `sync` is off by default and is the store's half of replication: it
@@ -139,9 +139,88 @@ re-exports the port as `happenstance_neon::happenstance_sync`. The bare
 flavour only, as the event store is, so it builds for `wasm32`. The identity
 an ingest checks claims against is read from the schema's meta row on every
 call, never cached on the handle. It turns on `event-store`, and
-`happenstance-core`'s `serde` feature through `happenstance-sync`. There is
-no runner (issue #244) and no network peer yet, so this is the port, not
-replication.
+`happenstance-core`'s `serde` feature through `happenstance-sync`. It also
+implements `WriteGroupStore`, the bare flavour again, which reads the log back
+in the writes that made it (#420), and stores the guard an ingested group
+arrived under. That makes it a local side for `happenstance-sync`'s runner,
+`runner::Edge` (#244), and the far side is the peer below.
+
+### The sync peer: `NeonSyncPeer`
+
+`sync` also brings `NeonSyncPeer`, a `SyncPeer` whose far side is a Neon
+store reached over this endpoint (#131). It is the peer that cannot hold a
+transaction across a round trip, so it spends exactly **one SQL request per
+`pull` and one per `push`**:
+
+- a pull sends the write-group read and the identity read as two statements
+  of one read-only `REPEATABLE READ` batch. The group read fetches one row past
+  what the page can carry, so `waiting` is decided inside the same request
+  (SY-37), and the responder identity (ADR-0104) is read in the same snapshot
+  as the page;
+- a push sends the ingest's statements, then the watermark and the identity,
+  in one `REPEATABLE READ` batch, so the ack confirms what that transaction
+  wrote. A push with nothing in it is one read-only request.
+
+```rust,ignore
+// Compiled as `NeonSyncPeer`'s doctest; nothing compiles this README.
+use happenstance_neon::{NeonConfig, NeonEventStore, NeonSyncPeer, NullTransport};
+
+let peer = NeonSyncPeer::new(NeonEventStore::new(NullTransport::new(), NeonConfig::default()));
+```
+
+`StoreSyncPeer` from `happenstance-sync` also works over `NeonEventStore`,
+and is what `NeonSyncPeer` is measured against: it asks the store one question
+per port method, which costs two HTTP round trips a pull and three a push.
+`NeonSyncPeer` sends the same SQL fused into one request. Its token is the
+same `StoreResume`, its pages are whole write groups, and a push writes no
+compensation, as `StoreSyncPeer`'s do. `new` declares `PeerLimits::minimum`,
+which sits inside this store's ceilings; a larger declaration must stay
+inside them, and a page must fit `max_response_bytes`. The bare flavour only,
+so it builds for `wasm32`. CI's `live-neon` job runs `sync_peer_conformance!`
+on it against the live endpoint, with a replay and a byte-identical round
+trip, and the workspace's `harness/sync-round-trip` runs a native SQLite
+store through it.
+
+## Upgrading to the write-group schema: migrate, then deploy
+
+This release adds `migration::MIGRATION_3` (`migrations/0003_write_group.sql`):
+two nullable columns on the event table, `write_group` and `group_guard`, and a
+partial index on the first. They record which rows one append, or one ingested
+group with its compensation, wrote together, so a runner and a store peer
+forward the log in whole writes (#420). Every `INSERT` this build sends names
+`write_group`, so **apply migration 3 to the schema before deploying this build
+to any process that writes to it**: send `migration::request(MIGRATION_3,
+&config)` after migration 1, as you send migration 1. A build that runs against
+a schema without the column fails its first append with an undefined-column
+error from the endpoint.
+
+The migration is idempotent. Its `ALTER TABLE … ADD COLUMN`s rewrite no row but
+take a brief exclusive lock; its index build blocks writes while it runs, so on a
+large table create `<event table>_write_group_idx` with `CREATE INDEX
+CONCURRENTLY` first, and the migration then leaves it alone. Rows written before
+it read back as groups of one, with no guard; nothing is backfilled. An older
+build keeps working against a migrated schema, and writes rows that read as
+groups of one.
+
+## Re-mint every branch before its first append
+
+A Neon branch is a copy of its parent, so it carries the parent's store identity together with an
+older position sequence. A branch that is created, reset or restored, and equally a `pg_restore` or
+a point-in-time recovery, would re-issue event identities its parent already issued, and a
+replication peer would silently drop the new events as already seen. Stop every writer to the
+branch, re-mint it, then resume appends. From code holding a store, that is
+`NeonEventStore::remint_identity`. From the tooling that makes branches, run
+`happenstance_neon::migration::remint_statement(&config).query`, which for the default
+`NeonConfig` is:
+
+```sql
+UPDATE "public"."store_meta" SET v = uuid_send(gen_random_uuid()) WHERE k = 'store_id' RETURNING encode(v, 'base64') AS store_id
+```
+
+No restart is needed: every append reads the identity row inside its own statement, and refuses
+with `NeonError::MissingIdentity`, writing nothing, if the row is absent; an ingest refuses the
+same way. The platform creates
+branches, not this crate, so put the statement in the tooling that does.
 
 ## Limits this store enforces
 

@@ -56,7 +56,7 @@ branch trades an in-code guarantee for an out-of-band one: the correctness of th
 longer depends on what the adapter can observe, only on whether whoever operates the deployment
 followed the document.
 
-`SqliteEventStore::remint_identity` (`crates/happenstance-sqlite/src/event_store.rs:448`) is that
+`SqliteEventStore::remint_identity` (`crates/happenstance-sqlite/src/event_store.rs:688`) is that
 branch's concrete implementation. Its precondition, stated in its own doc comment, is exactly the
 trust the branch describes: the caller asserts this database file is a restore or a clone of
 another, and the function's job is to act on that assertion, not to verify it. It opens the file,
@@ -102,7 +102,7 @@ the same store.
 `8900697` wrote the failing test first:
 `an_append_through_a_handle_the_file_has_outgrown_is_refused`
 (`crates/happenstance-sqlite/tests/migration.rs:501`). Commit `f719b2a` made it pass. `append_locked`
-(`crates/happenstance-sqlite/src/event_store.rs:757-820`) re-reads the file's persisted identity
+(`crates/happenstance-sqlite/src/event_store.rs:793-840`) re-reads the file's persisted identity
 inside the append's own `BEGIN IMMEDIATE`, before any guard is probed. When the handle's identity
 differs, it refuses with `SqliteEventStoreError::IdentityMoved` and names both incarnations. The
 check is one indexed read on a four-row table, under a lock the writer already holds. Both commits

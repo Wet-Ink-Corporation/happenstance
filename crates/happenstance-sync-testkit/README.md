@@ -11,8 +11,9 @@ New to happenstance? [The happenstance guide](https://wet-ink-corporation.github
 explains event sourcing and dynamic consistency boundaries from the beginning,
 with programs you can run.
 
-> **Status: published, and unfinished.** Phase 13 adds rules, and a new rule is
-> a minor of this crate's number, which is exactly the bump `cargo update`
+> **Status: published, and run against real peers.** Phase 13 grew it into
+> seven families and ran them against the network peers. A new rule is a minor
+> of this crate's number, which is exactly the bump `cargo update`
 > takes without being asked and the one that can turn a passing adapter red.
 > **Pin it exactly**, as you pin `happenstance-testkit`: an `=` requirement on
 > the version you test against, in `[dev-dependencies]`.
@@ -20,10 +21,11 @@ with programs you can run.
 > The version moves in lockstep with the rest of the workspace until 1.0. Each
 > rule names the clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
-> it checks; several of those are still `[PROVISIONAL]` (SY-7, SY-10, SY-27 –
-> SY-31, SY-36 – SY-38 among the ones a rule here checks), and a rule over a
-> provisional clause moves when its clause does. There is no runner yet (issue
-> #244), so nothing here checks one.
+> it checks; two of those are still `[PROVISIONAL]` (SY-7 and SY-10 among the
+> ones a rule here checks, ADR-0107),
+> and a rule over a provisional clause moves when its clause does. The
+> watermark family plays `happenstance-sync`'s shipped runner, `runner::Edge`,
+> and holds a projection store to what that runner asks of it (SY-31).
 >
 > Every rule returns `happenstance_testkit::RuleOutcome`, so that crate's type
 > is part of this one's public API.
@@ -31,10 +33,20 @@ with programs you can run.
 ## Use
 
 A store adapter that implements `IngestStore` mounts the ingest family beside
-the event-store suite, over a fixture that builds one isolated store per call:
+the event-store suite, over a fixture that builds one isolated store, with a
+fresh incarnation, per call (SY-7's rule opens two and fails a fixture that
+hands it one store twice):
 
 ```rust,ignore
 happenstance_sync_testkit::ingest_store_conformance!(MyIngestFixture::new());
+```
+
+A store a runner pushes from or a peer serves also implements
+`WriteGroupStore`, and mounts the write-group family (SY-39) on the same
+fixture:
+
+```rust,ignore
+happenstance_sync_testkit::write_group_store_conformance!(MyIngestFixture::new());
 ```
 
 A peer adapter mounts the peer family the same way:
@@ -49,9 +61,38 @@ each rule is shown to fail a named wrong implementation in this crate's own
 co-operation, such as a fault between two rows of one group, reports itself
 skipped with your fixture's stated reason rather than passing.
 
+A projection that declares itself convergent, by implementing
+`happenstance::ConvergentProjection`, is checked by calling one rule over a
+`ConvergenceFixture`: your projection, its store, and events from two origins
+whose order your fold could depend on. It runs the projection under two
+interleavings and compares the read models byte for byte (SY-20). A projection
+that does not declare it cannot be handed to the rule, which is how a fold such
+as FIFO cost layers is left out rather than failed (SY-22):
+
+```rust,ignore
+let outcome = happenstance_testkit::block_on(
+    happenstance_sync_testkit::convergence_rules::convergent_projection_is_interleaving_independent(
+        async || MyConvergenceFixture::new(),
+    ),
+)?;
+```
+
+A peer whose store can be backed up and restored mounts the restore family
+(VT-6) on a `RestoreFixture`: a local writer, a backup, and a restore that also
+takes every step your adapter documents for after one, such as a re-mint of its
+identity. The rule fails a peer that, after the restore, hands back one
+`EventId` for two different events. `MemoryRestoreFixture` is the reference:
+
+```rust,ignore
+happenstance_sync_testkit::restore_conformance!(MyRestoreFixture::new());
+```
+
 The harness is a parameter: `emit_ingest_tokio!` (the default),
 `emit_ingest_blocking!` for a `!Send` store, and `emit_ingest_wasm!` for
-`wasm32-unknown-unknown`; the peer family has the same three.
+`wasm32-unknown-unknown`; the peer family has the same three, and the
+write-group family has `emit_write_group_tokio!` and
+`emit_write_group_blocking!`, and the restore family `emit_restore_tokio!` and
+`emit_restore_blocking!`.
 
 ## Features
 
