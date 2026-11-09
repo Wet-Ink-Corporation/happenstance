@@ -21,7 +21,7 @@ with programs you can run.
 > rule names the clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > it checks; several of those are still `[PROVISIONAL]` (SY-7, SY-10 and
-> SY-36 – SY-39 among the ones a rule here checks, ADR-0107),
+> SY-39 among the ones a rule here checks, ADR-0107),
 > and a rule over a provisional clause moves when its clause does. There is no
 > runner yet (issue #244), so nothing here checks one.
 >

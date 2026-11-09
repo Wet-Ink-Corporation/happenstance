@@ -488,7 +488,7 @@ not the same as what a user needed to be told.
 
 ### Changed
 
-- **Fourteen specification clauses are `[FROZEN]`, proposed** (#124, #128,
+- **Eighteen specification clauses are `[FROZEN]`, proposed** (#124, #128,
   [ADR-0107](.kb/decisions/0107-phase-13s-clauses-are-frozen.md), `status:
   proposed` until the owner accepts it). No code changed. VT-6 (a restore never
   reissues an `EventId`), VT-9 (ingest keeps the recorded time), VT-21 and
@@ -504,8 +504,11 @@ not the same as what a user needed to be told.
   SY-10 stay `[PROVISIONAL]` until the runner has an adjudication hook; SY-29,
   SY-32 and WF-1 are renewed against their named experiments, so SY-32 is the only
   `[DEFERRED]` SY clause left. VT-36 is rescheduled to phase 14. SY-35's rule line
-  no longer claims the convergence family (#431). SY-36, SY-37, SY-38 and CF-42
-  are proposed as freezes in their own right, each awaiting the owner's yes.
+  no longer claims the convergence family (#431). Four more are frozen on the
+  owner's separate yes for each (ADR-0107 §5): SY-36 (every peer error states its
+  class), SY-37 (a pull says whether anything is waiting), SY-38 (an unheld own
+  identity stops ingest) and CF-42 (a fixture that declines read-your-writes
+  settles the frontier).
 
 - `happenstance-postgres`: a handle no longer caches the store's identity
   (#104). Every append, and every ingest, reads `store_meta` inside its own

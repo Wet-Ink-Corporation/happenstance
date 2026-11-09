@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**182 `[FROZEN]`**, **18 `[PROVISIONAL]`**, **5 `[DEFERRED]`** and **seven
+**186 `[FROZEN]`**, **14 `[PROVISIONAL]`**, **5 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -6906,7 +6906,7 @@ It was written before that code existed, and the clauses that depend on
 measurement rather than on argument are consequently `[DEFERRED]` against the
 phase that builds the port against two real peers — five of the thirty-seven,
 with a further eleven `[PROVISIONAL]` (three and thirteen since ADR-0027 settled SY-27
-and SY-28 without the experiment, and one of thirty-nine and seven since ADR-0107 at phase 13's close: SY-32, and SY-7, SY-10, SY-29 and SY-36 – SY-39). The rest are frozen, because the shape
+and SY-28 without the experiment, and one of thirty-nine and four since ADR-0107 at phase 13's close: SY-32, and SY-7, SY-10, SY-29 and SY-39). The rest are frozen, because the shape
 does not wait on the transport. They are written anyway, and the reason is
 recorded in the decision ledger: `RUNBOOK.md:438-439` says deferring the
 sync port **"leaks `EventId` and a tail seam back into `EventStore`"**. That was a
@@ -7521,13 +7521,13 @@ was not held either, and is refused too. The remedy is VT-6's re-mint, after
 which the same events MUST land, the claimed one as a foreign event under the
 identity that minted it.
 
-`[PROVISIONAL — falsified by a deployment in which an unheld own identity is
-expected and benign, so that halting the edge costs more than the wedged append
-it prevents. Falsification test: find a topology the workspace supports in which
-a conformant store, not restored and not rewound, receives an event carrying its
-own identity at a position it does not hold. Decided by
-[ADR-0098](../.kb/decisions/0098-an-unheld-own-identity-stops-ingest.md), which
-the owner accepted on 2026-10-17; it amends SY-1 and SY-33.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on the owner's own yes (ADR-0107 §5), on `an_unheld_own_identity_stops_the_ingest`
+(#108), red against `DropsTheClaim`, `ChecksOnlyTheHead`, `KeepsGroupsBeforeTheClaim`, `RefusesOnlyClaimsThatLand` and `RefusesEveryOwnIdentity`, and green on `MemoryIngestStore`
+and every adapter that implements `IngestStore`: SQLite, Postgres, Neon and the Durable Object. On Postgres and Neon its hidden-claim half reports a skip, because a refused call
+consumes sequence values, and each crate's own unit test verifies it instead. ADR-0098's first cost is gone: Postgres and Neon have `remint_identity` since #104. The
+falsification test was walked over every topology the workspace supports, the runner's echo pull included: a store neither restored nor rewound meets its own identity only on
+events it holds, which ingest skips. Reopened by a deployment in which an unheld own identity is expected and benign, so that halting the edge costs more than the wedged append
+it prevents. Decided by [ADR-0098](../.kb/decisions/0098-an-unheld-own-identity-stops-ingest.md), which the owner accepted on 2026-10-17; it amends SY-1 and SY-33.
 Rule: `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test,
 `crates/happenstance-sqlite/src/ingest_spike.rs`), with
 `a_claim_the_calls_own_compensation_would_hide_is_refused`,
@@ -7709,13 +7709,13 @@ cannot admit can hold that pull empty while the count is non-zero. That stall is
 why the second MUST is separate from the first: a peer stalled behind such a
 group returns an empty next pull and still must not say nothing is waiting.
 
-`[PROVISIONAL — falsified by a real peer that cannot tell, inside the pull's own
-round trip, whether anything lies past the token it mints, so that it can never
-answer `Nothing` and the field buys no round trip. Falsification test: the
-one-shot-HTTP Neon peer computes `waiting` in the same statement as its page, by
-fetching one row past the page, and the Durable Object peer does the same in its
-cursor query; either one needing a second statement fires it. Decided for
-#245.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on the owner's own yes (ADR-0107 §5), on
+`nothing_waiting_means_the_next_pull_is_empty`, which fails a peer that always says `Nothing` and one that reads a short page as the end
+(`tests/wrong_peers.rs`), and ran with no skip against `NeonSyncPeer` in `live-neon` and the Postgres `StoreSyncPeer` in `live-postgres`
+(run 42547020310) and under `workerd` against the Durable Object. The falsification test ran by construction: `NeonSyncPeer` computes
+`waiting` inside its pull's one request (#131), and `StoreSyncPeer`, which the Durable Object serves, reads one event past the page in the
+same `read_groups` call; neither needs a second statement. Reopened by a real peer that cannot tell, inside the pull's own round trip,
+whether anything lies past the token it mints, so that it can never answer `Nothing` and the field buys no round trip. Decided for #245.
 Rule: `nothing_waiting_means_the_next_pull_is_empty` (new,
 `happenstance-sync-testkit`) — the rule writes two logs, one of 257 small
 events for a page the event count ends, and one sized from the declared limits,
@@ -8411,16 +8411,16 @@ retry), **park** (this event can never land on this peer, as VT-25's
 the class; it MUST NOT infer one from the error's type or message. No class
 exists for a condition-level refusal, because SY-33 forbids the refusal.
 
-`[PROVISIONAL — falsified by a refusal one of the real peers produces whose
-right remedy depends on something other than the error, such as how often it
-has already been retried or which batch carried it, so that no one class per
-error is correct. Falsification test: drive every refusal the Durable Object
-peer, the one-shot-HTTP Postgres peer and the KV-capped peer of SY-18 can
-produce, and find one whose class cannot be stated without that context. A
-refusal that needs a fifth remedy is not a falsifier: the class set is
-`#[non_exhaustive]`, so a fifth class is additive. Decided by
-[ADR-0026](../.kb/decisions/0026-what-a-sync-peer-is.md), on the owner's
-call `wi-cbaec7`.]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on the owner's own yes (ADR-0107 §5), on
+`every_refusal_states_its_class`, which fails four wrong peers in `tests/wrong_peers.rs`: one class for every failure, a fixture that
+declares no refusal, a peer that accepts the oversized push, and an error whose class changes between reads. It is green against
+`MemorySyncPeer`, the KV-capped peer, the Durable Object under `workerd`, `NeonSyncPeer` in `live-neon` and the Postgres `StoreSyncPeer`
+in `live-postgres`. On each real peer it drives the oversized push, refused `Split` before the wire; the other refusals each real peer can
+produce are classified by its own `Classify`, a method of the error alone, and pinned by unit tests. Walked over those, none needs its
+retry count or its batch: a Cloudflare edge's own 404 page is read `Transient` by matching the page, still a function of the error, and a
+reset object's stopped edge is the incarnation check (ADR-0104), not a class. Reopened by a refusal from a real peer whose right remedy
+depends on context the error does not carry. A refusal that needs a fifth remedy is not a falsifier: the class set is `#[non_exhaustive]`,
+so a fifth class is additive. Decided by [ADR-0026](../.kb/decisions/0026-what-a-sync-peer-is.md), on the owner's call `wi-cbaec7`.
 Rule: `every_refusal_states_its_class` (new, `happenstance-sync-testkit`) — the
 fixture peer is driven into every refusal it can produce, and the rule asserts
 each reports the class the fixture declares for it. Its mutant reports every
@@ -9478,14 +9478,14 @@ with the fixture's own reason, where the fixture answers `Settled::Nothing`. A
 fixture that supports `READ_YOUR_OWN_WRITES` MUST NOT be asked to settle, so its
 run is the run it had before the method existed. The waiting is the fixture's: a
 rule still never waits (CF-33), which is why the method exists (ADR-0099).
-`[PROVISIONAL — falsified by a frontier adapter that cannot state "everything
-held is visible" as a probe it can repeat, such as a read replica with no view of
-the primary's `xmin`. Such a fixture could only keep the provided body, and 83
-rules would skip against it rather than run. The instruments are
-`happenstance-postgres` and `happenstance-neon`, whose fixtures poll the read
-path's own predicate, negated, with a 30-second deadline
-(`crates/happenstance-postgres/tests/support/mod.rs`,
-`crates/happenstance-neon/tests/support/mod.rs`).]`
+`[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13, on the owner's own yes
+(ADR-0107 §5). Its freeze condition is met, and CI holds it on every run: both live jobs fail on any `SKIP` under
+`READ_YOUR_OWN_WRITES` (`.github/workflows/ci.yml`), and `frontier_settle` passes behind a held frontier in `live-postgres`,
+both green on run 42547020310 and on every phase-13 merge before it. The instruments are `happenstance-postgres` and
+`happenstance-neon`, whose fixtures poll the read path's own predicate, negated, with a 30-second deadline
+(`crates/happenstance-postgres/tests/support/mod.rs`, `crates/happenstance-neon/tests/support/mod.rs`). Reopened by a frontier
+adapter that cannot state "everything held is visible" as a probe it can repeat, such as a read replica with no view of the
+primary's `xmin`: such a fixture could only keep the provided body, and 83 rules would skip against it rather than run.
 Rule: `an_unsettling_lag_skips_exactly_the_read_back_rules` and
 `the_read_back_inventory_partitions_the_named_rules`, meta-tests in
 `crates/happenstance-testkit/tests/mutation_coverage/lagging/settled.rs`. The
@@ -10442,9 +10442,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 39 | 31 | 7 | 1 | 0 |
-| §6 conformance | `CF` | 43 | 37 | 3 | 2 | 1 |
-| **Total** | | **212** | **182** | **18** | **5** | **7** |
+| §5 `SyncPeer` | `SY` | 39 | 34 | 4 | 1 | 0 |
+| §6 conformance | `CF` | 43 | 38 | 2 | 2 | 1 |
+| **Total** | | **212** | **186** | **14** | **5** | **7** |
 
 ### 7.2 The table
 
@@ -10637,9 +10637,9 @@ between them because its *shape* does not wait on a transport but its
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
 | SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
-| SY-36 | PROVISIONAL | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
-| SY-37 | PROVISIONAL | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |
-| SY-38 | PROVISIONAL | `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test, `crat… | E2E-42, E2E-34 |
+| SY-36 | FROZEN | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
+| SY-37 | FROZEN | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |
+| SY-38 | FROZEN | `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test, `crat… | E2E-42, E2E-34 |
 | SY-39 | PROVISIONAL | `an_append_reads_back_as_one_group`, `an_ingested_group_keeps_its_boundary_and… | E2E-35, E2E-39 |
 
 #### `CF` — conformance obligations (§6)
@@ -10687,7 +10687,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-39 | FROZEN | `arming_a_mid_batch_fault_makes_the_append_fail`, `append_is_atomic_under_a_mi… | E2E-07, E2E-39 |
 | CF-40 | FROZEN | `append_reports_exceeded_store_limits` | E2E-35, E2E-42 |
 | CF-41 | FROZEN | `the_promised_emitters_are_exactly_the_pinned_list`, a meta-test in `crates/ha… | *(none — see clause)* |
-| CF-42 | PROVISIONAL | `an_unsettling_lag_skips_exactly_the_read_back_rules` and `the_read_back_inven… | *(none — see clause)* |
+| CF-42 | FROZEN | `an_unsettling_lag_skips_exactly_the_read_back_rules` and `the_read_back_inven… | *(none — see clause)* |
 | CF-43 | FROZEN | `refused_reset_changes_nothing` | *(none — see clause)* |
 
 <!-- END GENERATED -->
