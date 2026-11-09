@@ -71,6 +71,7 @@ const READING_ORDER: &[&str] = &[
     "pass-conformance-suite.md",
     "upgrading-to-0-4.md",
     "upgrading-to-0-5.md",
+    "upgrading-to-0-6.md",
 ];
 
 /// Pages under `docs/` the site deliberately does not render, each with why.

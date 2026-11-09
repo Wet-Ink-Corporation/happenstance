@@ -40,12 +40,13 @@ What remains is sequenced in [`roadmap.md`](roadmap.md): retention (14), then `1
 
 ## In flight
 
-`claude/p13-exit` (#459) into `phase-13`, then this branch's release PR, which is not
-opened yet.
+`claude/p13-exit` (#459) and the `0.6.0` release PR (#460) are merged into `phase-13`.
+`claude/p13-upgrade-guide` adds `docs/upgrading-to-0-6.md`, the owner's request of
+2026-11-09, on the `0.5.0` precedent; its PR into `phase-13` is not opened yet.
 
 ## Next action
 
-1. The owner merges #459, then the `0.6.0` release PR, into `phase-13`.
+1. The owner merges the upgrade guide PR into `phase-13`.
 2. `phase-13` → `main`. On its merge commit run `cargo semver-checks check-release
    --workspace --baseline-version 0.5.1 --release-type minor`; any lint no trace row
    covers becomes a **T** row in the `0.6.0` trace before the tag.
