@@ -168,3 +168,9 @@ proposed marker to the #124 notes file. **No marker flips.**
   testkit; `cargo doc --workspace --all-features --no-deps
   --document-private-items` with `-D warnings`; `cargo xtask spec-trace`
   (after `--write`, two §7.2 rows); `cargo xtask lints`: all clean.
+- Gate: first run RED on `No space left on device` (environmental; another
+  agent's build filled the disk). After merging origin/phase-13 (7b9c7f80):
+  temper gate GREEN, fingerprint 0cceb650bb5541d4 — fmt, scan, manifests,
+  clippy, test, doc all ok. spec-trace and lints re-run clean after the merge.
+  The gate's advisories are all on lines older than this branch (base
+  f6f7e147): none is in code this change wrote.
