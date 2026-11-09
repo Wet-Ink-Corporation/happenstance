@@ -252,3 +252,19 @@ fn the_capability_skip_list_is_exactly_three() {
          module header and in the report at the same time or not at all."
     );
 }
+
+/// SY-31's watermark rule (#143) over one-shot HTTP: a runner's watermark kept
+/// under its reserved `sync/` id in the one request that commits a read-model
+/// row, and read back through a fresh handle. It reports no skip, so the skip
+/// list above is unchanged.
+#[tokio::test]
+#[ignore = "needs a live Neon endpoint; set NEON_CONNECTION and run with `-- --ignored`"]
+async fn watermark_advances_transactionally_with_a_read_model()
+-> Result<(), happenstance_sync_testkit::Violation> {
+    happenstance_sync_testkit::watermark_rules::watermark_advances_transactionally_with_a_read_model(
+        async || NeonProjectionFixture::new(),
+    )
+    .await?
+    .report("watermark_advances_transactionally_with_a_read_model");
+    Ok(())
+}

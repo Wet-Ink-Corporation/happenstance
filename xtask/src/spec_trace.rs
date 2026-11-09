@@ -83,20 +83,20 @@ const SUITE: &str = "crates/happenstance-testkit/src/suite.rs";
 /// from this array reproduces that defect one family later, which is why
 /// `projection.rs` joins it in the same change that creates it.
 ///
-/// It lives here rather than in `lints` because [`collect_rules`] does, and a
-/// list of files kept next to the function that parses them cannot drift from it.
-pub(crate) const RULE_FILES: [&str; 10] = [
+/// It lives next to [`collect_rules`], not in `lints`, so it cannot drift from its parser.
+pub(crate) const RULE_FILES: [&str; 11] = [
     SUITE,
     "crates/happenstance-testkit/src/model.rs",
     "crates/happenstance-testkit/src/concurrency.rs",
     "crates/happenstance-testkit/src/projection.rs",
-    // The sync-testkit families (#111, #246, #108, #420, #141, #133), each joined in its change.
+    // The sync-testkit families (#111, #246, #108, #420, #141, #133, #143), each joined in its change.
     "crates/happenstance-sync-testkit/src/sync_suite.rs",
     "crates/happenstance-sync-testkit/src/sync_model.rs",
     "crates/happenstance-sync-testkit/src/ingest_suite.rs",
     "crates/happenstance-sync-testkit/src/write_group_suite.rs",
     "crates/happenstance-sync-testkit/src/convergence_suite.rs",
     "crates/happenstance-sync-testkit/src/restore_suite.rs",
+    "crates/happenstance-sync-testkit/src/watermark_suite.rs",
 ];
 
 /// Every file a `wire::`-qualified name a clause cites may be defined in.

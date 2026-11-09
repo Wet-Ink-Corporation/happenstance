@@ -1191,3 +1191,18 @@ fn chunk_of_three() -> Chunk {
 fn chunk_of_two() -> Chunk {
     Chunk::of(NonZeroUsize::MIN.saturating_add(1))
 }
+
+/// SY-31's watermark rule (#143) on the live-transaction store: a runner's
+/// watermark kept under its reserved `sync/` id in the transaction a
+/// read-model row went into, and read back through a fresh connection.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container)"]
+async fn watermark_advances_transactionally_with_a_read_model()
+-> Result<(), happenstance_sync_testkit::Violation> {
+    happenstance_sync_testkit::watermark_rules::watermark_advances_transactionally_with_a_read_model(
+        async || LivePostgresProjectionFixture::new(),
+    )
+    .await?
+    .report("watermark_advances_transactionally_with_a_read_model");
+    Ok(())
+}

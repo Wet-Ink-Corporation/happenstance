@@ -59,6 +59,57 @@ not the same as what a user needed to be told.
   is its `#[ignore]`d live twin, which `live-neon`'s library trio runs. It
   seeds every third event first, asserts the counts and that each push
   averages under one event's share of the 34-minute window, and prints `SY14-MEASURE` lines. Tests only; no API change.
+- `happenstance-sync`: `runner::Watermark` and `runner::LoadWatermarkError`,
+  and `Edge::watermark` and `Edge::restored` (#143, SY-31). The runner half of
+  SY-31: an edge's confirmation watermark, its far side's identity and
+  `SyncStatus::confirmed`, is kept through `ProjectionStore` under
+  `ProjectionId::sync_watermark`, never as an event. `Watermark::commit` takes
+  the caller's batch, so whatever read model the caller wrote into it through
+  its adapter's own API lands in the same commit, or neither does; PS-9 gives
+  the port no write vocabulary, so the runner writes no rows of its own.
+  `Watermark::load` reads it back, answering `None` for a peer never synced
+  and `LoadWatermarkError::NotLive` for a rebuilding checkpoint under the id,
+  which `commit` never writes, and `Edge::restored` resumes an edge from it.
+  `Edge::watermark` is `None` until the far side has named its store and
+  acknowledged a push. The pull token is not kept: an edge restored without it
+  pulls from the start, and ingest skips what it holds. Additive.
+- `happenstance-sync-testkit`: the watermark family (#143), one rule,
+  `watermark_rules::watermark_advances_transactionally_with_a_read_model`
+  (SY-31), over a `happenstance_testkit::ProjectionFixture`, called directly
+  as the convergence family's are. It plays the shipped runner: a real `Edge`
+  to an in-memory far side, its `Watermark` committed with a probe row, read
+  back through a fresh handle, an edge restored from it pushing nothing, a
+  second peer's watermark kept apart, and a stale one refused as
+  `CommitError::CheckpointRegression` with its row left out. It detects a
+  projection store that refuses the reserved `sync/` prefix, one that keeps a
+  watermark in its handle rather than its store, one that keys every peer's
+  watermark alike, and one that upserts it beside the batch around the port's
+  regression check: each is in `tests/wrong_watermark_stores.rs` with the
+  message it fails on, beside a faithful wrapper that passes. Mounted against
+  `MemoryProjectionFixture`, `happenstance-sqlite`'s projection fixture, both
+  of `happenstance-postgres`'s (`live-postgres`) and `happenstance-neon`'s
+  (`live-neon`), in test targets those jobs already run.
+- `happenstance-testkit`: `append_reports_exceeded_store_limits` gains CF-40's
+  budget-unit branch (#143). Where a fixture states both `MAX_EVENT_DATA_LEN`
+  and `MAX_METADATA_LEN`, one event at both ceilings at once must be accepted,
+  because each byte ceiling bounds its own field: `data` plus metadata,
+  `ReplicatedEvent::payload_len`, is the replication port's unit, never a
+  store's, and SY-18 holds a peer's one budget to both field ceilings. It
+  detects `SharedPayloadBudgetStore`, which states both and holds their sum to
+  the payload's ceiling, so each field at its ceiling alone fits and no other
+  branch saw it. Every store in the workspace that states both,
+  `happenstance-cloudflare` (ADR-0093's carving fits one row at all four) and
+  `GappedPositionFixture`, already accepts it.
+- `harness/sync-round-trip` and `harness/workerd`: the runner's push through
+  the two unlike real peers keeps the local log's write groups (#143, SY-30).
+  The shipped `Edge` pushes a SQLite log of appends of 2, 3 and 1 events and a
+  guarded ingested group of 2 through a peer declaring 4 events a batch, so it
+  takes several pushes, and the far side's pull hands back the four writes
+  whole, the ingested one with its guard. Run against `NeonSyncPeer`
+  (`live-neon`), the Postgres `StoreSyncPeer` (`live-postgres`) and the
+  Durable Object over HTTP (`workerd`, local and deployed), each picked up by
+  the job's existing strict list/run/assert; a gate test shows the pre-#420
+  push, cut at the batch limit, failing the same check on the same log.
 - `happenstance-neon`: `NeonSyncPeer` and `NeonPeerError`, behind `sync`
   (#131). A `SyncPeer` whose far side is a Neon store reached over its HTTP
   endpoint, in **one SQL request per pull and one per push**: a pull is the

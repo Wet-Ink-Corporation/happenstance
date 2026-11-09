@@ -28,6 +28,7 @@
 
 mod http;
 
+use core::num::NonZeroUsize;
 use core::time::Duration;
 
 use happenstance_cloudflare::happenstance_sync::runner::{
@@ -36,11 +37,11 @@ use happenstance_cloudflare::happenstance_sync::runner::{
 use happenstance_cloudflare::happenstance_sync::wire::ResumeToken;
 use happenstance_cloudflare::happenstance_sync::{
     Classify, EventGroup, FailureClass, IngestGroup, IngestStore, PeerLimits, PushBatch,
-    RemoteError, RemoteSyncPeer, ReplicatedEvent, SyncPeer, Waiting,
+    RemoteError, RemoteSyncPeer, ReplicatedEvent, SyncPeer, Waiting, WriteGroupStore,
 };
 use happenstance_core::{
-    Event, EventId, EventStore, Query, ReadOptions, RecordedAt, SequencePosition, SequencedEvent,
-    StoreId, Tag, Tags, collect,
+    AppendCondition, Event, EventId, EventStore, Query, QueryItem, ReadOptions, RecordedAt,
+    SequencePosition, SequencedEvent, StoreId, Tag, Tags, collect,
 };
 use happenstance_sqlite::event_store::SqliteEventStore;
 use hyper::Method;
@@ -90,7 +91,18 @@ impl Harness {
 
     /// [`peer`](Self::peer), presenting `token` instead.
     fn peer_with_token(&self, name: &str, token: &str) -> RemoteSyncPeer<HttpExchange> {
-        let limits = PeerLimits::minimum();
+        self.peer_declaring(name, token, PeerLimits::minimum())
+    }
+
+    /// The object called `<run>-<name>`, declaring `limits` to the runner.
+    /// Tighter than the object's own is still true of it: a batch these
+    /// admit, the object admits.
+    fn peer_declaring(
+        &self,
+        name: &str,
+        token: &str,
+        limits: PeerLimits,
+    ) -> RemoteSyncPeer<HttpExchange> {
         let exchange =
             HttpExchange::new(&self.url, &format!("{}-{name}", self.run), token, &limits)
                 .expect("the platform's CA store reads");
@@ -365,6 +377,88 @@ async fn a_wrong_token_is_stop() {
         "{refused:?}"
     );
     assert_eq!(refused.class(), FailureClass::Stop);
+}
+
+/// The runner pushes a SQLite log to the object in the writes that made it
+/// (SY-30, #143): appends of 2, 3 and 1 events and a foreign group of 2
+/// ingested under a guard, with the object declared at 4 events a batch, so
+/// the edge needs several pushes. Pulled back over HTTP, the object holds the
+/// four groups, each whole, the ingested one with its guard.
+///
+/// Rejects a runner that cuts its push at the batch limit, which tears the
+/// append of 3 across two pushes and merges what it cuts, and a far side that
+/// drops a relayed group's guard on the way in or the way out.
+#[tokio::test]
+#[ignore = "needs a running harness Worker (WORKERD_HARNESS_URL, HARNESS_TOKEN, WORKERD_HARNESS_RUN); the `workerd` CI job runs these with --ignored"]
+async fn the_runner_keeps_write_groups_through_the_object() {
+    let harness = harness();
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_events = 4;
+    let peer = harness.peer_declaring("groups", &harness.token, limits);
+    reset(&peer).await;
+    let local = sqlite();
+    let opaque = |n: u8| awkward("Written", vec![n, 0x00, 0xFF], Vec::new());
+    local
+        .append(&[opaque(1), opaque(2)], None)
+        .await
+        .expect("an append");
+    local
+        .append(&[opaque(3), opaque(4), opaque(5)], None)
+        .await
+        .expect("an append");
+    let origin = StoreId::from_bytes([0x30; 16]);
+    let relayed: Vec<ReplicatedEvent> = [7, 9]
+        .into_iter()
+        .map(|position| {
+            ReplicatedEvent::new(
+                EventId::new(
+                    origin,
+                    SequencePosition::new(position).expect("test positions are not zero"),
+                ),
+                RecordedAt::from_millis(1_800_000_000_000),
+                awkward("Relayed", vec![0xFE, 0x01], vec![0x00]),
+            )
+        })
+        .collect();
+    let guard = AppendCondition::new(Query::from_item(
+        QueryItem::of_types(["Contested"]).expect("a valid item"),
+    ));
+    local
+        .ingest(&[IngestGroup::new(&relayed, &[]).with_guard(Some(&guard))])
+        .await
+        .expect("the ingest");
+    local.append(&[opaque(6)], None).await.expect("an append");
+
+    let mut edge = Edge::new();
+    edge.run(&peer, &local, &mut backoff(), &TokioSleep)
+        .await
+        .expect("the edge syncs with the object");
+    let written: Vec<EventGroup> = local
+        .read_groups(None, NonZeroUsize::new(64).expect("non-zero"))
+        .await
+        .expect("the local groups read")
+        .groups
+        .into_iter()
+        .map(EventGroup::from)
+        .collect();
+    let held = drain(&peer).await;
+
+    let shape = |groups: &[EventGroup]| -> Vec<(usize, bool)> {
+        groups
+            .iter()
+            .map(|group| (group.events.len(), group.guard.is_some()))
+            .collect()
+    };
+    assert_eq!(
+        shape(&written),
+        [(2, false), (3, false), (2, true), (1, false)]
+    );
+    assert_eq!(
+        held, written,
+        "the object holds the four writes, each whole"
+    );
+    assert!(edge.status().is_synced(), "{:?}", edge.status());
+    reset(&peer).await;
 }
 
 /// No answer within the bound is a timeout, and a timeout is `Transient`.
