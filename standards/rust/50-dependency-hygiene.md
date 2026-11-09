@@ -96,14 +96,14 @@ The real fix is a workspace edit that changes what all eight crates resolve.
 
 **Why.** A default feature set is its author's decision about their median user,
 inherited transitively into yours. Two pins here turn it off for measured
-reasons: `rusqlite` 0.40's default adds `ffi-sqlite-wasm-rs`, which no native
+reasons: `rusqlite`'s default (0.40 and 0.41) adds `ffi-sqlite-wasm-rs`, which no native
 adapter wants, and `postcard`'s default reaches `heapless` and then
 `atomic-polyfill 1.0.3`.
 
 **Do**
 
 ```toml
-rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
 postcard = { version = "1", default-features = false, features = ["use-std"] }
 ```
 
@@ -112,7 +112,7 @@ postcard = { version = "1", default-features = false, features = ["use-std"] }
 which *"no safe upgrade is available"*:
 
 ```toml
-rusqlite = "0.40"
+rusqlite = "0.41"
 postcard = "1"
 ```
 

@@ -96,7 +96,7 @@ futures-util = { version = "0.3", default-features = false }
 # `bundled` compiles the SQLite C amalgamation with the host toolchain, so no
 # system SQLite is needed on any developer machine or CI runner.
 # `default-features = false` drops `ffi-sqlite-wasm-rs`, which 0.40 turned on by
-# default and which no native adapter wants.
+# default, and 0.41 still does, which no native adapter wants.
 rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
 # No longer dev-only, and the move is the point: `happenstance` ships a postcard
 # codec behind its `postcard` feature, so a published crate links this. It was
