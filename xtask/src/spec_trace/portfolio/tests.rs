@@ -711,6 +711,22 @@ fn records_under_reads_status_from_the_atom_and_text_from_both_files() {
     assert_eq!(absent.map(|r| r.text), None);
 }
 
+/// Two records sharing a number are an error, not whichever one `read_dir`
+/// happens to list first.
+#[test]
+fn two_records_with_one_number_are_refused() {
+    let root = Scratch::new("duplicate");
+    root.write(".kb/decisions/0013-one.md", "---\nstatus: accepted\n---\n");
+    root.write(".kb/decisions/0013-two.md", "---\nstatus: accepted\n---\n");
+
+    let found = numbered(&root.0.join(".kb/decisions"), "0013");
+
+    assert!(
+        found.is_err(),
+        "a duplicate number must not pick a record: {found:?}"
+    );
+}
+
 #[test]
 fn the_summary_names_what_the_walk_did_not_read() {
     let mut out = Vec::new();

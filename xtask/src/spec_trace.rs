@@ -775,7 +775,8 @@ pub(crate) fn run(out: &mut impl io::Write, mode: Mode) -> Result<()> {
     let index = workspace_index(&root);
     let citation_coverage = check_citations(&root, &spec, &index, &mut problems);
 
-    // 12. CF-25 and CF-26 — every port §1.6 declares frozen is walked against
+    // 12. CF-25 and CF-26 — every port with a `[FROZEN]` clause, or declared
+    //     **Frozen** in §1.6, is walked against
     //     §6.5's portfolio and freeze ledger (#125). Both clauses named this
     //     check in their `Rule:` lines long before it existed.
     let (portfolio_walk, breaches) =

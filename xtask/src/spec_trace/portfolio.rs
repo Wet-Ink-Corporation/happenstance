@@ -555,13 +555,15 @@ pub(super) fn records_under(root: &Path) -> impl Fn(&str) -> Result<Option<Recor
     }
 }
 
-/// The one `NNNN-*.md` file in `dir`, if there is one. A missing directory
+/// The one `NNNN-*.md` file in `dir`, if there is one; two is an error, so
+/// `read_dir`'s unspecified order never picks the record. A missing directory
 /// holds none: a tree with no long-form records has no long form to add.
 fn numbered(dir: &Path, number: &str) -> Result<Option<PathBuf>> {
     if !dir.is_dir() {
         return Ok(None);
     }
     let stem = format!("{number}-");
+    let mut found: Option<PathBuf> = None;
     for entry in std::fs::read_dir(dir).with_context(|| format!("listing {}", dir.display()))? {
         let path = entry
             .with_context(|| format!("listing {}", dir.display()))?
@@ -574,10 +576,18 @@ fn numbered(dir: &Path, number: &str) -> Result<Option<PathBuf>> {
                 .extension()
                 .is_some_and(|e| e.eq_ignore_ascii_case("md"));
         if matches {
-            return Ok(Some(path));
+            if let Some(first) = &found {
+                anyhow::bail!(
+                    "two records numbered {number} in {}: {} and {}",
+                    dir.display(),
+                    first.display(),
+                    path.display()
+                );
+            }
+            found = Some(path);
         }
     }
-    Ok(None)
+    Ok(found)
 }
 
 /// The walk's one summary line, printed on every run, green or not.

@@ -84,7 +84,7 @@ fn is_separator(line: &str) -> bool {
 /// The text of a leading `**…**` run, if the cell opens with one.
 pub(super) fn bold_lead(cell: &str) -> Option<&str> {
     let rest = cell.strip_prefix("**")?;
-    rest.find("**").map(|end| rest[..end].trim())
+    rest.split_once("**").map(|(lead, _)| lead.trim())
 }
 
 /// An axis or port name as a cell writes it: `**Batch shape** (`…`)` is

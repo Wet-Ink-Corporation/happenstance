@@ -335,6 +335,6 @@ of E2E-07 (ES-24).
   `SyncPeer` × position allocation: the Postgres peer (`live-postgres`). × async flavour: the Durable
   Object under `workerd` (#130). × durability: `ack_never_confirms_a_non_durable_event` against the
   Neon, Postgres and Durable Object peers, a reconnect rather than a reopen until `SyncFixture`
-  gains a reopen capability. × transport moved from SY-14 to `NeonSyncPeer` (#131). §6.5's
+  gains a reopen capability (#448). × transport moved from SY-14 to `NeonSyncPeer` (#131). §6.5's
   position-allocation and async-flavour verdicts open *adapter yes*, as their cells' bodies already
   said. `cargo xtask spec-trace` is green: 15 rows, 10 at the far end, 3 accepted, 2 carried.
