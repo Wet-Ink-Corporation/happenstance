@@ -75,7 +75,7 @@ futures-util = { version = "0.3", default-features = false, features = ["std"] }
 # The floor arm. Same driver at the same version and the same `bundled` feature
 # the workspace names, so the raw-SQL control is compiled against the SQLite the
 # adapter links — a floor measured against a different SQLite is not a floor.
-rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "time"] }

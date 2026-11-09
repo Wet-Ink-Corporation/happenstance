@@ -97,7 +97,7 @@ futures-util = { version = "0.3", default-features = false }
 # system SQLite is needed on any developer machine or CI runner.
 # `default-features = false` drops `ffi-sqlite-wasm-rs`, which 0.40 turned on by
 # default and which no native adapter wants.
-rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+rusqlite = { version = "0.41", default-features = false, features = ["bundled"] }
 # No longer dev-only, and the move is the point: `happenstance` ships a postcard
 # codec behind its `postcard` feature, so a published crate links this. It was
 # already here as the non-self-describing half of WF-7's two-format matrix, and
