@@ -2,7 +2,7 @@
 id: kb-decision-0106
 title: ADR-0003 is no longer provisional, because two unlike peers round-trip a payload byte for byte
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0106
 reversibility: low
@@ -10,7 +10,7 @@ phase: 13
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed for #126. ADR-0003 (opaque payloads) was accepted as provisional, to lift at phase 13
+  Accepted 2026-11-09 for #126. ADR-0003 (opaque payloads) was accepted as provisional, to lift at phase 13
   "when happenstance-sync round-trips an event between two stores without deserialising its
   payload". Three named tests now do that, through two unlike real peers, on CI: a native SQLite
   store through a Durable Object over HTTP (workerd job, local and deployed), and through

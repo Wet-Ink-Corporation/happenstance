@@ -141,7 +141,7 @@ strength.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0001 | [`kb-decision-0001`](../decisions/0001-async-port-flavours.md) | Async ports in two flavours, Send and !Send | accepted | 0 | — |
 | ADR-0002 | [`kb-decision-0002`](../decisions/0002-crate-naming.md) | Prefixed crate names, with a parallel claim on eventum | **superseded** | 0 | superseded by `kb-decision-0005` |
-| ADR-0003 | [`kb-decision-0003`](../decisions/0003-opaque-payloads.md) | Opaque payloads in the contract crate | accepted (provisional) | 0 | — |
+| ADR-0003 | [`kb-decision-0003`](../decisions/0003-opaque-payloads.md) | Opaque payloads in the contract crate | accepted (provisional lifted by ADR-0106) | 0 | — |
 | ADR-0004 | [`kb-decision-0004`](../decisions/0004-edition-and-msrv.md) | Rust 2024 edition, MSRV 1.85 | accepted (amended, not superseded) | 0 | amended by `kb-decision-0029`, `kb-decision-0037` |
 | ADR-0005 | [`kb-decision-0005`](../decisions/0005-rename-to-happenstance.md) | Rename the project to happenstance, and make it the contract crate | accepted (partly superseded) | 0 | supersedes `kb-decision-0002`; partly superseded by `kb-decision-0006` |
 | ADR-0006 | [`kb-decision-0006`](../decisions/0006-bare-name-to-the-typed-layer.md) | The bare name goes to the typed layer; the contract becomes happenstance-core | accepted (partly superseded) | 0 | partly superseded by `kb-decision-0007` |
@@ -976,7 +976,7 @@ supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0105 | [`kb-decision-0105`](../decisions/0105-write-groups-are-recorded-per-row.md) | A store records each write's group on its rows, and a peer reads and pushes in those groups | proposed | 13 | — |
 
-## 2026-11-08: ADR-0003 is no longer provisional (#126), proposed
+## 2026-11-08: ADR-0003 is no longer provisional (#126), accepted 2026-11-09
 
 ADR-0106 is written straight here with no intake step, and is **proposed** until the owner
 accepts it. ADR-0003's lift condition is met: a native SQLite store round-trips every payload
@@ -986,7 +986,7 @@ unchanged.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0106 | [`kb-decision-0106`](../decisions/0106-adr-0003-is-no-longer-provisional.md) | ADR-0003 is no longer provisional, because two unlike peers round-trip a payload byte for byte | proposed | 13 | — |
+| ADR-0106 | [`kb-decision-0106`](../decisions/0106-adr-0003-is-no-longer-provisional.md) | ADR-0003 is no longer provisional, because two unlike peers round-trip a payload byte for byte | accepted | 13 | — |
 
 ## Adding a row
 

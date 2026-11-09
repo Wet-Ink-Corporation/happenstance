@@ -251,7 +251,7 @@ two-peer half is what makes this a port rather than a protocol.
       doc no longer describes only one.
 - [ ] `ingest_never_rejects` and `compensation_is_atomic_with_the_losing_event`
       green, with a mutant that fails each.
-- [ ] #126 · The byte-identical round trip is green, and ADR-0003 loses `provisional`.
+- [x] #126 · The byte-identical round trip is green, and ADR-0003 loses `provisional`.
 - [ ] #128 · Every `[DEFERRED]` `SY` clause is either settled or renewed against a named
       experiment; a renewal with no experiment is a build failure under CF-38.
 - [ ] Every `freeze-by-13` clause in [`ledgers.md`](../ledgers.md)'s 1.0

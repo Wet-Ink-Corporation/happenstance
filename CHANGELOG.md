@@ -488,6 +488,11 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- ADR-0003 (opaque payloads) is no longer provisional (#126). ADR-0106,
+  accepted 2026-11-09, lifts the marker on three byte-identical SQLite round
+  trips through unlike peers: the Durable Object under workerd, `NeonSyncPeer`
+  on a live endpoint, and the Postgres peer. No code changes.
+
 - `happenstance-postgres`: a handle no longer caches the store's identity
   (#104). Every append, and every ingest, reads `store_meta` inside its own
   transaction, so a re-mint is seen by the next append on every handle and
