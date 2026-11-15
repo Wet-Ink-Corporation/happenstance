@@ -12,7 +12,9 @@ use happenstance_sync::{
     Pulled, PushBatch, ReplicatedEvent, SendSyncPeer,
 };
 
-use crate::Violation;
+use happenstance_testkit::{Capability, Reopened};
+
+use crate::violation::{Violation, ensure};
 
 /// The clause a fixture's own failure to build a provocation is reported
 /// under: the rule that asked for it.
@@ -63,6 +65,104 @@ pub trait SyncFixture {
     /// A [`Violation`] if the fixture cannot build a provocation — its own
     /// failure, reported under SY-36 because that is the rule that asked.
     fn refusals(&self, peer: &Self::Peer) -> impl Future<Output = RefusalsOf<Self::Peer>>;
+
+    /// Whether this fixture can close and reopen its backing peer, discarding
+    /// every handle's process-level state.
+    ///
+    /// `happenstance_testkit::ProjectionFixture::REOPEN` for the peer port, and
+    /// CF-17 governs it in the same words: a fixture declaring it supported
+    /// MUST make [`reopen`](Self::reopen) discard that state **over a medium
+    /// that outlives the process's hold on it**, and MUST state the mechanism —
+    /// which pool is closed, which client is rebuilt. A fixture over a peer
+    /// with no medium outside the process MUST decline it, with that as its
+    /// stated reason.
+    ///
+    /// It is read by exactly one rule,
+    /// [`ack_never_confirms_a_non_durable_event`](crate::rules::ack_never_confirms_a_non_durable_event),
+    /// which reads SY-31's *durably seen* across a reopen. Without one the rule
+    /// can only drop the acking handle and connect another, so a peer that
+    /// keeps what it acknowledged in memory every handle shares passes it.
+    ///
+    /// # Defaulted, and checked
+    ///
+    /// Defaulted to a declension, in [`UNSTATED_SYNC_REOPEN`]'s words, so the
+    /// item is additive to every fixture written before it: a default may
+    /// decline on an author's behalf, never declare. A fixture that inherits
+    /// it is told so in its own CI by [`sync_declensions_are_stated`], which
+    /// [`sync_peer_conformance!`](crate::sync_peer_conformance) emits.
+    ///
+    /// # What declaring it does not prove
+    ///
+    /// An override that answers [`Reopened::Discarded`] and discards nothing is
+    /// indistinguishable, through the port, from an honest one. So the rule
+    /// rejects a *peer* that loses a confirmed event across a reopen, and
+    /// cannot reject a *fixture* that only claims to reopen; the declaration
+    /// MUST above carries that hazard, as it does for the projection port.
+    const REOPEN: Capability = Capability::declined(UNSTATED_SYNC_REOPEN);
+
+    /// Closes and reopens the backing peer, discarding every outstanding
+    /// handle's process-level state, and says whether it did.
+    ///
+    /// After an override returns [`Reopened::Discarded`], a fresh
+    /// [`connect`](Self::connect) must observe exactly what the peer durably
+    /// holds. Handles obtained before the call may stop working; a rule drops
+    /// every one before it calls this.
+    ///
+    /// # The provided body says it reopened nothing
+    ///
+    /// It returns [`Reopened::Nothing`], and the rule reports a violation on
+    /// that answer before it reads anything back. A fixture that declares
+    /// [`REOPEN`](Self::REOPEN) supported and forgets this override therefore
+    /// fails on every run, with a message naming this method: the projection
+    /// port's shape, not the event-store port's panicking one, so the failure
+    /// lands in the rule and no panic is in this crate's library code.
+    fn reopen(&self) -> impl Future<Output = Reopened> {
+        core::future::ready(Reopened::Nothing)
+    }
+}
+
+/// What [`SyncFixture::REOPEN`] says when a fixture says nothing.
+///
+/// `pub` so an adapter author can read what their silence says. A fixture
+/// cannot agree with it by naming it: [`sync_declensions_are_stated`] compares
+/// the text, so the constant named is the constant inherited.
+pub const UNSTATED_SYNC_REOPEN: &str = "this fixture has not said whether its peer can be reopened; a peer with \
+     no medium outside the process has nothing a reopen could read back, and this \
+     is that answer given by default rather than by its author";
+
+/// CF-18's machine-checked half for the sync-peer family: no capability `F`
+/// declines carries the reason it would inherit by saying nothing.
+///
+/// [`ingest_declensions_are_stated`](crate::ingest_declensions_are_stated)'s
+/// twin. Emitted once per mounted suite by
+/// [`sync_peer_conformance!`](crate::sync_peer_conformance), not by the
+/// emitter, so a third-party emitter cannot drop it. It cannot see a reason
+/// that is merely bad.
+///
+/// The opener is taken, and never called, so `F` is inferred from the
+/// macro's hoisted fixture function.
+///
+/// # Errors
+///
+/// A [`Violation`] of CF-18 naming each capability `F` declines with the
+/// inherited reason.
+pub fn sync_declensions_are_stated<F: SyncFixture>(
+    _opener: impl AsyncFn() -> F,
+) -> Result<(), Violation> {
+    let declared = [("REOPEN", F::REOPEN, UNSTATED_SYNC_REOPEN)];
+    let unstated: Vec<&str> = declared
+        .iter()
+        .filter(|(_, capability, default)| capability.reason() == Some(*default))
+        .map(|(name, _, _)| *name)
+        .collect();
+    ensure(unstated.is_empty(), "CF-18", || {
+        format!(
+            "this fixture declines {} without saying why: the reason printed on every run is \
+             this crate's words, not the adapter's account of its peer. Write the constant on \
+             the `impl`, with the reason this peer cannot co-operate, in your own words",
+            unstated.join(", ")
+        )
+    })
 }
 
 /// What [`SyncFixture::refusals`] resolves to for a peer `P`.
@@ -220,6 +320,15 @@ impl Default for MemorySyncFixture {
 impl SyncFixture for MemorySyncFixture {
     type Peer = MemorySyncHandle;
 
+    /// Declined, by incapacity: the reference peer's log is process memory,
+    /// so a reopen would read back nothing or everything, never what was
+    /// durable. `tests/wrong_reopens.rs` proves the rule's reopen half instead.
+    const REOPEN: Capability = Capability::declined(
+        "the reference peer keeps its log in process memory and has no medium outside the \
+         process a reopen could read back; SY-31's reopen half is proven against the wrong \
+         peers in tests/wrong_reopens.rs and run against the Postgres and Neon peers",
+    );
+
     async fn connect(&self) -> Self::Peer {
         MemorySyncHandle {
             peer: Arc::clone(&self.peer),
@@ -267,8 +376,80 @@ impl SendSyncPeer for MemorySyncHandle {
 #[cfg(test)]
 mod tests {
     use happenstance_sync::PeerLimits;
+    use happenstance_testkit::{Capability, Reopened};
 
-    use super::{MAX_PROVOKED_BATCH_BYTES, batch_over_the_limit};
+    use super::{
+        MAX_PROVOKED_BATCH_BYTES, MemorySyncFixture, MemorySyncHandle, RefusalsOf, SyncFixture,
+        batch_over_the_limit, oversized_push_refusal, sync_declensions_are_stated,
+    };
+
+    /// A fixture over the reference peer whose `REOPEN` is `$reopen`, or the
+    /// trait's default when none is given.
+    macro_rules! over_the_reference {
+        ($name:ident $(, $reopen:expr)?) => {
+            struct $name(MemorySyncFixture);
+
+            impl SyncFixture for $name {
+                type Peer = MemorySyncHandle;
+                $(const REOPEN: Capability = $reopen;)?
+
+                async fn connect(&self) -> Self::Peer {
+                    self.0.connect().await
+                }
+
+                async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
+                    oversized_push_refusal(peer).await
+                }
+            }
+        };
+    }
+
+    over_the_reference!(Silent);
+    over_the_reference!(Supports, Capability::SUPPORTED);
+    over_the_reference!(
+        States,
+        Capability::declined("a test fixture over the reference peer, which keeps no medium")
+    );
+
+    #[test]
+    fn a_fixture_that_inherits_the_default_reopen_declension_is_rejected() {
+        let checked = sync_declensions_are_stated(async || Silent(MemorySyncFixture::new()));
+
+        assert_eq!(
+            checked.map_err(|violation| violation.clause()),
+            Err("CF-18")
+        );
+    }
+
+    #[test]
+    fn a_supported_or_stated_reopen_passes() {
+        assert_eq!(
+            sync_declensions_are_stated(async || Supports(MemorySyncFixture::new())),
+            Ok(())
+        );
+        assert_eq!(
+            sync_declensions_are_stated(async || States(MemorySyncFixture::new())),
+            Ok(())
+        );
+    }
+
+    /// The provided body answers that it reopened nothing, which is what the
+    /// rule reports a declared-and-forgotten override by.
+    #[test]
+    fn the_default_reopen_reopens_nothing() {
+        let reopened = happenstance_testkit::block_on(Silent(MemorySyncFixture::new()).reopen());
+
+        assert_eq!(reopened, Reopened::Nothing);
+    }
+
+    /// The reference fixture states its declension, so its own mount passes.
+    #[test]
+    fn the_reference_fixture_states_its_reopen_declension() {
+        assert_eq!(
+            sync_declensions_are_stated(async || MemorySyncFixture::new()),
+            Ok(())
+        );
+    }
 
     /// A peer declaring more than the ceiling is told to provoke its own
     /// refusal, and nothing is allocated for it.

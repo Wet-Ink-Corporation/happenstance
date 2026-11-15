@@ -19,6 +19,8 @@ use happenstance_sync::{
     PeerLimits, Pulled, PushBatch, ReplicatedEvent, SendSyncPeer,
 };
 
+use happenstance_testkit::Capability;
+
 use crate::{Refusal, RefusalsOf, SyncFixture, Violation, oversized_push_refusal};
 
 /// The per-value cap of Turnstile peer D's KV store: 128 KiB.
@@ -152,6 +154,12 @@ impl Default for KvCappedFixture {
 
 impl SyncFixture for KvCappedFixture {
     type Peer = KvCappedPeer;
+
+    /// Declined, by incapacity, as the reference fixture's is.
+    const REOPEN: Capability = Capability::declined(
+        "the KV-capped reference peer keeps its log in process memory, behind the cap, and \
+         has no medium outside the process a reopen could read back",
+    );
 
     async fn connect(&self) -> Self::Peer {
         KvCappedPeer {

@@ -23,7 +23,10 @@
 //!
 //! # No declension check
 //!
-//! `sync_peer_conformance!` emits none. A rule may still answer `skipped` with
+//! `sync_peer_conformance!` emits one since #448, over `SyncFixture::REOPEN`,
+//! and this runner does not mount the macro, so it runs none: the fixture here
+//! keeps the default declension, and SY-31's rule runs without a reopen, as it
+//! did before the capability existed. A rule may still answer `skipped` with
 //! the reason the suite writes for it (`NO_SECOND_PAGE`, `NO_CONFIRMATION`),
 //! and the runner fails any skip: under `PeerLimits::minimum` this peer shows
 //! a page boundary and confirms what it acknowledges, so every rule must

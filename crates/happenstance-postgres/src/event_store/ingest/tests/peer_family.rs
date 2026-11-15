@@ -18,6 +18,8 @@
 //! `live-postgres` job already runs and counts every `#[ignore]`d test of this
 //! target, so mounting here needs no change to CI.
 
+use std::sync::{Mutex, MutexGuard};
+
 use happenstance_core::{Event, EventStore, Query, ReadOptions, SequencedEvent, Tags, collect};
 use happenstance_sync::{
     EventGroup, IngestGroup, IngestStore, PushBatch, StoreSyncPeer, SyncPeer, Waiting,
@@ -26,39 +28,86 @@ use happenstance_sync::{
 use happenstance_sync_testkit::{
     IngestFixture, MemoryIngestFixture, RefusalsOf, SyncFixture, oversized_push_refusal,
 };
+use happenstance_testkit::{Capability, Reopened};
 use sqlx::PgPool;
-use tokio::sync::OnceCell;
 
 use super::server;
 use crate::event_store::PostgresEventStore;
+use crate::migration;
 
 /// The Postgres sync peer: the store is both halves.
 type PostgresPeer = StoreSyncPeer<PostgresEventStore, PostgresEventStore>;
 
 /// One fresh schema per fixture, and a peer over new handles onto it per
 /// `connect`.
+///
+/// The schema outlives the pool: [`reopen`](SyncFixture::reopen) closes the
+/// pool and the next `connect` opens another onto the same schema.
 #[derive(Debug)]
 struct PostgresPeerFixture {
-    pool: OnceCell<PgPool>,
+    /// Minted at construction and never changed, so a reopen reaches the same
+    /// tables.
+    schema: String,
+    /// The pool every handle shares, opened on the first `connect` after
+    /// construction or a reopen.
+    ///
+    /// A `Mutex` because the state really is shared and mutable (OWN-11):
+    /// `connect` fills it and `reopen` empties it, both through `&self`, and
+    /// the fixture's futures may run on a multi-threaded runtime. A
+    /// `std::sync::Mutex`, not tokio's: every guard is a statement long and
+    /// none is held across an `.await`.
+    pool: Mutex<Option<PgPool>>,
 }
 
 impl PostgresPeerFixture {
     fn new() -> Self {
         Self {
-            pool: OnceCell::new(),
+            schema: server::fresh_schema_name(),
+            pool: Mutex::new(None),
         }
+    }
+
+    /// The pool onto this fixture's schema, opening one and applying the
+    /// event log's migrations if there is none. The migrations are idempotent,
+    /// so a pool opened after a reopen applies nothing.
+    async fn pool(&self) -> PgPool {
+        let current = self.current().clone();
+        if let Some(pool) = current {
+            return pool;
+        }
+        let opened = server::pool_onto(&self.schema).await;
+        migration::apply(&opened).await.unwrap_or_else(|error| {
+            panic!("a broken test environment: the event log's migrations failed ({error})")
+        });
+        // A cheap handle onto the pool, which the cell keeps. Should two
+        // connects race, the first pool stored wins and the other is dropped.
+        self.current().get_or_insert(opened).clone()
+    }
+
+    /// The cell, locked for one statement.
+    fn current(&self) -> MutexGuard<'_, Option<PgPool>> {
+        self.pool
+            .lock()
+            .expect("no test thread panics while holding the fixture's pool")
     }
 }
 
 impl SyncFixture for PostgresPeerFixture {
     type Peer = PostgresPeer;
 
+    /// Supported, over the server. [`reopen`](SyncFixture::reopen) closes the
+    /// fixture's pool, waiting for every connection it holds to be returned
+    /// and closed, and the next `connect` opens a new pool onto the same
+    /// schema: nothing a handle held in this process survives, and the rows
+    /// the server committed do.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
     async fn connect(&self) -> Self::Peer {
         // Refcounted handles onto the one pool, which every handle shares.
-        let pool = self.pool.get_or_init(server::fresh_pool).await;
+        let pool = self.pool().await;
         StoreSyncPeer::new(
             PostgresEventStore::new(pool.clone()),
-            PostgresEventStore::new(pool.clone()),
+            PostgresEventStore::new(pool),
         )
     }
 
@@ -66,6 +115,16 @@ impl SyncFixture for PostgresPeerFixture {
     /// limits can be driven into: `Split`, before the store is asked.
     async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
         oversized_push_refusal(peer).await
+    }
+
+    /// Closes the pool. Taken out of the cell first, so no guard is held
+    /// across the close.
+    async fn reopen(&self) -> Reopened {
+        let closing = self.current().take();
+        if let Some(pool) = closing {
+            pool.close().await;
+        }
+        Reopened::Discarded
     }
 }
 
@@ -166,7 +225,7 @@ async fn a_round_trip_through_the_postgres_peer_is_byte_identical() {
     let back = MemoryIngestFixture::new().connect().await;
     let fixture = PostgresPeerFixture::new();
     let peer = fixture.connect().await;
-    let far = PostgresEventStore::new(fixture.pool.get_or_init(server::fresh_pool).await.clone());
+    let far = PostgresEventStore::new(fixture.pool().await);
     let [first, second] = awkward_events();
     for events in [&first, &second] {
         EventStore::append(&near, events, None)
@@ -236,7 +295,7 @@ async fn replaying_a_pushed_batch_changes_nothing() {
     let batch = groups_of(&near).await;
     let fixture = PostgresPeerFixture::new();
     let peer = fixture.connect().await;
-    let far = PostgresEventStore::new(fixture.pool.get_or_init(server::fresh_pool).await.clone());
+    let far = PostgresEventStore::new(fixture.pool().await);
 
     let once = peer.push(&batch).await.expect("the first push lands");
     let before = log(&far).await;
