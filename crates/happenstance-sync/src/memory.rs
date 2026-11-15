@@ -31,14 +31,18 @@
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 use happenstance_core::{EventId, StoreId};
+
+use compact::Compaction;
 
 use crate::identity::{ReplicatedEvent, Watermark};
 use crate::peer::{
     Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer, Waiting,
 };
+
+mod compact;
 
 /// Where a [`MemorySyncPeer`] pull left off.
 ///
@@ -67,9 +71,9 @@ impl MemoryResume {
 
 /// How [`MemorySyncPeer`] fails.
 ///
-/// Short, because an in-memory peer has almost no transport to fail. The two
-/// variants that are here are the two that are real: a poisoned lock, and a
-/// push that exceeds the limits this peer declared.
+/// Short, because an in-memory peer has almost no transport to fail. Each
+/// variant here is real: a poisoned lock, a push over the limits this peer
+/// declared, and a pull from below what its compaction forgot.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum MemoryPeerError {
@@ -93,6 +97,36 @@ pub enum MemoryPeerError {
         /// What this peer declared it could take.
         limit: usize,
     },
+
+    /// The pull's token has not reached the newest event this peer's
+    /// compaction forgot, so the history between them is gone (SY-32).
+    ///
+    /// Class [`Reseed`](crate::FailureClass::Reseed): a retry fails the same
+    /// way for ever. The refused token is handed back.
+    #[error(
+        "{} reaches below this peer's retention floor at {floor}: the history between has been forgotten",
+        PullFrom(.from.as_ref())
+    )]
+    BelowRetentionFloor {
+        /// The newest event compaction dropped, as
+        /// [`PeerLimits::retention_floor`] reports it.
+        floor: EventId,
+        /// The token that was refused. `None` is a pull from the start.
+        from: Option<MemoryResume>,
+    },
+}
+
+/// Where a refused pull started, for [`MemoryPeerError::BelowRetentionFloor`]'s
+/// message.
+struct PullFrom<'a>(Option<&'a MemoryResume>);
+
+impl core::fmt::Display for PullFrom<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self.0 {
+            None => f.write_str("a pull from the start"),
+            Some(from) => write!(f, "a pull after {} groups", from.consumed()),
+        }
+    }
 }
 
 /// An in-memory peer.
@@ -170,6 +204,9 @@ struct PeerState {
     /// seen" calls that event held and drops it, and nothing downstream ever
     /// sees it. The sync testkit's model family found this in this peer.
     held: BTreeSet<EventId>,
+    /// What compaction has dropped from the front of `groups`, if anything
+    /// (SY-32). `compact.rs` says how it is kept.
+    compaction: Option<Compaction>,
 }
 
 impl MemorySyncPeer {
@@ -235,7 +272,16 @@ impl SendSyncPeer for MemorySyncPeer {
 
     async fn pull(&self, from: Option<&Self::Resume>) -> Result<Pulled<Self::Resume>, Self::Error> {
         let state = self.state.lock().map_err(|_| MemoryPeerError::Poisoned)?;
-        let mut next = from.copied().unwrap_or_default().next_group;
+        // A token counts groups from the start of the log as it was ever
+        // written; `next` counts them in what compaction left (SY-32).
+        let dropped = Compaction::dropped(state.compaction);
+        let wanted = from.map_or(dropped, |from| from.next_group);
+        let mut next = Compaction::locate(state.compaction, wanted).map_err(|floor| {
+            MemoryPeerError::BelowRetentionFloor {
+                floor,
+                from: from.copied(),
+            }
+        })?;
         let mut budget = PullBatchLimit::from(&self.limits);
         let mut groups = Vec::new();
 
@@ -263,10 +309,13 @@ impl SendSyncPeer for MemorySyncPeer {
             .flat_map(|group| group.events.iter())
             .fold(0_u64, |count, _| count.saturating_add(1));
 
-        Ok(
-            Pulled::new(PushBatch::new(groups), MemoryResume { next_group: next })
-                .with_waiting(Waiting::counted(remaining)),
+        Ok(Pulled::new(
+            PushBatch::new(groups),
+            MemoryResume {
+                next_group: dropped.saturating_add(next),
+            },
         )
+        .with_waiting(Waiting::counted(remaining)))
     }
 
     /// Appends each event this peer has never held, skips each it has, and
@@ -325,8 +374,24 @@ impl SendSyncPeer for MemorySyncPeer {
         Ok(ack)
     }
 
+    /// The limits this peer was built with, and the floor its own compaction
+    /// has set (SY-32).
     fn limits(&self) -> PeerLimits {
-        self.limits.clone()
+        // Read through a poisoned lock rather than failing: `limits` cannot
+        // fail, and the floor is one `Copy` assignment made before anything
+        // is dropped, so a torn log still holds a floor that over-reports.
+        // `None` on poison would claim nothing was forgotten.
+        let compaction = self
+            .state
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .compaction;
+        PeerLimits {
+            retention_floor: compaction
+                .map(|compaction| compaction.floor)
+                .or(self.limits.retention_floor),
+            ..self.limits.clone()
+        }
     }
 }
 
@@ -338,6 +403,9 @@ impl crate::Classify for MemoryPeerError {
             // A torn log does not mend on retry.
             Self::Poisoned => crate::FailureClass::Stop,
             Self::BatchTooLarge { .. } => crate::FailureClass::Split,
+            // History below the floor is gone; only a re-seed or an
+            // accepted gap moves the edge (SY-32).
+            Self::BelowRetentionFloor { .. } => crate::FailureClass::Reseed,
         }
     }
 }
@@ -361,6 +429,21 @@ mod classify_tests {
             limit: 65_536,
         };
         assert_eq!(error.class(), FailureClass::Split);
+    }
+
+    /// Rejects a refusal below the floor classed `Stop` or `Transient`: the
+    /// first reads as configuration, the second retries for ever.
+    #[test]
+    fn a_pull_below_the_floor_is_reseed() {
+        let floor = happenstance_core::EventId::new(
+            happenstance_core::StoreId::from_bytes([1; 16]),
+            happenstance_core::SequencePosition::FIRST,
+        );
+        let error = MemoryPeerError::BelowRetentionFloor {
+            floor,
+            from: Some(super::MemoryResume::start()),
+        };
+        assert_eq!(error.class(), FailureClass::Reseed);
     }
 }
 
