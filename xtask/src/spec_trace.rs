@@ -852,16 +852,16 @@ fn check_named_rules(
             if resolvable.contains(rule) || declaration_for(&c.id, rule).is_some() {
                 continue;
             }
-            let looked_in = if rule.starts_with("wire::") {
-                WIRE_TESTS.join(" or ")
+            let (looked_in, table) = if rule.starts_with("wire::") {
+                (WIRE_TESTS.join(" or "), sync_family::table_for(&c.id))
             } else if c.id.starts_with("SY-") {
-                sync_family::suites()
+                (sync_family::suites(), sync_family::table_for(&c.id))
             } else {
-                SUITE.to_owned()
+                (SUITE.to_owned(), sync_family::table_for(&c.id))
             };
             problems.push(format!(
                 "{}:{} — {} names rule `{}`, which is not in {}. Write it, or declare it in \
-                 `UNRESOLVABLE_RULE_NAMES` with the reason nothing can find it — the clause's \
+                 `{table}` with the reason nothing can find it — the clause's \
                  own prose no longer decides whether its names are checked.",
                 SPEC, c.line, c.id, rule, looked_in
             ));
@@ -888,9 +888,8 @@ fn declaration_for(clause: &str, rule: &str) -> Option<&'static Unresolvable> {
 /// standing behind twelve `[FROZEN]` clauses, and until this function nothing in
 /// the workspace would have noticed one being deleted: none is in `RULE_FILES`.
 ///
-/// Returns the per-kind census, in [`Unresolvable`]'s own order, for the summary
-/// line. Counted rather than written down, per [`UNCLAIMED_PENDING_ADR`]'s
-/// precedent: a comment stating a total is a second thing to update.
+/// Returns the per-kind census, in [`Unresolvable`]'s order, for the summary line,
+/// counted rather than written down per [`UNCLAIMED_PENDING_ADR`]: a stated total goes stale.
 fn reconcile_unresolvable<'a>(
     declared: impl IntoIterator<Item = &'a (&'a str, &'a str, Unresolvable)>,
     clauses: &[Clause],
@@ -900,10 +899,11 @@ fn reconcile_unresolvable<'a>(
 ) -> [usize; 3] {
     let mut census = [0usize; 3];
     for (clause, rule, why) in declared {
+        let table = sync_family::table_for(clause);
         if resolvable.contains(*rule) {
             problems.push(format!(
                 "`{rule}` is {} for {clause}, and it now resolves. The declaration is stale: \
-                 delete the `UNRESOLVABLE_RULE_NAMES` entry, so that {clause} is checked \
+                 delete the `{table}` entry, so that {clause} is checked \
                  against the rule rather than against a note about it.",
                 why.claim()
             ));
@@ -915,7 +915,7 @@ fn reconcile_unresolvable<'a>(
         {
             problems.push(format!(
                 "{SPEC} — {clause} no longer names `{rule}`, which is {}. The list can only \
-                 shrink; delete the `UNRESOLVABLE_RULE_NAMES` entry.",
+                 shrink; delete the `{table}` entry.",
                 why.claim()
             ));
             continue;
@@ -4605,6 +4605,10 @@ mod tests {
             "{problem}"
         );
         assert!(!problem.contains(SUITE), "{problem}");
+        assert!(
+            problem.contains("`sync_family::SYNC_UNRESOLVABLE_RULE_NAMES`"),
+            "an SY name is declared in the sync table, so the message names it: {problem}"
+        );
     }
 
     /// The other side: a name the sync table declares is accounted for and not

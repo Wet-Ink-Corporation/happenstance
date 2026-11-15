@@ -34,6 +34,20 @@ pub(super) fn suites() -> String {
         .join(" or ")
 }
 
+/// The table a declaration for `clause` belongs in, as the remediation messages
+/// name it: an `SY` clause's goes here, every other clause's in the parent's.
+///
+/// `every_sy_declaration_is_in_the_sync_table` refuses an `SY` entry in the
+/// parent table, so a message that sent an `SY` name there would send its reader
+/// into a second failure.
+pub(super) fn table_for(clause: &str) -> &'static str {
+    if clause.starts_with("SY-") {
+        "sync_family::SYNC_UNRESOLVABLE_RULE_NAMES"
+    } else {
+        "UNRESOLVABLE_RULE_NAMES"
+    }
+}
+
 /// Every declaration check 4 consults: the contract families' table, then this
 /// module's.
 pub(super) fn all_declarations()
@@ -43,10 +57,11 @@ pub(super) fn all_declarations()
         .chain(&SYNC_UNRESOLVABLE_RULE_NAMES)
 }
 
-/// The owner of the eight `[FROZEN]` clauses whose rule nobody wrote and no
-/// differently named rule enforces, found by keyword over every `pub async fn`
-/// in the seven families. #458 asks for each to be written or for its `Rule:`
-/// line to be repointed, and a repoint of a `[FROZEN]` line is a record's.
+/// The owner of the eight `[FROZEN]` clauses whose named rule nobody wrote. A
+/// keyword search over every `pub async fn` in the seven families found a
+/// differently named rule enforcing one of them, SY-3's, and its entry says
+/// which. #458 asks for each to be written or for its `Rule:` line to be
+/// repointed, and a repoint of a `[FROZEN]` line is a record's.
 const OWED_BY_458: &str = "#458's second half: written into `happenstance-sync-testkit`, or the \
      `[FROZEN]` Rule line repointed by a record (#163's freeze ADR)";
 
@@ -62,6 +77,10 @@ const OWED_BY_465: &str = "#465: written at the runner level, or the `[FROZEN]` 
 pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 21] = [
     // ---- Scheduled: nothing has written them -----------------------------
     (
+        // Already enforced under another name: SY-12's
+        // `dedupe_reaches_identity_without_decoding` delivers the same batch
+        // twice and refuses a second compensation, which is SY-3's stated
+        // assertion. The candidate for #163's repoint, not a rule to duplicate.
         "SY-3",
         "compensation_is_idempotent_under_redelivery",
         Unresolvable::Scheduled(OWED_BY_458),
