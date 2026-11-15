@@ -75,7 +75,7 @@
 
 use core::future::Future;
 
-use happenstance_core::{EventStore, ProjectionId, ProjectionProbe};
+use happenstance_core::{EventStore, ProjectionId, ProjectionProbe, SequencePosition};
 
 /// One isolated backing store, plus the ways a rule is allowed to reach it.
 ///
@@ -729,6 +729,108 @@ pub trait Fixture {
     /// report a stuck server as a skip.
     fn settle_frontier(&self) -> impl Future<Output = Settled> {
         core::future::ready(Settled::Nothing)
+    }
+
+    /// Whether this fixture can **remove events from its store outside the
+    /// port**: delete them from the adapter's own storage, by a mechanism
+    /// [`EventStore`] does not have.
+    ///
+    /// ES-38 (a removed position is never handed out again) and ES-40 (a
+    /// condition over removed history does not reject) are about a store that
+    /// has lost events, and neither can be checked against a store nothing can
+    /// remove from. ADR-0028 names this capability for its sub-question 3, so
+    /// that both rules can run against the real adapters as well as against
+    /// CF-27's completeness instrument.
+    ///
+    /// # Why this is a fixture capability and not a port method
+    ///
+    /// ADR-0028's first decision keeps deletion outside the port through 1.x.
+    /// A retention job's raw `DELETE`, a `TRUNCATE` and a Durable Object's
+    /// `delete_all()` all happen where no adapter can see them, so the removal
+    /// a rule needs has to come from the same place: the fixture's side of the
+    /// storage, which the fixture can reach and the port cannot.
+    ///
+    /// # Why it is not the decorator
+    ///
+    /// CF-27's completeness instrument, the `WithholdingStore` decorator,
+    /// **hides** events from a store that still holds them. Positions are not
+    /// reused there by delegation: the store underneath still holds every one.
+    /// Only a deletion from the adapter's own storage can show that its
+    /// allocator survives one, which is the `INTEGER PRIMARY KEY` without
+    /// `AUTOINCREMENT` shape ADR-0028 names.
+    ///
+    /// # What declaring it commits the fixture to
+    ///
+    /// [`removal_outside_the_port_removes_exactly_the_named_events`](crate::rules::removal_outside_the_port_removes_exactly_the_named_events)
+    /// appends four events, removes the second and the fourth through
+    /// [`remove_outside_port`](Self::remove_outside_port), and requires a handle
+    /// it already held to read back exactly the other two, unchanged, and the
+    /// membership probe to answer `false` for the removed identities.
+    ///
+    /// CF-39's shape, one capability over: a fixture whose removal cannot reach
+    /// the store's own storage MUST decline this capability, rather than
+    /// declare it and contribute a green result about a store nothing was
+    /// removed from.
+    ///
+    /// # Same store, not a new one
+    ///
+    /// A removal leaves the store's identity and its position allocator where
+    /// they were. A wipe that re-mints the `StoreId` or rewinds the allocator —
+    /// a Durable Object's `delete_all()`, `DROP SCHEMA` followed by a fresh
+    /// migration, `TRUNCATE … RESTART IDENTITY` on Postgres — makes a
+    /// **different** store, which is VT-6's business and not removal.
+    ///
+    /// # Defaulted, and not checked by CF-18's emitted check
+    ///
+    /// The default is declined, in [`UNSTATED_REMOVAL`]'s words, which say
+    /// that the fixture has not said and that the answer is given by default.
+    /// Those words are true of every fixture that says nothing, so
+    /// [`assert_declensions_are_stated`] accepts the silence, as it does
+    /// [`HELD_ABOVE_FRONTIER`](Self::HELD_ABOVE_FRONTIER)'s for a store with
+    /// no frontier. A fixture that declares the capability and forgets the
+    /// override is caught by the rule instead, on every run, because the
+    /// provided body answers [`Removed::Nothing`].
+    const REMOVAL: Capability = Capability::declined(UNSTATED_REMOVAL);
+
+    /// Removes the events this store holds at `positions`, by a mechanism
+    /// outside [`EventStore`] — a raw `DELETE` on the adapter's own storage —
+    /// and says whether it did.
+    ///
+    /// An override returns [`Removed::Deleted`] once every named event is gone
+    /// from the store's own storage, and nothing else is.
+    ///
+    /// # The contract on the argument
+    ///
+    /// * Every named position is one this store holds. A rule names only
+    ///   positions an `append` returned and that nothing has removed since.
+    /// * A position named twice is removed once.
+    /// * An empty slice removes nothing, and an override answers
+    ///   [`Removed::Deleted`].
+    /// * An override may treat a position it does not hold as a broken test
+    ///   environment and panic, for [`connect`](Self::connect)'s reason.
+    /// * Removing part of a write group (SY-39) is outside what ES-38
+    ///   describes. A rule that removes from a grouped log names whole groups.
+    ///
+    /// # What the removal must reach, and what it must leave
+    ///
+    /// It MUST reach a handle the caller already holds, as
+    /// [`arm_read_fault`](Self::arm_read_fault)'s arming must. The rule
+    /// connects before it removes.
+    ///
+    /// It MUST NOT mint a new incarnation or rewind the position allocator.
+    /// See [`REMOVAL`](Self::REMOVAL)'s "Same store, not a new one".
+    ///
+    /// # The provided body says it removed nothing
+    ///
+    /// It returns [`Removed::Nothing`] and touches nothing. The rule asserts on
+    /// that answer before it reads anything back, so a fixture that declares
+    /// [`REMOVAL`](Self::REMOVAL) supported and forgets this override fails on
+    /// every run, with a message naming this method.
+    fn remove_outside_port(&self, positions: &[SequencePosition]) -> impl Future<Output = Removed> {
+        // `let _` is load-bearing for `reopen`'s reason: the body uses neither
+        // argument, and the gate denies `unused_variables`.
+        let _ = (self, positions);
+        core::future::ready(Removed::Nothing)
     }
 }
 
@@ -1395,7 +1497,7 @@ pub const NO_CEILING_REASON: &str = "this fixture states no ceiling for any stor
 // The declensions a fixture inherits by saying nothing
 // ---------------------------------------------------------------------------
 //
-// Seven capabilities default to a declension, and the reason each carries is
+// Eight capabilities default to a declension, and the reason each carries is
 // THIS CRATE'S prose. That is what makes them different in kind from every
 // other declined capability, and the difference is the one `NO_CEILING_REASON`
 // above already names: a declined capability's reason is the adapter's account
@@ -1559,12 +1661,18 @@ impl RuleOutcome {
 /// repository's own operating notes warn about, arriving from the direction
 /// nobody watches.
 ///
-/// The gap that is real is **declension by inheritance**. Seven capabilities
+/// The gap that is real is **declension by inheritance**. Eight capabilities
 /// default to a declension whose words are *this crate's*, so a fixture that
 /// says nothing prints the testkit's prose as though it were its own account of
 /// its own store — which is precisely the misrepresentation CF-18 exists to
 /// prevent, one level in from where it was looking. That is what this rejects,
 /// by comparing each constant against the `UNSTATED_*` value it would inherit.
+///
+/// [`REMOVAL`](Fixture::REMOVAL) is the one of the eight this never checks.
+/// [`UNSTATED_REMOVAL`] says the fixture has not answered and that the answer
+/// is a default, which is true of every fixture that inherits it, so silence
+/// misrepresents nothing. A fixture that claims the capability and forgets the
+/// override is failed by the rule, not here.
 ///
 /// # Its own limits, stated rather than discovered
 ///
@@ -1742,3 +1850,38 @@ pub enum Settled {
     /// Nothing was settled. Only the provided body returns this.
     Nothing,
 }
+
+/// What [`Fixture::remove_outside_port`] reports it did.
+///
+/// The rule asserts [`Removed::Deleted`] before it reads anything back. That is
+/// how a fixture that claims [`REMOVAL`](Fixture::REMOVAL) and forgets the
+/// override fails on every run, with a message naming the method, rather than
+/// on a read-back that could be blamed on the store.
+///
+/// Deliberately exhaustive, like [`Armed`]. A removal either happened or it did
+/// not, and a third answer would be one the rule could not judge. It carries no
+/// count: the rule reads the store back, which is stronger than anything a
+/// fixture could report about itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[must_use = "the rule asserts on this answer; dropping it hides a forgotten override"]
+pub enum Removed {
+    /// The override deleted every event the store held at the named positions,
+    /// from the store's own storage, and nothing else.
+    Deleted,
+    /// Nothing was removed. Only the provided body returns this.
+    Nothing,
+}
+
+/// What [`Fixture::REMOVAL`] says when a fixture does not.
+///
+/// The eighth inherited declension, and like [`UNSTATED_HELD_ABOVE_FRONTIER`]
+/// for a store with no frontier, its words are true of every fixture that
+/// inherits them: they say the fixture has not answered and that this is the
+/// default. That is why [`assert_declensions_are_stated`] does not hold a
+/// fixture to it. The rule
+/// [`removal_outside_the_port_removes_exactly_the_named_events`](crate::rules::removal_outside_the_port_removes_exactly_the_named_events)
+/// reports a skip carrying these words against every fixture that says nothing.
+pub const UNSTATED_REMOVAL: &str = "this fixture has not said whether it can remove events from its store \
+     outside the port; `EventStore` has no delete (ADR-0028), so a removal has to come from \
+     the adapter's own storage, and this is that answer given by default rather than by its \
+     author";

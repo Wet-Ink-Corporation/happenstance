@@ -4400,8 +4400,8 @@ impl Subject for LosingFixture {
 /// the constant [`correct::TEST_RECORDED_AT`] — fixed rather than read from a
 /// clock, because CF-33 forbids one — so a replay that re-stamps through the
 /// correct path lands on the same value it replaced and nothing can see it.
-/// `GappedPositionStore`'s doc comment already records exactly this: it restamps
-/// on replay and passes `recorded_time_survives_a_reopen` anyway.
+/// `GappedPositionStore`'s doc comment records exactly this: it restamped on
+/// replay until #147 and passed `recorded_time_survives_a_reopen` anyway.
 ///
 /// So the new value is derived from a per-fixture **reopen generation**:
 /// deterministic, so the harness stays reproducible run to run; strictly
@@ -5400,3 +5400,7 @@ pub(crate) mod tags_per_batch_floor;
 
 // CF-40's budget unit (#143), declared here at the end for the same reasons.
 pub(crate) mod payload_budget;
+
+// `Fixture::REMOVAL`'s wrong implementations (#147), declared here at the end
+// for the same reasons.
+pub(crate) mod removal;

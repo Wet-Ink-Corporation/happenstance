@@ -122,6 +122,16 @@ impl Fixture for PrunedMemoryFixture {
          tests/withholding_store_instruments.rs",
     );
 
+    // Declined, though `withhold` could answer it: the instrument hides events
+    // from a store that still holds them, and `REMOVAL` promises a deletion
+    // from the store's own storage (#147). Granting it here would let the
+    // guard rule certify a removal nothing performed.
+    const REMOVAL: Capability = Capability::declined(
+        "the instrument withholds events from a MemoryEventStore that still holds \
+         them, which is hiding rather than deleting, and the inner store has no \
+         delete of its own",
+    );
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // A second handle onto the same instrument: a cheap clone of two `Arc`s.
         ready(self.store.clone())

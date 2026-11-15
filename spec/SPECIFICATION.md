@@ -9876,9 +9876,9 @@ written refusal, so the report shape is instrument-local and not a port surface.
 [ADR-0028](../.kb/decisions/0028-what-a-store-may-forget.md) widens the instrument
 from a suffix to an arbitrary retained set, because a suffix-only instrument
 cannot falsify the floor that ES-39 rejects. It also names a `Fixture`
-capability for phase 14 to add, defaulted to declined on `MID_BATCH_FAULT`'s
-precedent, through which a fixture removes events outside the port (a raw
-`DELETE`). That lets ES-38's rule run against the real adapters as well as the
+capability for phase 14 to add, and #147 added it: `Fixture::REMOVAL`, declined by default on `MID_BATCH_FAULT`'s
+precedent, with `Fixture::remove_outside_port`, through which a fixture removes events outside the port (a raw
+`DELETE`; the SQLite, Postgres, Neon and Durable Object fixtures grant it, and a Durable Object wiped by `delete_all()` is a different store under VT-6, not a removal). That lets ES-38's rule run against the real adapters as well as the
 decorator.
 Rule: `instrument_report_is_accurate_and_the_suite_cannot_tell`, a meta-test in crates/happenstance-testkit/tests/completeness_instrument.rs built at #144 over `WithholdingStore`, with the recorded pass list in
 crates/happenstance-testkit/tests/completeness_instrument/pass_list.txt (it was suffix_store_is_distinguishable_from_a_young_store until ADR-0028 chose the
@@ -9887,9 +9887,9 @@ refusal it asserts two things: the full suite passes against the instrument, so
 that indistinguishability at the port is the specified outcome with the recorded
 pass list as the evidence; and the instrument's own report is accurate. This is
 the instrument, not a primitive. ES-39 keeps the question of a port surface, and
-ES-38's `positions_are_not_reused_after_removal` and ES-40's
-`condition_over_removed_history_does_not_reject` are the two rules that already
-have assertions and are waiting only on this instrument to be written against.
+ES-38's `positions_are_not_reused_after_removal` and ES-40's `condition_over_removed_history_does_not_reject` are the two rules that already
+have assertions and are waiting only on this instrument to be written against. The capability's guard (#147) is
+`removal_outside_the_port_removes_exactly_the_named_events`, which fails a fixture that declares `REMOVAL` and removes nothing, too much, or rebuilds the log from its survivors.
 Cases: E2E-46, E2E-47, E2E-56, E2E-33.
 Rejects: an instrument whose inherent report misstates what it withholds — one
 that reports a range as withheld while `read` still yields events from it, or

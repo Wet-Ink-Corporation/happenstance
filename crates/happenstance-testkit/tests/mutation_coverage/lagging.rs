@@ -43,7 +43,7 @@ use happenstance_core::{
     AppendCondition, AppendError, Event, EventId, EventStore, Query, ReadOptions, SequencePosition,
     SequencedEvent, collect,
 };
-use happenstance_testkit::{Armed, Capability, Fixture, Settled};
+use happenstance_testkit::{Armed, Capability, Fixture, Removed, Settled};
 
 use crate::harness::Subject;
 
@@ -324,6 +324,7 @@ impl<F: Fixture, M: Mode> Fixture for LaggingFixture<F, M> {
              lag ends at every settle, so it cannot hold one there either",
         )
     };
+    const REMOVAL: Capability = F::REMOVAL;
 
     async fn connect(&self) -> Self::Store {
         LaggingStore {
@@ -348,6 +349,12 @@ impl<F: Fixture, M: Mode> Fixture for LaggingFixture<F, M> {
 
     fn arm_held_above_frontier(&self) -> impl Future<Output = Armed> {
         self.inner.arm_held_above_frontier()
+    }
+
+    // Forwarded with the constant: a removal adds no row, so it starts no lag,
+    // and the inner store's answer is the one a held handle sees.
+    fn remove_outside_port(&self, positions: &[SequencePosition]) -> impl Future<Output = Removed> {
+        self.inner.remove_outside_port(positions)
     }
 
     async fn settle_frontier(&self) -> Settled {

@@ -225,6 +225,9 @@ macro_rules! for_each_event_store_rule {
 
             // --- Position visibility ---------------------------------------
             nothing_below_an_observed_position_appears_later,
+
+            // --- Removal outside the port (CF-27) ---------------------------
+            removal_outside_the_port_removes_exactly_the_named_events,
         }
     };
 }
