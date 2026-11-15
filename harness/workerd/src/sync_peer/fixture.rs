@@ -12,11 +12,9 @@
 //! (`tests/sqlite_round_trip.rs`), which drives the same handler from a native
 //! client over real HTTP, locally and on the deployed object.
 
-use core::future::Future;
-
 use happenstance_cloudflare::happenstance_sync::wire::Route;
 use happenstance_cloudflare::happenstance_sync::{
-    Classify, Exchange, FailureClass, PeerLimits, RemoteSyncPeer, StoreSyncPeer,
+    Classify, Exchange, FailureClass, PeerLimits, RemoteSyncPeer, StoreSyncPeer, SyncPeer as _,
 };
 use happenstance_cloudflare::sync_http::{
     CloudflareSyncPeer, SYNC_PATH_PREFIX, class_for, serve_sync_request,
@@ -24,7 +22,8 @@ use happenstance_cloudflare::sync_http::{
 use happenstance_cloudflare::worker::js_sys::Uint8Array;
 use happenstance_cloudflare::worker::{self, Method, Request, RequestInit};
 use happenstance_sync_testkit::{
-    IngestFixture as _, RefusalsOf, SyncFixture, oversized_push_refusal,
+    IngestFixture as _, Refusal, RefusalsOf, SyncFixture, batch_over_the_limit,
+    oversized_push_refusal,
 };
 
 use crate::ingest::fixture::WorkerdIngestFixture;
@@ -46,6 +45,15 @@ impl WorkerdSyncFixture {
     pub const fn new(ingest: WorkerdIngestFixture) -> Self {
         Self { ingest }
     }
+
+    /// A client declaring `declared` for a far side whose own limits are
+    /// [`PeerLimits::minimum`], as the object's own routes declare.
+    async fn client(&self, declared: PeerLimits) -> RemoteSyncPeer<ObjectExchange> {
+        let store = self.ingest.connect().await;
+        // Two handles onto one store: a clone is two `Rc` bumps.
+        let far = StoreSyncPeer::with_limits(store.clone(), store, PeerLimits::minimum());
+        RemoteSyncPeer::new(ObjectExchange { far }, declared)
+    }
 }
 
 impl SyncFixture for WorkerdSyncFixture {
@@ -54,16 +62,26 @@ impl SyncFixture for WorkerdSyncFixture {
     /// [`PeerLimits::minimum`] at both ends, as the object's own routes
     /// declare: the limits a client must be told out of band (ADR-0097).
     async fn connect(&self) -> Self::Peer {
-        let store = self.ingest.connect().await;
-        // Two handles onto one store: a clone is two `Rc` bumps.
-        let far = StoreSyncPeer::with_limits(store.clone(), store, PeerLimits::minimum());
-        RemoteSyncPeer::new(ObjectExchange { far }, PeerLimits::minimum())
+        self.client(PeerLimits::minimum()).await
     }
 
-    /// The oversized-push refusal, `Split`, which the client makes before it
-    /// sends, over the limits both ends declare (#452).
-    fn refusals(&self, peer: &Self::Peer) -> impl Future<Output = RefusalsOf<Self::Peer>> {
-        oversized_push_refusal(peer)
+    /// Two oversized pushes, both `Split`. The first, over the limits both
+    /// ends declare, is refused by the client before it sends (#452). The
+    /// second comes from a client declaring twice the far side's
+    /// `max_batch_bytes`, so it is sent: the object's handler hands it to the
+    /// `StoreSyncPeer`, whose refusal leaves as a 413 by `status_for` and
+    /// comes back as `Split` through `class_for`, inside a real object.
+    async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
+        let mut refusals = oversized_push_refusal(peer).await?;
+        let mut wider = PeerLimits::minimum();
+        wider.max_batch_bytes = 2 * PeerLimits::minimum().max_batch_bytes;
+        let oversized = batch_over_the_limit(&PeerLimits::minimum())?;
+        refusals.push(Refusal {
+            provoked_by: "a push the client's wider limits admit and the far side refuses",
+            declared: FailureClass::Split,
+            outcome: self.client(wider).await.push(&oversized).await.map(drop),
+        });
+        Ok(refusals)
     }
 }
 

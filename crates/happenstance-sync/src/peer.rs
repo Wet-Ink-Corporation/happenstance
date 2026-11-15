@@ -809,15 +809,19 @@ mod waiting_tests {
     }
 }
 
+/// The limit checks' tests, and the batches they are measured against. The
+/// helpers are `pub(crate)` so the client's (`remote`) and the server's
+/// (`store_peer`) tests of the same limits share one fixture (#452).
 #[cfg(test)]
-mod limit_tests {
+pub(crate) mod limit_tests {
     use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
 
     use super::{EventGroup, LimitBreach, PeerLimits, PushBatch};
     use crate::identity::ReplicatedEvent;
 
-    /// 4 bytes an event, 10 bytes a push, 3 events a push.
-    fn tight() -> PeerLimits {
+    /// Limits with three different numbers, so a refusal names which one it
+    /// read: 4 bytes an event, 10 bytes a push, 3 events a push.
+    pub(crate) const fn tight() -> PeerLimits {
         PeerLimits {
             max_event_bytes: 4,
             max_batch_bytes: 10,
@@ -826,15 +830,17 @@ mod limit_tests {
         }
     }
 
-    fn id(position: u64) -> EventId {
+    /// The id of the event at `position` in a [`batch`].
+    pub(crate) fn id(position: u64) -> EventId {
         EventId::new(
             StoreId::from_bytes([0x50; 16]),
             SequencePosition::new(position).expect("test positions start at 1"),
         )
     }
 
-    /// One group, one event per entry of `lens`, numbered from position 1.
-    fn batch(lens: &[usize]) -> PushBatch {
+    /// One group of events, one per entry of `lens`, each carrying that many
+    /// payload bytes, numbered from position 1.
+    pub(crate) fn batch(lens: &[usize]) -> PushBatch {
         let events = (1_u64..)
             .zip(lens)
             .map(|(position, &len)| {

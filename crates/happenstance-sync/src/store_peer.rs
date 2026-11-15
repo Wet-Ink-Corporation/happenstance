@@ -545,36 +545,12 @@ mod tests {
     #[cfg(feature = "memory")]
     #[tokio::test]
     async fn an_oversized_event_outranks_the_count_and_the_first_is_named() {
-        use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
+        use crate::peer::limit_tests::{batch, id, tight};
+        use crate::{MemoryIngestStore, StoreSyncPeer, SyncPeer};
 
-        use crate::{
-            EventGroup, MemoryIngestStore, PeerLimits, PushBatch, ReplicatedEvent, StoreSyncPeer,
-            SyncPeer,
-        };
-
-        let id = |position| {
-            EventId::new(
-                StoreId::from_bytes([0x53; 16]),
-                SequencePosition::new(position).expect("test positions start at 1"),
-            )
-        };
-        let events = (1_u64..)
-            .zip([0_usize, 5, 0, 6])
-            .map(|(position, len)| {
-                let event = Event::new("Sized", alloc::vec![0_u8; len])
-                    .expect("a static event type is valid");
-                ReplicatedEvent::new(id(position), RecordedAt::from_millis(0), event)
-            })
-            .collect();
-        let batch = PushBatch::new(alloc::vec![EventGroup::new(None, events)]);
-        let limits = PeerLimits {
-            max_event_bytes: 4,
-            max_batch_bytes: 10,
-            max_batch_events: 3,
-            retention_floor: None,
-        };
+        let batch = batch(&[0, 5, 0, 6]);
         let peer =
-            StoreSyncPeer::with_limits(MemoryIngestStore::new(), MemoryIngestStore::new(), limits);
+            StoreSyncPeer::with_limits(MemoryIngestStore::new(), MemoryIngestStore::new(), tight());
 
         let refused = peer
             .push(&batch)

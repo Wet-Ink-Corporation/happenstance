@@ -264,12 +264,10 @@ mod tests {
     use alloc::vec::Vec;
     use core::cell::Cell;
 
-    use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
-
     use super::{Exchange, RemoteError, RemoteSyncPeer};
     use crate::classify::{Classify, FailureClass};
-    use crate::identity::ReplicatedEvent;
-    use crate::peer::{EventGroup, PeerLimits, PushBatch, SyncPeer};
+    use crate::peer::SyncPeer;
+    use crate::peer::limit_tests::{batch, id, tight};
     use crate::wire::Route;
 
     /// What every call to [`Counting`] answers.
@@ -300,41 +298,8 @@ mod tests {
         }
     }
 
-    /// Limits with three different numbers, so a refusal names which one it
-    /// read: 4 bytes an event, 10 bytes a push, 3 events a push.
-    fn tight() -> PeerLimits {
-        PeerLimits {
-            max_event_bytes: 4,
-            max_batch_bytes: 10,
-            max_batch_events: 3,
-            retention_floor: None,
-        }
-    }
-
     fn peer() -> RemoteSyncPeer<Counting> {
         RemoteSyncPeer::new(Counting::default(), tight())
-    }
-
-    /// The id of the event at `position` in a [`batch`].
-    fn id(position: u64) -> EventId {
-        EventId::new(
-            StoreId::from_bytes([0x45; 16]),
-            SequencePosition::new(position).expect("test positions start at 1"),
-        )
-    }
-
-    /// One group of events, one per entry of `lens`, each carrying that many
-    /// payload bytes, numbered from position 1.
-    fn batch(lens: &[usize]) -> PushBatch {
-        let events = (1_u64..)
-            .zip(lens)
-            .map(|(position, &len)| {
-                let event = Event::new("Sized", alloc::vec![0_u8; len])
-                    .expect("a static event type is valid");
-                ReplicatedEvent::new(id(position), RecordedAt::from_millis(0), event)
-            })
-            .collect();
-        PushBatch::new(alloc::vec![EventGroup::new(None, events)])
     }
 
     /// The control the refusals are measured against: a push the limits admit
