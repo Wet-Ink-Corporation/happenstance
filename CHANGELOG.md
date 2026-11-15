@@ -33,6 +33,15 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Changed
+
+- `happenstance-sync-testkit`: `directional_merge_rules_compose` (SY-10) no
+  longer plays a refused push in its hub-and-spoke walk, a check no store
+  could fail: the store is never told of a refusal, and no port the runner
+  holds can roll it back. The walk now runs in the shipped `Edge::step`'s
+  order, pull then push, and SY-34's refusal is held by `happenstance-sync`'s
+  runner tests. No rule's verdict changes against any store (#441).
+
 ## [0.6.0] — 2026-11-09
 
 Replication runs over the network. Phase 13 built `happenstance-sync`'s
