@@ -47,6 +47,7 @@ use core::convert::Infallible;
 use happenstance_core::Event;
 
 use crate::classify::Classify;
+use crate::ingest::IngestGroup;
 use crate::peer::EventGroup;
 
 /// A merge rule: what one direction of an edge writes in answer to a group it
@@ -174,22 +175,111 @@ impl SendAdjudicate for Accept {
     }
 }
 
+/// One incoming group, paired with the compensation its rule answered.
+///
+/// A pair rather than two vectors zipped later, so a group and its answer
+/// cannot come apart, and a short list of answers cannot drop a group from the
+/// ingest while the pull token advances past it.
+#[derive(Debug)]
+pub(crate) struct Judged<'a> {
+    pub(crate) group: &'a EventGroup,
+    pub(crate) compensation: Vec<Event>,
+}
+
+impl Judged<'_> {
+    /// The group as one atomic unit of the ingest: its events, its
+    /// compensation in the same write (SY-2), and its guard (SY-30).
+    pub(crate) fn ingest_group(&self) -> IngestGroup<'_> {
+        IngestGroup::new(&self.group.events, &self.compensation)
+            .with_guard(self.group.guard.as_ref())
+    }
+}
+
 /// Asks `rule` for each group's compensation, in batch order, each with the
-/// groups before it: one answer per group, index for index.
+/// groups before it, and hands every group back paired with its answer.
 ///
 /// One function for both ingest sites, so the edge and the store peer cannot
-/// disagree about what `earlier` holds.
-pub(crate) async fn compensations<A: Adjudicate>(
+/// disagree about what `earlier` holds. The group and its prefix come from the
+/// same split of the batch, and the loop ends exactly when no group is left,
+/// so every group is judged once.
+pub(crate) async fn judge<'a, A: Adjudicate>(
     rule: &A,
-    groups: &[EventGroup],
-) -> Result<Vec<Vec<Event>>, A::Error> {
-    let mut answers = Vec::with_capacity(groups.len());
-    for (at, group) in groups.iter().enumerate() {
-        // Always `Some`: `at` indexes `groups`, so its prefix is in bounds.
-        let Some(earlier) = groups.get(..at) else {
-            break;
-        };
-        answers.push(rule.compensation(group, earlier).await?);
+    groups: &'a [EventGroup],
+) -> Result<Vec<Judged<'a>>, A::Error> {
+    let mut judged = Vec::with_capacity(groups.len());
+    while let Some((earlier, [group, ..])) = groups.split_at_checked(judged.len()) {
+        let compensation = rule.compensation(group, earlier).await?;
+        judged.push(Judged {
+            group,
+            compensation,
+        });
     }
-    Ok(answers)
+    Ok(judged)
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::vec::Vec;
+    use core::cell::RefCell;
+    use core::convert::Infallible;
+
+    use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
+
+    use super::{Adjudicate, judge};
+    use crate::identity::ReplicatedEvent;
+    use crate::peer::EventGroup;
+
+    /// Records the length of `earlier` it was handed for each group, and
+    /// answers each group with one event per group before it.
+    #[derive(Default)]
+    struct Recording(RefCell<Vec<usize>>);
+
+    impl Adjudicate for Recording {
+        type Error = Infallible;
+
+        async fn compensation(
+            &self,
+            _group: &EventGroup,
+            earlier: &[EventGroup],
+        ) -> Result<Vec<Event>, Infallible> {
+            self.0.borrow_mut().push(earlier.len());
+            Ok(earlier
+                .iter()
+                .map(|_| Event::new("Answered", &b"{}"[..]).expect("a static type is valid"))
+                .collect())
+        }
+    }
+
+    fn batch(len: u8) -> Vec<EventGroup> {
+        (1..=len)
+            .map(|origin| {
+                let id = EventId::new(StoreId::from_bytes([origin; 16]), SequencePosition::FIRST);
+                let event = Event::new("Claimed", &b"{}"[..]).expect("a static type is valid");
+                let at = RecordedAt::from_millis(1_800_000_000_000);
+                EventGroup::new(None, Vec::from([ReplicatedEvent::new(id, at, event)]))
+            })
+            .collect()
+    }
+
+    /// Every group comes back paired with its own answer, in batch order,
+    /// each judged with exactly the groups before it: none, one, or many.
+    /// Rejects a judgement that drops a group, pairs an answer with the wrong
+    /// group, or hands a group a prefix other than its own.
+    #[tokio::test]
+    async fn every_group_is_judged_once_with_its_own_prefix_and_paired_with_its_answer() {
+        for len in [0_u8, 1, 5] {
+            let groups = batch(len);
+            let rule = Recording::default();
+
+            let judged = judge(&rule, &groups).await.expect("an infallible rule");
+
+            assert_eq!(judged.len(), groups.len(), "{len} groups");
+            for (at, (pair, group)) in judged.iter().zip(&groups).enumerate() {
+                assert!(core::ptr::eq(pair.group, group), "group {at} of {len}");
+                assert_eq!(pair.compensation.len(), at, "group {at}'s own answer");
+            }
+            let expected: Vec<usize> = (0..usize::from(len)).collect();
+            assert_eq!(*rule.0.borrow(), expected, "the prefixes handed out");
+        }
+    }
 }

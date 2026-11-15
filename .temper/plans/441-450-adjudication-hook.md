@@ -364,3 +364,12 @@ Extra from #441's review: a `wrong_ingest_stores` mutant that upserts its own cl
   (sync + sync-testkit, all targets, all features; sync default features) ok; rustdoc -D warnings
   (all features, and sync default) ok; wasm32 check of sync, sync-testkit, cloudflare+sync ok;
   `cargo xtask spec-trace` ok (spec edits line-neutral); `cargo xtask lints` ok; `cargo test -p xtask` ok.
+- Review fixes (approved with minors):
+  - F1: red `error[E0432]: unresolved import super::judge` for
+    `every_group_is_judged_once_with_its_own_prefix_and_paired_with_its_answer` (0, 1, 5 groups);
+    green with `judge` -> `Vec<Judged>` (group paired with its answer, prefix and group from one
+    `split_at_checked`), both ingest sites building `IngestGroup`s from the pairs. lib 61/61.
+  - F2: `unchanged.rs` adds an unannotated `Edge::new()` stepped in generic code, `resuming`/`restored`
+    chained with `with_responder`/`with_buffer`, and `SendPeer<StoreSyncPeer<S, I>>` under 0.6.0's bounds.
+  - F4: `Phase`'s history moved to a `//` comment. F5: `with_adjudicator` says Debug/Send follow the rule.
+  - clippy and rustdoc -D warnings (sync + sync-testkit) ok; runner 67, flavours 11, wrong_ingest_stores 35, doc 22+2.

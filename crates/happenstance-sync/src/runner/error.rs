@@ -57,9 +57,9 @@ impl fmt::Display for Failure {
 
 /// The parts of a step.
 ///
-/// A step runs them pull, adjudicate, ingest, read, push. `Adjudicate` is
-/// declared last because it joined last: the variants keep the order, and so
-/// the discriminants, they had before it.
+/// A step runs them pull, adjudicate, ingest, read, push.
+// `Adjudicate` is declared last, out of run order, so the variants before it
+// keep the discriminants they had in 0.6.0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Phase {

@@ -76,7 +76,7 @@ use crate::ingest::{IngestError, IngestGroup, IngestStore};
 use crate::peer::{
     Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SyncPeer, Waiting,
 };
-use crate::runner::{Accept, Adjudicate};
+use crate::runner::{Accept, Adjudicate, Judged, judge};
 use crate::write_group::WriteGroupStore;
 
 /// A peer over a store the caller holds: `events` to read, `ingest` to write.
@@ -384,17 +384,10 @@ where
         self.admit(batch)?;
         // After the admission, so a refused push reaches no rule; before the
         // ingest, so each answer lands in its group's one write (SY-2).
-        let answers = crate::runner::compensations(&self.rule, &batch.groups)
+        let judged = judge(&self.rule, &batch.groups)
             .await
             .map_err(StorePeerError::Adjudicate)?;
-        let groups: Vec<IngestGroup<'_>> = batch
-            .groups
-            .iter()
-            .zip(&answers)
-            .map(|(group, answer)| {
-                IngestGroup::new(&group.events, answer).with_guard(group.guard.as_ref())
-            })
-            .collect();
+        let groups: Vec<IngestGroup<'_>> = judged.iter().map(Judged::ingest_group).collect();
         let ingested = self
             .ingest
             .ingest(&groups)

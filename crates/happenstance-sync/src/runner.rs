@@ -136,8 +136,8 @@ mod watermark;
 
 use run::Run;
 
-pub(crate) use adjudicate::compensations;
 pub use adjudicate::{Accept, Adjudicate, SendAdjudicate};
+pub(crate) use adjudicate::{Judged, judge};
 pub use backoff::{Backoff, BackoffError, SendSleep, Sleep};
 pub use error::{Failure, Phase, StepError, StepFailure};
 pub use incarnation::{IncarnationChanged, StopCause};
@@ -269,6 +269,11 @@ impl<R> Edge<R> {
     /// Only the pull: what the edge pushes is the far side's to judge. Give an
     /// edge a rule when its local side is the adjudicator SY-7 assigns for the
     /// facts it pulls, such as a hub that drives its own edge to a spoke.
+    ///
+    /// The edge holds `rule` by value, and no bound is placed on it here: the
+    /// edge is [`Debug`](core::fmt::Debug) only when `B` is, and its step
+    /// future is `Send` only for a [`SendAdjudicate`] rule that is
+    /// `Send + Sync`.
     ///
     /// # Examples
     ///
@@ -504,21 +509,13 @@ impl<R, A: Adjudicate> Edge<R, A> {
             .map_err(StepError::Incarnation)?;
         // Every group judged before any lands: the rule decides, and never
         // writes (SY-2, SY-7).
-        let answers = compensations(&self.rule, &pulled.batch.groups)
+        let judged = judge(&self.rule, &pulled.batch.groups)
             .await
             .map_err(StepError::Adjudicate)?;
         // One ingest group per pulled group: the far side's atomic units land
         // as atomic units (SY-30), each with its guard, which the store keeps
         // so a relay forwards it, and with its compensation in the same write.
-        let groups: Vec<IngestGroup<'_>> = pulled
-            .batch
-            .groups
-            .iter()
-            .zip(&answers)
-            .map(|(group, answer)| {
-                IngestGroup::new(&group.events, answer).with_guard(group.guard.as_ref())
-            })
-            .collect();
+        let groups: Vec<IngestGroup<'_>> = judged.iter().map(Judged::ingest_group).collect();
         let ingested = if groups.is_empty() {
             Ingested::default()
         } else {
