@@ -446,7 +446,9 @@ impl<R, A: Adjudicate> Edge<R, A> {
                     None => EdgeState::Parked(failure),
                 },
                 FailureClass::Park => EdgeState::Parked(failure),
-                FailureClass::Stop => EdgeState::Stopped(StopCause::Failure(failure)),
+                FailureClass::Stop | FailureClass::Reseed => {
+                    EdgeState::Stopped(StopCause::Failure(failure))
+                }
             }
         };
     }

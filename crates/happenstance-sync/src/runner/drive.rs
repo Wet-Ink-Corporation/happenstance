@@ -138,7 +138,9 @@ impl<R, A: Adjudicate> Edge<R, A> {
                         // The step parked or stopped the edge for these, so
                         // the state check above has already returned; kept
                         // total all the same.
-                        FailureClass::Park | FailureClass::Stop => return Err(error),
+                        FailureClass::Park | FailureClass::Stop | FailureClass::Reseed => {
+                            return Err(error);
+                        }
                     }
                 }
             };
