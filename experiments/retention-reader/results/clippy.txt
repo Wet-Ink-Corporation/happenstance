@@ -1,0 +1,4 @@
+$ cargo clippy --locked --manifest-path <repo>/experiments/retention-reader/Cargo.toml --all-targets -- -D warnings
+    Checking retention-reader v0.0.0 (<repo>/experiments/retention-reader)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.82s
+exit status: 0
