@@ -61,7 +61,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use happenstance_sqlite::event_store::SqliteEventStore;
-use happenstance_testkit::{Capability, Fixture};
+use happenstance_testkit::{Capability, Fixture, Removed};
 
 /// One fixture instance is **one temporary SQLite file**; each `connect` is one
 /// more real connection onto it; two instances share nothing.
@@ -267,5 +267,85 @@ impl Fixture for SqliteFixture {
             .pragma_update(None, "wal_checkpoint", "TRUNCATE")
             .expect("the write-ahead log could not be checkpointed");
         drop(connection);
+    }
+
+    /// Supported: a raw `DELETE` through a second connection onto this file
+    /// reaches the store's own storage, which is what a retention job does.
+    ///
+    /// # Same store, and the allocator survives it
+    ///
+    /// `event.position` is `INTEGER PRIMARY KEY AUTOINCREMENT`, so
+    /// `sqlite_sequence` keeps the high-water mark through any `DELETE`,
+    /// including one that empties the table, and a removed position is never
+    /// handed out again. `store_meta` is not touched, so the `StoreId` survives
+    /// too. Only `DELETE FROM sqlite_sequence` or a rebuilt file rewinds the
+    /// allocator, and both make a different store (VT-6), which is not what
+    /// this capability models.
+    const REMOVAL: Capability = Capability::SUPPORTED;
+
+    /// Deletes the named events in one `BEGIN IMMEDIATE` transaction on a
+    /// second connection, as `tests/append.rs::a_failure_mid_batch_leaves_nothing`
+    /// installs its trigger.
+    ///
+    /// Per position, in this order: `tag_cardinality` is decremented for each
+    /// of the event's tags, its `event_tag` rows go, and then its `event` row.
+    /// Tag rows first, because `event_tag.position REFERENCES event(position)`
+    /// and the store opens every connection with `PRAGMA foreign_keys = ON`.
+    /// The decrement keeps the planner's selectivity statistic true, so a
+    /// retention script copied from this body does not leave it stale. The
+    /// connection waits out a writer for the shipped busy timeout rather than
+    /// failing at once.
+    ///
+    /// It panics if a position is not held, for `connect`'s reason: the rule
+    /// names only positions it appended, so a missing row is a broken test
+    /// environment.
+    // Paths spelled out rather than imported, so that the lines above keep the
+    // numbers the knowledge base cites.
+    async fn remove_outside_port(
+        &self,
+        positions: &[happenstance_core::SequencePosition],
+    ) -> Removed {
+        let mut distinct: Vec<i64> = positions
+            .iter()
+            .map(|position| i64::try_from(position.get()).expect("a SQLite position fits i64"))
+            .collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+
+        let mut connection = rusqlite::Connection::open(&self.path)
+            .expect("a broken test environment, not a non-conformant adapter");
+        connection
+            .busy_timeout(std::time::Duration::from_millis(
+                happenstance_sqlite::connection::BUSY_TIMEOUT_MS,
+            ))
+            .expect("the removal connection takes a busy timeout");
+        connection
+            .pragma_update(None, "foreign_keys", "ON")
+            .expect("the removal connection enforces foreign keys, as the store's do");
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .expect("the removal takes the write lock");
+        for position in &distinct {
+            transaction
+                .execute(
+                    "UPDATE tag_cardinality SET events = events - 1 \
+                     WHERE tag IN (SELECT tag FROM event_tag WHERE position = ?1)",
+                    [position],
+                )
+                .expect("the tag statistic is decremented");
+            transaction
+                .execute("DELETE FROM event_tag WHERE position = ?1", [position])
+                .expect("the event's tag rows are deleted");
+            let removed = transaction
+                .execute("DELETE FROM event WHERE position = ?1", [position])
+                .expect("the event row is deleted");
+            assert_eq!(
+                removed, 1,
+                "the rule names only positions this store holds, and position \
+                 {position} was not there: a broken test environment"
+            );
+        }
+        transaction.commit().expect("the removal commits");
+        Removed::Deleted
     }
 }
