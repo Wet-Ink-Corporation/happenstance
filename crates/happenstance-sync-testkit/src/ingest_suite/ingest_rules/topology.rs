@@ -43,9 +43,9 @@
 //! whose declined step keeps the spoke's own claim, and `tests/runner/main.rs`'s
 //! `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class`.
 //!
-//! So the walk plays no refusal, and runs in the order the shipped `Edge::step`
-//! does, pull before push, so that each step of the walk is a step of the
-//! runner.
+//! So the walk plays no refusal, and runs in `Edge::step`'s order, pull before
+//! push. Its push carries only the spoke's own claim: the shipped runner's push
+//! also relays the other spoke's claim, which the hub skips as already held.
 
 use alloc::format;
 use alloc::string::String;
