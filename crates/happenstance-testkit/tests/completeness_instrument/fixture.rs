@@ -24,7 +24,7 @@ use happenstance_testkit::{Capability, Fixture, WithholdingStore};
 /// Chosen so that the history is *dangerous*: were a withheld event still seen
 /// by a condition, rules that expect an append to land would be refused. A
 /// history no rule's condition matches would leave the condition rewrite
-/// untested by every family but the model (the review finding on #144).
+/// untested by every family but the model.
 const SEEDED: [&[&str]; 3] = [
     &["Blocker"],
     &["Existing", "Anything", "First", "A"],

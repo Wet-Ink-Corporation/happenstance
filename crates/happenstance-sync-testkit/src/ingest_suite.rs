@@ -1335,14 +1335,14 @@ pub mod ingest_rules {
     /// under (SY-30). The hub adjudicates by fact family (SY-35), never by a
     /// guard.
     ///
-    /// * **Hub and spoke.** The hub holds another spoke's claim, ingested
-    ///   under its origin's guard. The spoke appends its own, and its push is
-    ///   refused (SY-33): neither log may change. It pulls the other claim,
+    /// * **Hub and spoke**, in the shipped `Edge::step`'s order, pull before
+    ///   push. The hub holds another spoke's claim, ingested under its
+    ///   origin's guard. The spoke appends its own. It pulls the other claim,
     ///   whose guard its own log breaks, and takes it unjudged: one event, no
-    ///   reversal. Its push is re-offered and the hub adjudicates it, writing
-    ///   the claim with its reversal (SY-7). The spoke pulls the reversal. Both logs
-    ///   end with the two claims and the hub's one reversal, and the spoke
-    ///   still holds its own claim under its own identity (SY-34, E2E-45).
+    ///   reversal. It pushes its own and the hub adjudicates it, writing the
+    ///   claim with its reversal (SY-7). The spoke pulls the reversal. Both
+    ///   logs end with the two claims and the hub's one reversal, and the
+    ///   spoke still holds its own claim under its own identity (E2E-45).
     /// * **Peer to peer.** Each peer appends its own claim. Neither
     ///   adjudicates the family on this edge, so each takes the other's claim
     ///   unjudged. Both logs end with the two claims and no reversal.
@@ -1368,6 +1368,16 @@ pub mod ingest_rules {
     /// `Edge`'s half is checked in `happenstance-sync`'s
     /// `tests/runner/directions.rs`: its pull never adjudicates, and the far
     /// side's push handler can.
+    ///
+    /// **A spoke rolled back on a refused push (SY-34).** The walk plays no
+    /// refusal (SY-33), because the store is never told of one: a declined
+    /// push is the far peer's answer to `SyncPeer::push`, and every port the
+    /// runner holds over the store only adds events, so the rollback cannot be
+    /// written through them and no store could fail a check at the refusal.
+    /// The runner's half is held in `happenstance-sync`'s runner tests:
+    /// `tests/runner/directions.rs`, whose declined step keeps the spoke's own
+    /// claim, and `tests/runner/main.rs`'s
+    /// `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class`.
     ///
     /// # Errors
     ///
