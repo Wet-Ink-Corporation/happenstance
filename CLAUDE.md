@@ -88,6 +88,13 @@ examples/tickets-over-http/      two processes over one file. an HTTP API and a 
                                  runner, contended over real sockets, with read-your-writes
                                  answered by 202 until the view catches up. one image, three
                                  roles, and the only lib target under examples/.
+examples/two-devices-one-seat/   the flagship. two devices sell the last seat offline; sync
+                                 brings both sales to a central store (SY-1), which keeps its
+                                 rule with one ordinary append (SY-2) by convention until #450;
+                                 three SQLite files converge on one log and one read model,
+                                 read back after every handle is dropped. RemoteSyncPeer over
+                                 an in-process Exchange into serve_sync. lib + bin, like
+                                 tickets-over-http, so its tests drive the story step by step.
 harness/workerd/                 🔬 the runtime instrument. a real Durable Object that runs
                                  every event-store rule, the ingest, write-group and sync peer
                                  families under workerd — locally, and on an object deployed
