@@ -156,6 +156,14 @@ enum Mistake {
     /// written into an adapter, and its peers lose the per-direction rule the
     /// runner is required to permit.
     AdjudicatesOnIngest,
+    /// SY-10's own-claim check, and only it: an upsert keyed by the fact
+    /// family. When a foreign event lands carrying the type and the tags of an
+    /// event this store wrote itself, the store re-mints its own event at the
+    /// tail under a new position, so its bytes stay and the identity it was
+    /// written under is gone. Every fact still compares equal by type and
+    /// bytes; only a rule that asks for the store's own claim by identity
+    /// sees that the store gave it up when a peer's claim arrived (#441).
+    RemintsItsOwnFactWhenContested,
     /// SY-14's, the serial peel's cousin at scale: consult what the store
     /// holds for the first [`LOOKUP_CHUNK`] foreign events of a call only, as
     /// a store does that sends one `IN (…)` list of identities under a
@@ -577,6 +585,31 @@ impl WrongIngestStore {
         } else {
             working.push(row);
         }
+        if self.mistake == Mistake::RemintsItsOwnFactWhenContested {
+            self.remint_contested(working, &shipped.event);
+        }
+    }
+
+    /// [`Mistake::RemintsItsOwnFactWhenContested`]'s upsert: the first event
+    /// this store wrote itself with `landed`'s type and non-empty tags is
+    /// moved to the tail under a fresh identity of its own.
+    fn remint_contested(&self, working: &mut Vec<Row>, landed: &Event) {
+        let contested = working.iter().position(|row| {
+            row.stored.id.store() == self.own
+                && !landed.tags().is_empty()
+                && row.stored.event_type() == landed.event_type()
+                && row.stored.tags() == landed.tags()
+        });
+        let Some(at) = contested else {
+            return;
+        };
+        let own = working.remove(at);
+        let position = next_position(working);
+        let id = EventId::new(self.own, position);
+        working.push(Row {
+            stored: SequencedEvent::new(position, id, own.stored.recorded_at, own.stored.event),
+            origin: id,
+        });
     }
 
     /// The recorded time this store keeps for an ingested event its origin
@@ -1366,6 +1399,25 @@ fn directional_merge_rules_compose_fails_a_store_that_adjudicates_on_ingest() {
         violation
             .message()
             .starts_with("a claim pulled from the far end was counted as"),
+        "the rule failed for another reason: {violation}"
+    );
+}
+
+/// SY-10's rule fails it, by its own-claim check and nothing else: every log
+/// holds the facts the walk expects by type and bytes, and the spoke's claim
+/// is no longer held under the identity it was appended as. No other rule
+/// appends a fact of its own and then ingests a peer's on the same type and
+/// tags, so none sees the upsert.
+#[test]
+fn directional_merge_rules_compose_fails_a_store_that_remints_its_own_fact_when_contested() {
+    let open = async || WrongFixture::new(Mistake::RemintsItsOwnFactWhenContested);
+    fails_exactly(&verdicts(open), "directional_merge_rules_compose", "SY-10");
+    let violation = block_on(ingest_rules::directional_merge_rules_compose(open))
+        .expect_err("the rule rejects the store");
+    assert!(
+        violation
+            .message()
+            .contains("no longer holds its own claim"),
         "the rule failed for another reason: {violation}"
     );
 }

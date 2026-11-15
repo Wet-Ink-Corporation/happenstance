@@ -66,6 +66,7 @@
 //! push is still one exchange, and the identity travels in its reply.
 
 use alloc::vec::Vec;
+use core::convert::Infallible;
 use core::num::NonZeroUsize;
 
 use happenstance_core::{EventId, StoreId};
@@ -75,6 +76,7 @@ use crate::ingest::{IngestError, IngestGroup, IngestStore};
 use crate::peer::{
     Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SyncPeer, Waiting,
 };
+use crate::runner::{Accept, Adjudicate, Judged, judge};
 use crate::write_group::WriteGroupStore;
 
 /// A peer over a store the caller holds: `events` to read, `ingest` to write.
@@ -84,13 +86,17 @@ use crate::write_group::WriteGroupStore;
 /// same store**. A peer whose pushes land somewhere its pulls never read
 /// acknowledges events it will never forward.
 ///
-/// # It never adjudicates
+/// # It adjudicates only with a rule
 ///
-/// A push ingests with **no compensation**: the store peer only replicates.
-/// A hub served by this peer, directly or behind
-/// [`serve_sync`](crate::serve_sync), therefore cannot author a compensation,
-/// and cannot be the peer SY-7 makes the adjudicator. An adjudication hook is
-/// planned with SY-7 (#136).
+/// By default a push ingests with **no compensation**: the store peer only
+/// replicates, under [`Accept`]. Given a merge rule by
+/// [`with_adjudicator`](Self::with_adjudicator), it judges each pushed group
+/// before the push lands, and lands each with the compensation the rule
+/// answered, in one write (SY-2). That is how a hub served by this peer,
+/// directly or behind
+/// [`serve_sync_adjudicated`](crate::serve::serve_sync_adjudicated), is the
+/// peer SY-7 makes the adjudicator of what its spokes push (SY-10). It never
+/// judges what it is pulled from: that is the pulling edge's rule.
 ///
 /// # Limits
 ///
@@ -186,10 +192,12 @@ use crate::write_group::WriteGroupStore;
 /// # }
 /// ```
 #[derive(Debug, Clone)]
-pub struct StoreSyncPeer<S, I> {
+pub struct StoreSyncPeer<S, I, A = Accept> {
     events: S,
     ingest: I,
     limits: PeerLimits,
+    /// The merge rule for what this peer is pushed (SY-7).
+    rule: A,
 }
 
 impl<S, I> StoreSyncPeer<S, I> {
@@ -207,19 +215,52 @@ impl<S, I> StoreSyncPeer<S, I> {
             events,
             ingest,
             limits,
+            rule: Accept,
+        }
+    }
+
+    /// The same peer, judging what it is pushed by `rule`: each pushed group
+    /// lands in one write with the compensation `rule` answers for it (SY-2,
+    /// SY-7). The rule is asked only for a push the declared limits admit, so
+    /// a refused push reaches no rule and writes nothing.
+    ///
+    /// Only the push: what this peer is pulled from is the pulling edge's to
+    /// judge, through [`Edge::with_adjudicator`](crate::runner::Edge::with_adjudicator).
+    #[must_use]
+    pub fn with_adjudicator<B>(self, rule: B) -> StoreSyncPeer<S, I, B> {
+        let Self {
+            events,
+            ingest,
+            limits,
+            rule: Accept,
+        } = self;
+        StoreSyncPeer {
+            events,
+            ingest,
+            limits,
+            rule,
         }
     }
 }
 
-impl<S, I> StoreSyncPeer<S, I>
+/// The error a [`StoreSyncPeer`] over `S` and `I` with the rule `A` fails
+/// with, spelled once.
+type PeerError<S, I, A> = StorePeerError<
+    <S as WriteGroupStore>::Error,
+    <I as IngestStore>::Error,
+    <A as Adjudicate>::Error,
+>;
+
+impl<S, I, A> StoreSyncPeer<S, I, A>
 where
     S: WriteGroupStore,
     I: IngestStore,
+    A: Adjudicate,
 {
     /// Refuses a push the declared limits do not admit, before anything is
     /// written: an event that can never land first, then the batch's count and
     /// bytes, which a split can cure.
-    fn admit(&self, batch: &PushBatch) -> Result<(), StorePeerError<S::Error, I::Error>> {
+    fn admit(&self, batch: &PushBatch) -> Result<(), PeerError<S, I, A>> {
         let limits = &self.limits;
         if let Some(event) = batch
             .events()
@@ -250,7 +291,7 @@ where
 
     /// The ingest half's identity, read now and never cached, so a re-mint
     /// shows on the next answer (ADR-0104).
-    async fn responder(&self) -> Result<StoreId, StorePeerError<S::Error, I::Error>> {
+    async fn responder(&self) -> Result<StoreId, PeerError<S, I, A>> {
         self.ingest
             .store_id()
             .await
@@ -258,12 +299,13 @@ where
     }
 }
 
-impl<S, I> SyncPeer for StoreSyncPeer<S, I>
+impl<S, I, A> SyncPeer for StoreSyncPeer<S, I, A>
 where
     S: WriteGroupStore,
     I: IngestStore,
+    A: Adjudicate,
 {
-    type Error = StorePeerError<S::Error, I::Error>;
+    type Error = StorePeerError<S::Error, I::Error, A::Error>;
     type Resume = StoreResume;
 
     /// Reads the far store's write groups above `from`, each whole, until the
@@ -316,19 +358,23 @@ where
             .with_responder(responder))
     }
 
-    /// Ingests each pushed group as one atomic group with no compensation, and
-    /// acknowledges with the store's watermark after the write.
+    /// Ingests each pushed group as one atomic group, with the compensation
+    /// the peer's merge rule answers for it, and acknowledges with the store's
+    /// watermark after the write.
     ///
     /// The travelling guards are not evaluated (SY-1): each is stored with its
-    /// group and forwarded on pull (SY-30). Nothing here detects a conflict or
-    /// writes a compensation, so this peer cannot be SY-7's adjudicator; the
-    /// hook for that is planned with SY-7 (#136).
+    /// group and forwarded on pull (SY-30), and a rule may read them as
+    /// evidence (SY-6). Under [`Accept`], the default, no group is
+    /// compensated. The rule is asked after the limits admit the push and
+    /// before the one ingest, each group with the groups before it.
     ///
     /// # Errors
     ///
     /// [`StorePeerError::EventTooLarge`], [`TooManyEvents`](StorePeerError::TooManyEvents)
     /// or [`BatchTooLarge`](StorePeerError::BatchTooLarge) for a push the
     /// declared limits do not admit, with nothing written;
+    /// [`StorePeerError::Adjudicate`] if the rule cannot judge the push, with
+    /// nothing written;
     /// [`StorePeerError::Ingest`] if the store refuses or fails the write; and
     /// [`StorePeerError::Watermark`] or [`StorePeerError::Identity`] if the
     /// write landed and the confirmation, or the identity that names the
@@ -336,11 +382,12 @@ where
     /// skip.
     async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
         self.admit(batch)?;
-        let groups: Vec<IngestGroup<'_>> = batch
-            .groups
-            .iter()
-            .map(|group| IngestGroup::new(&group.events, &[]).with_guard(group.guard.as_ref()))
-            .collect();
+        // After the admission, so a refused push reaches no rule; before the
+        // ingest, so each answer lands in its group's one write (SY-2).
+        let judged = judge(&self.rule, &batch.groups)
+            .await
+            .map_err(StorePeerError::Adjudicate)?;
+        let groups: Vec<IngestGroup<'_>> = judged.iter().map(Judged::ingest_group).collect();
         let ingested = self
             .ingest
             .ingest(&groups)
@@ -375,14 +422,17 @@ mod resume;
 pub use resume::{ForeignToken, StoreResume};
 
 /// How a [`StoreSyncPeer`] fails: its store's group-read error `R`, its ingest
-/// error `W`, or a push over the limits it declared.
+/// error `W`, its merge rule's error `A`, or a push over the limits it
+/// declared.
 ///
 /// The store's errors are type parameters, never strings (RS-30-2), and each
 /// states its own class (SY-36). No bounds on the enum, so it is `Send` exactly
-/// when both store errors are (ADR-0009).
+/// when the store's and the rule's errors are (ADR-0009). `A` defaults to
+/// [`Infallible`], the error of [`Accept`], so `StorePeerError<R, W>` still
+/// names the error of a peer that judges nothing.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum StorePeerError<R, W> {
+pub enum StorePeerError<R, W, A = Infallible> {
     /// The far store's group read failed; the store's error states the class.
     #[error("the far store's group read failed")]
     Read(#[source] R),
@@ -446,11 +496,16 @@ pub enum StorePeerError<R, W> {
         /// What this peer declared.
         limit: usize,
     },
+
+    /// The peer's merge rule could not judge the push; nothing in it was
+    /// written. The rule's error states the class.
+    #[error("the far store's merge rule could not judge the push")]
+    Adjudicate(#[source] A),
 }
 
-/// The store's arms ask the store's error; the limit arms are fixed by the arm
-/// (SY-36).
-impl<R: Classify, W: Classify> Classify for StorePeerError<R, W> {
+/// The store's arms ask the store's error, the rule's arm the rule's; the
+/// limit arms are fixed by the arm (SY-36).
+impl<R: Classify, W: Classify, A: Classify> Classify for StorePeerError<R, W, A> {
     fn class(&self) -> FailureClass {
         match self {
             Self::Read(error) => error.class(),
@@ -458,6 +513,7 @@ impl<R: Classify, W: Classify> Classify for StorePeerError<R, W> {
             Self::Watermark(error) | Self::Identity(error) => error.class(),
             Self::EventTooLarge { .. } => FailureClass::Park,
             Self::TooManyEvents { .. } | Self::BatchTooLarge { .. } => FailureClass::Split,
+            Self::Adjudicate(error) => error.class(),
         }
     }
 }

@@ -4,11 +4,14 @@
 //! # Why the rule plays the runner
 //!
 //! SY-7 makes adjudication a role, and a role is runner configuration, not a
-//! property of the port. No runner in `happenstance-sync` authors a
-//! compensation yet, so the rule plays that runner, as the model family plays
-//! the runner that drives its peers. What is left to the store is the one part
-//! of authorship it controls: the identity a compensation is minted under,
-//! which is how a log records who wrote it.
+//! property of the port. The shipped runner takes it through its adjudication
+//! hook (#450), and the rule plays a runner that mounts the same hook: the
+//! [`SeatRule`] beside this file on the side the assignment names, the
+//! shipped [`Accept`] on the other. That the shipped runner writes nothing
+//! under `Accept` is `happenstance-sync`'s `tests/runner/wrong_runners.rs`.
+//! What is left to the store is the one part of authorship it controls: the
+//! identity a compensation is minted under, which is how a log records who
+//! wrote it.
 //!
 //! # Why the two stores never meet in the rule
 //!
@@ -20,14 +23,15 @@
 
 use alloc::format;
 use alloc::vec::Vec;
-use core::slice;
 
 use happenstance_core::{
-    Event, EventId, EventStore, EventType, Query, QueryItem, ReadOptions, RecordedAt,
-    SequencePosition, SequencedEvent, StoreId, Tag, Tags, collect,
+    Event, EventId, EventStore, EventType, Query, QueryItem, RecordedAt, SequencePosition,
+    SequencedEvent, StoreId, Tag, Tags,
 };
-use happenstance_sync::{IngestGroup, IngestStore, Ingested, ReplicatedEvent};
+use happenstance_sync::runner::{Accept, Adjudicate};
+use happenstance_sync::{EventGroup, IngestGroup, IngestStore, Ingested, ReplicatedEvent};
 
+use super::seat_rule::SeatRule;
 use super::{ensure_counts, ensure_foreign, ingest, opaque, read_all};
 use crate::IngestFixture;
 use crate::violation::{Violation, ensure};
@@ -188,29 +192,38 @@ async fn side<F: IngestFixture>(
     })
 }
 
-/// The runner's step for one pulled claim: read the guard as evidence (SY-6)
-/// against what the side holds, and answer a conflict with a reversal only
-/// where the assignment says this side adjudicates. The store evaluates
-/// nothing (SY-1).
+/// The runner's step for one pulled claim, under the hook the assignment
+/// mounts on this side: [`SeatRule`], judging by the seat family against
+/// what the side holds, where the side adjudicates, and the shipped
+/// [`Accept`] where it does not. The store evaluates nothing (SY-1).
 async fn deliver<S: EventStore + IngestStore>(
     side: &Side<S>,
     claim: &ReplicatedEvent,
-    guard: &Query,
+    family: &Query,
 ) -> Result<Ingested, Violation> {
-    let held = collect(side.store.read(guard, ReadOptions::new()))
-        .await
-        .map_err(|error| {
-            Violation::new(
-                SY_7,
-                format!("the store refused a read of the guard's query: {error}"),
-            )
-        })?;
-    let compensation = if !held.is_empty() && side.adjudicates {
-        slice::from_ref(&side.reversal)
+    if side.adjudicates {
+        let rule = SeatRule::new(&side.store, family, &side.reversal);
+        deliver_under(&rule, side, claim).await
     } else {
-        &[]
-    };
-    let group = IngestGroup::new(slice::from_ref(claim), compensation);
+        deliver_under(&Accept, side, claim).await
+    }
+}
+
+/// One claim landing on `side` as a runner mounting `rule` lands it: one
+/// group, with the compensation the rule answered in the same write (SY-2).
+async fn deliver_under<S: EventStore + IngestStore, A: Adjudicate>(
+    rule: &A,
+    side: &Side<S>,
+    claim: &ReplicatedEvent,
+) -> Result<Ingested, Violation> {
+    // Owned because the hook judges a wire group; the arrangement keeps
+    // `claim` for the other side.
+    let pulled = EventGroup::new(None, Vec::from([claim.clone()]));
+    let compensation = rule
+        .compensation(&pulled, &[])
+        .await
+        .map_err(|error| Violation::new(SY_7, format!("{error}")))?;
+    let group = IngestGroup::new(&pulled.events, &compensation);
     ingest(&side.store, &[group], SY_7).await
 }
 
