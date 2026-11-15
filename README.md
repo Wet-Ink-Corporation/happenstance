@@ -170,7 +170,24 @@ API.
 
 ## Examples
 
-Each runs on a real SQLite file except the first, and none depends on another.
+Start with the one that shows what the rest is for:
+
+```console
+cargo run -p two-devices-one-seat
+```
+
+`two-devices-one-seat` is a central store and two devices, each a SQLite file.
+The signal drops and both devices sell the last seat, each one right about the
+history it holds. When the signal returns, sync brings both sales to central,
+which now holds four sales for three seats: the oversell is visible, not lost.
+Central keeps its rule with one ordinary append, a refund that carries its
+reason, and the refund syncs back. Every handle is dropped, and the three files
+are read back holding the same events and the same read model. The phone, still
+offline, then refuses the seat on its own. The guide page is
+[Sync a device to a central store](docs/sync-a-device.md).
+
+The rest each run on a real SQLite file except the first, and none depends on
+another:
 
 ```console
 cargo run -p course-subscriptions      # the canonical rule across two things, in memory

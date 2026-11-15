@@ -271,6 +271,25 @@ mod run_on_a_durable_object {
     #![doc = include_str!("../../docs/run-on-a-durable-object.md")]
 }
 
+// The sync how-to. Three fences over `MemoryIngestStore`, the far side shared
+// through a hidden `Rc` wrapper because the memory store is not `Clone`. The
+// first is a whole edge: an `Exchange` that calls `serve_sync`, one step, and
+// both logs holding the same `EventId`s. The second drops the signal, and the
+// step fails `Transient` with the edge still running and the sale delivered by
+// the next step. With no signal that step fails in its pull, before the sale is
+// in any batch, so this fence does not reach a push lost in flight; the
+// example's `a_lost_push_is_transient_and_the_next_step_delivers_it` does, and
+// proof.rs holds it. The third keeps the watermark through
+// `MemoryProjectionStore` and restores an edge from it, which pushes nothing
+// and lands nothing twice. A runner that never delivered the sale once the
+// signal returned, an exchange classifying no signal as anything but
+// transient, or a restored edge that re-pushed what was confirmed, turns this
+// module red.
+#[cfg(doctest)]
+mod sync_a_device {
+    #![doc = include_str!("../../docs/sync-a-device.md")]
+}
+
 // The conformance how-to. Two fences. The first is a whole fixture over
 // `GappyMemoryStore`, with the one-line suite invocation an adapter writes; its
 // `main` runs every rule `for_each_event_store_rule!` names under `block_on`, as

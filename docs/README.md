@@ -28,6 +28,7 @@ stopped working would fail the build before it reached a reader.
 | Choosing a store for your deployment | [`choose-a-store.md`](choose-a-store.md) |
 | Arranging stores, sync and views across devices, edge and cloud | [`choose-a-topology.md`](choose-a-topology.md) |
 | Running the event store inside a Durable Object | [`run-on-a-durable-object.md`](run-on-a-durable-object.md) |
+| Syncing a device's store with a central one | [`sync-a-device.md`](sync-a-device.md) |
 | What to read before you write an adapter | [`adapter-reading-order.md`](adapter-reading-order.md) |
 | Passing the conformance suite with your adapter | [`pass-conformance-suite.md`](pass-conformance-suite.md) |
 | Moving your code from 0.3 to 0.4 | [`upgrading-to-0-4.md`](upgrading-to-0-4.md) |
