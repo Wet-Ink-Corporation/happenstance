@@ -19,7 +19,7 @@
 //!
 //! A rule returns the compensation a group lands with and writes nothing
 //! itself. The runner lands the group and its compensation in **one**
-//! [`IngestGroup`](crate::IngestGroup), so they commit together or not at all
+//! [`IngestGroup`], so they commit together or not at all
 //! (SY-2), and a compensation committed apart from the claim it answers cannot
 //! be written through this trait at all. The alternative that lost was a hook
 //! handed the store, which makes that forbidden state one forgotten
