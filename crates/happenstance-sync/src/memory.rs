@@ -35,14 +35,10 @@ use std::sync::{Mutex, PoisonError};
 
 use happenstance_core::{EventId, StoreId};
 
-use compact::Compaction;
-
 use crate::identity::{ReplicatedEvent, Watermark};
 use crate::peer::{
     Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SendSyncPeer, Waiting,
 };
-
-mod compact;
 
 /// Where a [`MemorySyncPeer`] pull left off.
 ///
@@ -399,6 +395,11 @@ impl SendSyncPeer for MemorySyncPeer {
         }
     }
 }
+
+// The compaction stand-in (SY-32), declared down here for the same reason
+// as the impl below: `references/adr/0026` cites the error's lines above.
+mod compact;
+use compact::Compaction;
 
 // Declared here, at the end, so the lines above keep the numbers cited
 // elsewhere. Each class follows from the variant alone (SY-36).
