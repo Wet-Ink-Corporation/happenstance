@@ -60,8 +60,8 @@ impl SyncFixture for WorkerdSyncFixture {
         RemoteSyncPeer::new(ObjectExchange { far }, PeerLimits::minimum())
     }
 
-    /// The store peer's oversized-push refusal, answered 413 and read back as
-    /// `Split`.
+    /// The oversized-push refusal, `Split`, which the client makes before it
+    /// sends, over the limits both ends declare (#452).
     fn refusals(&self, peer: &Self::Peer) -> impl Future<Output = RefusalsOf<Self::Peer>> {
         oversized_push_refusal(peer)
     }

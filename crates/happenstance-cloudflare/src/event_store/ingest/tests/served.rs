@@ -322,8 +322,8 @@ impl SyncFixture for ServedFixture {
         ))
     }
 
-    /// The store peer's oversized-push refusal, carried back through the
-    /// status with its class intact.
+    /// The oversized-push refusal, `Split`, made by the client before it sends
+    /// (#452). The 413 path is held by the body-over-the-cap test above.
     fn refusals(&self, peer: &Self::Peer) -> impl Future<Output = RefusalsOf<Self::Peer>> {
         oversized_push_refusal(peer)
     }

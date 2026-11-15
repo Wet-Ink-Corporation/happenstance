@@ -166,7 +166,7 @@ where
     }
 
     /// [`RemoteSyncPeer`]'s push: one [`Route::Push`](crate::wire::Route::Push)
-    /// exchange.
+    /// exchange, or none when the declared limits refuse the batch.
     ///
     /// # Errors
     ///
