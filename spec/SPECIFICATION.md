@@ -7218,18 +7218,18 @@ from each other, each ingesting the same conflicting pair; assert the two logs
 converge after they meet. Renewed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md), with SY-10: `only_the_adjudicator_compensates` holds the store half and the falsification test ran with its divergence recorded (#136), but no runner authors a compensation, so the MUST that a non-adjudicator writes none cannot fail yet. The named experiment is the runner's adjudication hook, a follow-up to #244, mounting the rule; the marker moves then.]`
 Rule: `only_the_adjudicator_compensates` (`happenstance-sync-testkit`, #136), in the
 ingest family: two stores take one conflicting pair in opposite orders, the rule plays
-the runner and holds a one-adjudicator assignment, and the adjudicator's log must hold
-one reversal, filed under its own identity, and the other store's none. It fails the
-wrong store `FilesCompensationUnderAPlaceholder`, which mints a compensation under an
-incarnation it never read. Every peer adjudicating is a runner configuration, and no
-runner in `happenstance-sync` authors a compensation yet, so the rule cannot be handed
-one; the falsification test runs it beside the rule instead, on `MemoryIngestStore`
-with two adjudicator configurations, and records the divergence: after the two stores
-meet they hold the same events, and under two adjudicators that is two reversals with
-two identities, reversing opposite claims, so no claim to the seat stands. The
-rule's teeth are the store half (a compensation is minted under the identity the store
-holds); the runner half, that a non-adjudicator writes none, binds the adjudication hook
-when it is built, and the marker stays provisional until that hook mounts the rule.
+the runner through the shipped hook (`runner::Adjudicate`, #450), mounting a seat rule on
+the adjudicator and `Accept` on the other, and the adjudicator's log must hold one
+reversal, filed under its own identity, and the other store's none. It fails the wrong
+store `FilesCompensationUnderAPlaceholder`, which mints a compensation under an
+incarnation it never read. The falsification test runs beside the rule, on
+`MemoryIngestStore` with two adjudicator configurations, and records the divergence:
+after the two stores meet they hold the same events, and under two adjudicators that is
+two reversals with two identities, reversing opposite claims, so no claim to the seat
+stands. The runner half, that a non-adjudicator writes none, is held by
+`happenstance-sync`'s `tests/runner/wrong_runners.rs`: the shipped `Edge` against a
+`MiniEdge` that adjudicates under `Accept` (#450). The marker stays provisional until
+its own change moves it, with SY-10's.
 Cases: E2E-39, E2E-42, E2E-45.
 
 *Rejects:* every-peer-adjudicates, which is the reading SY-1 through SY-3 invite
@@ -7313,7 +7313,7 @@ permit a different merge rule in each direction of one edge.**
 merge rule in a deployment where the hub holds every log and the spoke holds
 one. Falsification test: implement the hub's rule on a spoke and show the spoke's
 projections stay correct. Renewed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md), with SY-7: `directional_merge_rules_compose` (#137) fails `AdjudicatesOnIngest`, but `runner::Edge`'s pull always accepts, so a hub that drives its own edge toward a spoke cannot adjudicate what it pulls. The named experiment is the adjudication hook mounting the rule, after #441's decorative refused-push check is settled.]`
-Rule: `directional_merge_rules_compose` (`happenstance-sync-testkit`, #137, ingest family).
+Rule: `directional_merge_rules_compose` (`happenstance-sync-testkit`, #137, ingest family), its merge rules mounted through the shipped hook (#450); the runner half, a rule judging only the ingest site it is mounted on, is `happenstance-sync`'s `tests/runner/wrong_runners.rs`.
 Cases: E2E-42, E2E-44, E2E-45.
 
 *Rejects:* treating hub-and-spoke as peer-to-peer with one side declining to

@@ -73,7 +73,8 @@
 //!
 //! `step` and `run` borrow the peer and the store for as long as they run and
 //! keep neither. The edge owns only what is *about the link*: the far side's
-//! resume token, its incarnation and the status. Nothing here spawns a task or
+//! resume token, its incarnation, the status, and the merge rule it was given
+//! for what it pulls. Nothing here spawns a task or
 //! holds a timer, so the same edge is driven by a test, by a Durable Object's
 //! alarm, or by a task the caller spawns on its own runtime; dropping
 //! `run`'s future between steps loses nothing a later step does not redo.
@@ -84,6 +85,20 @@
 //! For a peer and store of the `Send` flavours the step's future is `Send` too,
 //! given a `Send + Sync` resume token; `tests/flavours.rs` proves both, the
 //! second in generic code under `tokio::spawn`.
+//!
+//! # Adjudication: a rule for what the edge pulls
+//!
+//! An edge lands what it pulls unjudged unless it is given a merge rule:
+//! [`Edge::with_adjudicator`] takes any [`Adjudicate`], and each pulled group
+//! then lands in one write with the compensation the rule answers for it
+//! (SY-2, SY-7). [`Accept`], the default, judges nothing. The rule judges only
+//! the pull; what the edge pushes is the far side's to judge, which a
+//! [`StoreSyncPeer`](crate::StoreSyncPeer) does through its own
+//! [`with_adjudicator`](crate::StoreSyncPeer::with_adjudicator). So the two
+//! directions of one edge take two rules, with no role parameter (SY-9,
+//! SY-10). A rule that cannot decide fails the step in
+//! [`Phase::Adjudicate`]: nothing in the batch lands, the token stays, and
+//! the edge reacts to the rule's class like any other failure (SY-36).
 //!
 //! # Where the watermark lives
 //!
@@ -110,6 +125,7 @@ use crate::ingest::{IngestGroup, IngestStore, Ingested};
 use crate::peer::{PushBatch, SyncPeer};
 use crate::write_group::WriteGroupStore;
 
+mod adjudicate;
 mod backoff;
 mod drive;
 mod error;
@@ -120,6 +136,8 @@ mod watermark;
 
 use run::Run;
 
+pub(crate) use adjudicate::compensations;
+pub use adjudicate::{Accept, Adjudicate, SendAdjudicate};
 pub use backoff::{Backoff, BackoffError, SendSleep, Sleep};
 pub use error::{Failure, Phase, StepError, StepFailure};
 pub use incarnation::{IncarnationChanged, StopCause};
@@ -131,6 +149,13 @@ pub use watermark::{LoadWatermarkError, Watermark};
 /// Generic over the far side's resume token `R` rather than over the peer, so
 /// the struct carries no bound and the peer is borrowed per
 /// [`step`](Self::step) rather than owned.
+///
+/// And over the merge rule `A` it applies to what it pulls, [`Accept`] unless
+/// [`with_adjudicator`](Self::with_adjudicator) says otherwise. A type
+/// parameter rather than a per-step argument, because SY-7 assigns a rule to
+/// an edge for its life, and a rule handed to each step could change between
+/// two of them. Defaulted, so `Edge<R>` still names the edge that judges
+/// nothing.
 ///
 /// # One edge, one peer, for its whole life
 ///
@@ -177,7 +202,7 @@ pub use watermark::{LoadWatermarkError, Watermark};
 /// # }
 /// ```
 #[derive(Debug)]
-pub struct Edge<R> {
+pub struct Edge<R, A = Accept> {
     /// Where the next pull resumes; `None` before the first.
     resume: Option<R>,
     status: SyncStatus,
@@ -188,6 +213,8 @@ pub struct Edge<R> {
     split_cap: Option<NonZeroUsize>,
     /// The size of the push in flight, so a split refusing it can be halved.
     offered: Option<Offered>,
+    /// The merge rule for what this edge pulls (SY-7).
+    rule: A,
 }
 
 /// How many write groups, and events, one push offered.
@@ -232,9 +259,60 @@ impl<R> Edge<R> {
             buffer: Self::DEFAULT_BUFFER,
             split_cap: None,
             offered: None,
+            rule: Accept,
         }
     }
 
+    /// The same edge, judging what it pulls by `rule`: each pulled group lands
+    /// in one write with the compensation `rule` answers for it (SY-2, SY-7).
+    ///
+    /// Only the pull: what the edge pushes is the far side's to judge. Give an
+    /// edge a rule when its local side is the adjudicator SY-7 assigns for the
+    /// facts it pulls, such as a hub that drives its own edge to a spoke.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use happenstance_sync::runner::{Accept, Edge};
+    ///
+    /// // `Accept` stands in for a rule of the caller's own; `u64` for the far
+    /// // side's resume token.
+    /// let edge: Edge<u64, Accept> = Edge::new().with_adjudicator(Accept);
+    /// assert!(edge.resume_token().is_none());
+    /// ```
+    #[must_use]
+    pub fn with_adjudicator<B>(self, rule: B) -> Edge<R, B> {
+        let Self {
+            resume,
+            status,
+            buffer,
+            split_cap,
+            offered,
+            rule: Accept,
+        } = self;
+        Edge {
+            resume,
+            status,
+            buffer,
+            split_cap,
+            offered,
+            rule,
+        }
+    }
+
+    /// An edge resuming from a kept `watermark`: it pushes what the local log
+    /// holds above it, pulls from the start of the far side's log, and stops
+    /// at the first answer from a store other than the watermark's peer.
+    ///
+    /// [`Edge::resuming`] with the watermark's position and no token, then
+    /// [`with_responder`](Self::with_responder) with its peer.
+    #[must_use]
+    pub const fn restored(watermark: Watermark) -> Self {
+        Self::resuming(Some(watermark.confirmed()), None).with_responder(watermark.peer())
+    }
+}
+
+impl<R, A> Edge<R, A> {
     /// The same edge, knowing the far side as `responder`: the
     /// [`SyncStatus::responder`] a caller kept. Its first answer from any
     /// other store stops it.
@@ -286,18 +364,9 @@ impl<R> Edge<R> {
             _ => None,
         }
     }
+}
 
-    /// An edge resuming from a kept `watermark`: it pushes what the local log
-    /// holds above it, pulls from the start of the far side's log, and stops
-    /// at the first answer from a store other than the watermark's peer.
-    ///
-    /// [`Edge::resuming`] with the watermark's position and no token, then
-    /// [`with_responder`](Self::with_responder) with its peer.
-    #[must_use]
-    pub const fn restored(watermark: Watermark) -> Self {
-        Self::resuming(Some(watermark.confirmed()), None).with_responder(watermark.peer())
-    }
-
+impl<R, A: Adjudicate> Edge<R, A> {
     /// One exchange: pull and ingest, then read and push.
     ///
     /// The pull token, and [`SyncStatus::waiting`], advance only once the
@@ -320,14 +389,21 @@ impl<R> Edge<R> {
     /// acted on: a pulled batch is not ingested, and an ack does not move the
     /// watermark.
     ///
+    /// Each pulled group is judged by the edge's
+    /// [rule](Self::with_adjudicator), with the groups before it in the
+    /// batch, before any of them lands; each then lands in one write with
+    /// the compensation the rule answered (SY-2). Under [`Accept`] that is
+    /// none.
+    ///
     /// # Errors
     ///
     /// A [`StepError`] naming the phase that failed and carrying the failure,
-    /// or [`StepError::Incarnation`] for an answer from another store. Its
+    /// [`StepError::Incarnation`] for an answer from another store, or
+    /// [`StepError::Adjudicate`] for a rule that could not decide. Its
     /// class is recorded in [`SyncStatus::last_failure`] and acted on as the
     /// [module](self) describes. A parked or stopped edge returns
     /// [`StepError::Parked`] or [`StepError::Stopped`] without any I/O.
-    pub async fn step<P, S>(&mut self, peer: &P, store: &S) -> Result<Stepped, StepFailure<P, S>>
+    pub async fn step<P, S>(&mut self, peer: &P, store: &S) -> Result<Stepped, StepFailure<P, S, A>>
     where
         P: SyncPeer<Resume = R>,
         S: WriteGroupStore + IngestStore,
@@ -400,7 +476,7 @@ impl<R> Edge<R> {
         }
     }
 
-    async fn exchange<P, S>(&mut self, peer: &P, store: &S) -> Result<Stepped, StepFailure<P, S>>
+    async fn exchange<P, S>(&mut self, peer: &P, store: &S) -> Result<Stepped, StepFailure<P, S, A>>
     where
         P: SyncPeer<Resume = R>,
         S: WriteGroupStore + IngestStore,
@@ -414,7 +490,7 @@ impl<R> Edge<R> {
         &mut self,
         peer: &P,
         store: &S,
-    ) -> Result<Ingested, StepFailure<P, S>>
+    ) -> Result<Ingested, StepFailure<P, S, A>>
     where
         P: SyncPeer<Resume = R>,
         S: WriteGroupStore + IngestStore,
@@ -426,14 +502,22 @@ impl<R> Edge<R> {
         // Before the ingest: a batch from another incarnation never lands.
         self.check(Phase::Pull, pulled.responder)
             .map_err(StepError::Incarnation)?;
+        // Every group judged before any lands: the rule decides, and never
+        // writes (SY-2, SY-7).
+        let answers = compensations(&self.rule, &pulled.batch.groups)
+            .await
+            .map_err(StepError::Adjudicate)?;
         // One ingest group per pulled group: the far side's atomic units land
         // as atomic units (SY-30), each with its guard, which the store keeps
-        // so a relay forwards it. No compensation: adjudication is SY-7's.
+        // so a relay forwards it, and with its compensation in the same write.
         let groups: Vec<IngestGroup<'_>> = pulled
             .batch
             .groups
             .iter()
-            .map(|group| IngestGroup::new(&group.events, &[]).with_guard(group.guard.as_ref()))
+            .zip(&answers)
+            .map(|(group, answer)| {
+                IngestGroup::new(&group.events, answer).with_guard(group.guard.as_ref())
+            })
             .collect();
         let ingested = if groups.is_empty() {
             Ingested::default()
@@ -448,7 +532,7 @@ impl<R> Edge<R> {
         Ok(ingested)
     }
 
-    async fn push_local<P, S>(&mut self, peer: &P, store: &S) -> Result<usize, StepFailure<P, S>>
+    async fn push_local<P, S>(&mut self, peer: &P, store: &S) -> Result<usize, StepFailure<P, S, A>>
     where
         P: SyncPeer<Resume = R>,
         S: WriteGroupStore + IngestStore,

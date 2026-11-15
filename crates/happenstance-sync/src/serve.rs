@@ -7,10 +7,12 @@
 //! once, so every transport answers with the same bytes.
 
 use alloc::vec::Vec;
+use core::convert::Infallible;
 
 use crate::classify::{Classify, FailureClass};
 use crate::ingest::IngestStore;
 use crate::peer::{Pulled, PushBatch, SyncPeer};
+use crate::runner::Adjudicate;
 use crate::store_peer::{ForeignToken, StorePeerError, StoreResume, StoreSyncPeer};
 use crate::wire::{CodecError, PullRequest, ResumeToken, Route, decode, encode};
 use crate::write_group::WriteGroupStore;
@@ -57,6 +59,35 @@ where
     S: WriteGroupStore,
     I: IngestStore,
 {
+    serve_sync_adjudicated(peer, route, request).await
+}
+
+/// [`serve_sync`] through a store peer that judges what it is pushed: one
+/// request answered through `peer`, whose merge rule `A` lands each pushed
+/// group with its compensation (SY-7, SY-10).
+///
+/// What a hub served over a transport mounts when it is the adjudicator of
+/// what its spokes push: build the peer with
+/// [`StoreSyncPeer::with_adjudicator`] and serve it here. A sibling rather
+/// than a third type parameter on [`serve_sync`], so code that names
+/// `serve_sync::<S, I>` keeps compiling. Every other word of [`serve_sync`]'s
+/// documentation holds here, and the bytes are the same.
+///
+/// # Errors
+///
+/// As [`serve_sync`], and [`ServeError::Peer`] holding
+/// [`StorePeerError::Adjudicate`] if the rule cannot judge a push, with
+/// nothing written.
+pub async fn serve_sync_adjudicated<S, I, A>(
+    peer: &StoreSyncPeer<S, I, A>,
+    route: Route,
+    request: &[u8],
+) -> Result<Vec<u8>, ServeError<S::Error, I::Error, A::Error>>
+where
+    S: WriteGroupStore,
+    I: IngestStore,
+    A: Adjudicate,
+{
     match route {
         Route::Pull => {
             let request: PullRequest = decode(route, request)?;
@@ -84,14 +115,15 @@ where
     }
 }
 
-/// Why [`serve_sync`] could not answer.
+/// Why [`serve_sync`] or [`serve_sync_adjudicated`] could not answer.
 ///
-/// Generic over the store's read error `R` and ingest error `W`, as
-/// [`StorePeerError`] is, and bounded nowhere on the enum, so it is `Send`
-/// exactly when they are.
+/// Generic over the store's read error `R`, its ingest error `W` and the
+/// peer's merge rule's error `A`, as [`StorePeerError`] is, and bounded
+/// nowhere on the enum, so it is `Send` exactly when they are. `A` defaults
+/// to [`Infallible`], so `ServeError<R, W>` is still [`serve_sync`]'s error.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum ServeError<R, W> {
+pub enum ServeError<R, W, A = Infallible> {
     /// The request did not decode, or the reply did not encode.
     /// [`Stop`](FailureClass::Stop).
     #[error(transparent)]
@@ -104,10 +136,10 @@ pub enum ServeError<R, W> {
 
     /// The peer refused or failed; its error states the class.
     #[error(transparent)]
-    Peer(StorePeerError<R, W>),
+    Peer(StorePeerError<R, W, A>),
 }
 
-impl<R: Classify, W: Classify> Classify for ServeError<R, W> {
+impl<R: Classify, W: Classify, A: Classify> Classify for ServeError<R, W, A> {
     fn class(&self) -> FailureClass {
         match self {
             Self::Codec(error) => error.class(),

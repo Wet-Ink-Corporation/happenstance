@@ -26,9 +26,10 @@ with programs you can run.
 >   pass `happenstance-sync-testkit`'s peer suite, and a native SQLite store
 >   round-trips through all three with its payload bytes identical.
 >
-> Still to come: a peer set above the single edge, an `Exchange` over a real
-> network in a published crate, and the adjudication hook SY-7 and SY-10 wait
-> on (#450).
+> Still to come: a peer set above the single edge, and an `Exchange` over a
+> real network in a published crate. The adjudication hook SY-7 and SY-10
+> waited on is built (#450): `runner::Adjudicate`, mounted on an edge or a
+> `StoreSyncPeer`; their markers move in a change of their own.
 >
 > A `[FROZEN]` `SY` clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
