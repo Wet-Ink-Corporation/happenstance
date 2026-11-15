@@ -293,11 +293,11 @@ pub struct PeerLimits {
     pub max_batch_bytes: usize,
     /// Largest number of events in one [`push`](SyncPeer::push).
     pub max_batch_events: usize,
-    /// The lowest resume point this peer can still satisfy, if it has pruned.
+    /// The newest event this peer has pruned, if any: a token must have reached it to resume.
     ///
-    /// A resume token pointing below this can never be satisfied, and a runner
-    /// that keeps retrying it never converges. It says nothing about whether
-    /// everything above it is retained (SY-32, ADR-0028). `None`: no pruning.
+    /// The peer refuses a pull from below it with class [`Reseed`](crate::FailureClass::Reseed),
+    /// and a runner reports it rather than retrying (SY-32). It says nothing about whether
+    /// everything above it is retained (ADR-0028). `None`: no pruning.
     pub retention_floor: Option<EventId>,
 }
 

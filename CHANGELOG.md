@@ -71,6 +71,37 @@ not the same as what a user needed to be told.
   `instrument_report_is_accurate_and_the_suite_cannot_tell` beside three wrong
   instruments it rejects. Additive: no rule joins any family, so no adapter
   goes red.
+- `happenstance-sync`: a retention gap is reported, not silent (SY-32, #158).
+  A fifth failure class, `FailureClass::Reseed`, for a far side that has
+  forgotten history an edge's resume token has not reached. The runner never
+  compares a token with `PeerLimits::retention_floor` itself (tokens are
+  opaque, and an `EventId` orders authorship within one origin, not
+  forwarding): the peer refuses, and a step failing with `Reseed` stops the
+  edge with the new `StopCause::RetentionGap(runner::RetentionGap)`, carrying
+  the far side's floor as it read at the refusal. `SyncStatus::retention_gap()`
+  reads it back, derived from `state`, and `Edge::run` returns it without
+  waiting. `MemorySyncPeer` stands in for a compacting peer:
+  `compact_recorded_before(RecordedAt)` drops the longest prefix of its log
+  recorded before the cutoff, `limits().retention_floor` then names the newest
+  event forgotten, a pull from a token below it, **or from the start**, is
+  refused with the new `MemoryPeerError::BelowRetentionFloor` (class
+  `Reseed`, handing the token back), and `floor_token()` is the explicit way
+  to accept the gap. Compaction forgets identities, so a re-push appends.
+  **Additive only**: `FailureClass`, `StopCause` and `MemoryPeerError` are
+  `#[non_exhaustive]`, and the wire is unchanged. Cloudflare's HTTP mapping
+  carries `Reseed` as 400, which reads back as `Stop`: safe, not yet reported
+  as a gap.
+- `happenstance-sync-testkit`: `retention_gap_is_reported_not_silent` (SY-32)
+  joins the peer family. It pushes a shore log one group per day on a test
+  clock, keeps a stale token from day 10 and a recent one from day 70, has the
+  fixture compact on a 90-day window on day 130, and holds the peer to a floor
+  naming an event it forgot, a `Reseed` refusal of the stale token and of a
+  pull from the start, and a recent token that resumes with exactly what came
+  after it. `SyncFixture` gains `COMPACTION`, declined by default in
+  `UNSTATED_COMPACTION`'s words, and a provided `compact_recorded_before`;
+  `MemorySyncFixture` and `KvCappedFixture` support it. **Every other fixture
+  compiles unchanged and reports the rule skipped**, so no adapter goes red.
+  `tests/wrong_retention.rs` carries six wrong peers it rejects.
 
 ### Changed
 
@@ -80,6 +111,13 @@ not the same as what a user needed to be told.
   holds can roll it back. The walk now runs in the shipped `Edge::step`'s
   order, pull then push, and SY-34's refusal is held by `happenstance-sync`'s
   runner tests. No rule's verdict changes against any store (#441).
+- `happenstance-sync`: `SyncError::BelowRetentionFloor` states class
+  `Reseed`, not `Stop`: its remedy is a re-seed or an accepted gap, not
+  configuration (#158).
+- `happenstance-sync`: `MemorySyncPeer::with_limits` no longer reports a
+  `retention_floor` it was handed. The floor its own compaction sets replaces
+  it, `None` until then, because a floor a peer declares and does not enforce
+  is the silent failure SY-32 forbids (#158).
 
 ## [0.6.0] — 2026-11-09
 

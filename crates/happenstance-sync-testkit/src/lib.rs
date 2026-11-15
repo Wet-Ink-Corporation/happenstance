@@ -46,13 +46,14 @@
 //! | [`nothing_waiting_means_the_next_pull_is_empty`](rules::nothing_waiting_means_the_next_pull_is_empty) | SY-37 | a peer that says nothing is waiting when its page ran out, not its log |
 //! | [`ack_never_confirms_a_non_durable_event`](rules::ack_never_confirms_a_non_durable_event) | SY-31 | a peer that confirms an event before it is durable |
 //! | [`round_trip_preserves_the_whole_log`](rules::round_trip_preserves_the_whole_log) | SY-28, SY-27 | a peer that withholds from its counterpart the events a type or tag filter matches, among those the rule's log carries |
+//! | [`retention_gap_is_reported_not_silent`](rules::retention_gap_is_reported_not_silent) | SY-32 | a peer that compacts and answers a token below its floor, or the start, with a strict subset in silence, or refuses it as anything but `Reseed`; skipped unless the fixture declares [`COMPACTION`](SyncFixture::COMPACTION) |
 //!
 //! Each rule names a wrong implementation, and that implementation lives in
 //! this crate's `tests/wrong_peers.rs` — SY-18's in `tests/wrong_limits.rs`,
 //! over [`KvCappedFixture`], its batch rule's in `tests/wrong_peers.rs`,
-//! SY-23's in `tests/wrong_orders.rs`, and SY-28's in `tests/wrong_scopes.rs`
-//! — where the rule is shown to fail it. A rule no peer can fail is
-//! decorative.
+//! SY-23's in `tests/wrong_orders.rs`, SY-28's in `tests/wrong_scopes.rs`,
+//! and SY-32's in `tests/wrong_retention.rs` — where the rule is shown to fail
+//! it. A rule no peer can fail is decorative.
 //!
 //! **No peer or ingest rule decodes a payload** (SY-35), and **no rule in
 //! [`rules`] holds two peers** (SY-8). [`rules`] says how the rules keep both. The model family
