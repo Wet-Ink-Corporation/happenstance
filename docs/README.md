@@ -26,6 +26,7 @@ stopped working would fail the build before it reached a reader.
 | Retrying a command without applying it twice | [`retry-a-command.md`](retry-a-command.md) |
 | Rebuilding a read model from the log | [`rebuild-a-read-model.md`](rebuild-a-read-model.md) |
 | Choosing a store for your deployment | [`choose-a-store.md`](choose-a-store.md) |
+| Arranging stores, sync and views across devices, edge and cloud | [`choose-a-topology.md`](choose-a-topology.md) |
 | Running the event store inside a Durable Object | [`run-on-a-durable-object.md`](run-on-a-durable-object.md) |
 | What to read before you write an adapter | [`adapter-reading-order.md`](adapter-reading-order.md) |
 | Passing the conformance suite with your adapter | [`pass-conformance-suite.md`](pass-conformance-suite.md) |

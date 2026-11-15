@@ -246,6 +246,15 @@ mod choose_a_store {
     #![doc = include_str!("../../docs/choose-a-store.md")]
 }
 
+// The topology how-to. No Rust fence: it arranges stores, sync edges, views and
+// decisions that the pages around it already compile, and names the clauses each
+// arrangement keeps rather than restating them. Registered so the page is in the
+// harness the moment it gains a fence.
+#[cfg(doctest)]
+mod choose_a_topology {
+    #![doc = include_str!("../../docs/choose-a-topology.md")]
+}
+
 // The Durable Object how-to. Three fences, and none names the Cloudflare crate,
 // because it is not a dependency of this target. The first is a stand-in with
 // that store's shape, an `Rc` over the memory store implementing only the bare

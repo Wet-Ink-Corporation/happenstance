@@ -140,3 +140,4 @@ pre[data-lang="text"], pre:has(> code[data-lang="text"]) { background: var(--mut
 .lost { max-width: 72ch; margin: 0 auto; padding: var(--space-20) var(--space-8); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+.topology-figure { margin: 0 0 24px; } .topology-figure img { width: 100%; height: auto; display: block; border-radius: 16px; }
