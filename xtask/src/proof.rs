@@ -1345,6 +1345,7 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::ingest::tests::served::sync_conformance::ack_never_confirms_a_non_durable_event",
     "event_store::ingest::tests::served::sync_conformance::push_envelope_preserves_group_boundaries",
     "event_store::ingest::tests::served::sync_conformance::round_trip_preserves_the_whole_log",
+    "event_store::ingest::tests::served::sync_conformance::every_declined_capability_is_stated_by_this_fixture",
 ];
 
 /// The runner that executes a `wasm-bindgen-test` harness.

@@ -129,7 +129,7 @@ pub mod rules {
     use happenstance_sync::{
         Ack, Classify, EventGroup, PeerLimits, PushBatch, ReplicatedEvent, SyncPeer, Waiting,
     };
-    use happenstance_testkit::RuleOutcome;
+    use happenstance_testkit::{Reopened, RuleOutcome};
 
     use crate::kv_capped::turnstile_seat_map;
     use crate::violation::{Violation, ensure};
@@ -672,19 +672,24 @@ pub mod rules {
     /// it, and nothing re-sends it.
     ///
     /// The rule pushes one batch of two groups from two origins, at origin
-    /// positions 3 and 7 and 2, drops the handle that pushed, connects a fresh
-    /// one onto the same fixture and pulls everything. Then every pushed event
-    /// at or below the confirmed mark for its origin is held, byte for byte,
-    /// and every confirmed mark names an event the fresh handle holds.
-    /// `confirmed` is read as a high-water mark, never as everything up to: no
-    /// position below a mark that the rule did not push is assumed held.
+    /// positions 3 and 7 and 2, drops the handle that pushed, reopens the
+    /// fixture when it can, connects a fresh handle onto it and pulls
+    /// everything. Then every pushed event at or below the confirmed mark for
+    /// its origin is held, byte for byte, and every confirmed mark names an
+    /// event the fresh handle holds. `confirmed` is read as a high-water mark,
+    /// never as everything up to: no position below a mark that the rule did
+    /// not push is assumed held.
     ///
     /// "Not durable" is observed as "gone once the acking handle is dropped",
-    /// which is the strongest crash a [`SyncFixture`] can express today: one
-    /// fixture is one backing peer, and each `connect` one handle onto it. A
-    /// peer that buffers in fixture-wide memory and loses it to a process crash
-    /// passes here, until the fixture contract gains a reopen capability with
-    /// the first durable peer adapter.
+    /// and, when the fixture declares [`SyncFixture::REOPEN`], as "gone once
+    /// the fixture is reopened", the process crash CF-17 lets a fixture stage.
+    /// The reopen must answer [`Reopened::Discarded`]; a fixture that declares
+    /// the capability and keeps the provided `reopen` is a violation here. A
+    /// fixture that declines it is run as before, and a peer that buffers in
+    /// memory every handle shares, and would lose it to a crash, passes: that
+    /// is what the declension costs, and its reason is the fixture's to state.
+    ///
+    /// [`Reopened::Discarded`]: happenstance_testkit::Reopened::Discarded
     ///
     /// A peer whose ack confirms none of the pushed events has given the rule
     /// nothing to check, so the rule reports
@@ -699,11 +704,14 @@ pub mod rules {
     /// A write-behind cache that acknowledges a push on admission and commits
     /// it later, so a handle dropped in between has confirmed what the peer
     /// never held. `tests/wrong_peers.rs` carries it, and the peer that
-    /// confirms nothing, which this rule must skip.
+    /// confirms nothing, which this rule must skip. `tests/wrong_reopens.rs`
+    /// carries the same cache in memory every handle shares, which only a
+    /// reopen can show.
     ///
     /// # Errors
     ///
     /// A [`Violation`] of SY-31 if the peer refuses the push or a pull, if a
+    /// fixture declaring [`SyncFixture::REOPEN`] reopened nothing, if a
     /// confirmed event is not held by a fresh handle, or if a confirmed mark
     /// names no event the fresh handle holds.
     pub async fn ack_never_confirms_a_non_durable_event<F: SyncFixture>(
@@ -730,6 +738,19 @@ pub mod rules {
             // The acking handle is dropped here: what it confirmed must
             // outlive it.
         };
+        if F::REOPEN.is_supported() {
+            ensure(
+                fixture.reopen().await == Reopened::Discarded,
+                CLAUSE,
+                || {
+                    String::from(
+                        "the fixture declares REOPEN supported and its reopen answered \
+                         `Nothing`: `SyncFixture::reopen` is not overridden, or its override \
+                         reopened nothing, so the crash this rule stages never happened",
+                    )
+                },
+            )?;
+        }
 
         let fresh = fixture.connect().await;
         let held: Vec<ReplicatedEvent> = pull_everything(&fresh, CLAUSE)

@@ -161,6 +161,30 @@ not the same as what a user needed to be told.
   `happenstance-sqlite`.
 - `happenstance-core`: `AppendCondition`'s documentation names the rule that
   checks its vacuous pass over removed history. Documentation only.
+- `happenstance-sync-testkit`: a reopen capability on `SyncFixture` (#448).
+  The defaulted `const REOPEN: Capability`, declined in the new
+  `UNSTATED_SYNC_REOPEN`'s words, and the provided
+  `reopen(&self) -> impl Future<Output = Reopened>`, which answers
+  `Reopened::Nothing`: `ProjectionFixture::REOPEN`'s shape, governed by CF-17
+  in the same words. `ack_never_confirms_a_non_durable_event` (SY-31) now
+  reopens a fixture that declares the capability, after the acking handle is
+  dropped and before a fresh one reads back, and a reopen that answers
+  `Nothing` is a violation naming `SyncFixture::reopen`. It detects a peer
+  that keeps what it acknowledged in memory every handle shares, which a
+  handle swap alone cannot see; `tests/wrong_reopens.rs` carries it, and
+  records that the same peer passes under a fixture that declines. A fixture
+  that declines runs the rule as before. `sync_peer_conformance!` now also
+  emits `every_declined_capability_is_stated_by_this_fixture`
+  (`sync_declensions_are_stated`, CF-18), which **fails a fixture that leaves
+  `REOPEN` at the default declension**: the projection port's precedent, and
+  the one change here an adapter outside the workspace must answer, with a
+  one-line constant. Every fixture in the workspace states it.
+- `happenstance-postgres`, `happenstance-neon`: the sync peer fixtures grant
+  `REOPEN`. Postgres closes the fixture's pool and opens a new one onto the
+  same schema; Neon drops its transport, client and read ledger and builds a
+  new `LiveTransport` over the same `NeonConfig`. Test code only. The
+  Cloudflare, in-memory, KV-capped, `!Send`, remote and store fixtures decline
+  it in their own words. No API change.
 
 ### Changed
 

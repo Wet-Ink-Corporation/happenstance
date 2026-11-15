@@ -32,6 +32,11 @@ impl LocalFixture {
 impl SyncFixture for LocalFixture {
     type Peer = LocalPeer;
 
+    const REOPEN: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+        "the `!Send` fixture holds the reference peer in process memory behind an `Rc`, so \
+         there is no medium outside the process a reopen could read back",
+    );
+
     async fn connect(&self) -> Self::Peer {
         LocalPeer {
             inner: Rc::clone(&self.peer),

@@ -356,6 +356,17 @@ impl ServedFixture {
 impl SyncFixture for ServedFixture {
     type Peer = RemoteSyncPeer<RequestExchange>;
 
+    /// Declined: every `connect` already builds its store afresh from the
+    /// object's state, so the handle swap the rule makes is all a reopen on
+    /// this shim could add, and the isolate restart the capability stands for
+    /// is not something the shim can perform.
+    const REOPEN: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+        "each connect builds a new client over a store re-derived from the object's state, so \
+         the handle swap SY-31's rule already makes is all a reopen on this shim could do; \
+         restarting the isolate, the crash the capability stands for, is beyond the shim, and \
+         harness/workerd runs the family on a real object",
+    );
+
     fn connect(&self) -> impl Future<Output = Self::Peer> {
         core::future::ready(self.client(PeerLimits::minimum()))
     }

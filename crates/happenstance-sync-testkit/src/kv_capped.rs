@@ -155,6 +155,12 @@ impl Default for KvCappedFixture {
 impl SyncFixture for KvCappedFixture {
     type Peer = KvCappedPeer;
 
+    /// Declined, by incapacity, as the reference fixture's is.
+    const REOPEN: Capability = Capability::declined(
+        "the KV-capped reference peer keeps its log in process memory, behind the cap, and \
+         has no medium outside the process a reopen could read back",
+    );
+
     async fn connect(&self) -> Self::Peer {
         KvCappedPeer {
             inner: Arc::clone(&self.peer),
