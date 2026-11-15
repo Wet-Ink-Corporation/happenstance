@@ -1,5 +1,6 @@
 //! The native client: an [`Exchange`] over HTTP `POST`, carrying postcard
-//! envelopes to the harness Worker's `/do/<object>/sync/<route>`.
+//! envelopes to the harness Worker's `/do/<object>/sync/<route>`, or to the
+//! wide mount's `/do/<object>/sync-wide/<route>`.
 //!
 //! What a production client owes the port, each kept here: one round trip per
 //! exchange; a timeout on every round trip ([`ROUND_TRIP_TIMEOUT`]); a reply
@@ -56,6 +57,9 @@ pub(crate) struct HttpExchange {
     token: String,
     /// The largest reply body read: the far side's batch and the envelope.
     max_reply: usize,
+    /// The mount the sync routes sit under: `SYNC_PATH_PREFIX` unless
+    /// [`at_prefix`](Self::at_prefix) moved it.
+    sync_prefix: &'static str,
 }
 
 impl HttpExchange {
@@ -84,7 +88,16 @@ impl HttpExchange {
             object: format!("{}/do/{object}", base.trim_end_matches('/')),
             token: token.to_owned(),
             max_reply: max_request_bytes(limits),
+            sync_prefix: SYNC_PATH_PREFIX,
         })
+    }
+
+    /// The same exchange, sending its pulls and pushes to the mount at
+    /// `prefix` (`/sync-wide/`, say) rather than `/sync/`. The limits passed
+    /// to [`new`](Self::new) must be the ones that mount declares.
+    pub(crate) fn at_prefix(mut self, prefix: &'static str) -> Self {
+        self.sync_prefix = prefix;
+        self
     }
 
     /// One request to `path` under the object, bounded by
@@ -178,7 +191,7 @@ fn is_platform_miss(status: u16, body: &str) -> bool {
 pub(crate) const RETRY_ATTEMPTS: usize = 3;
 
 /// The pause before the second attempt; each later pause doubles it.
-const RETRY_FIRST_PAUSE: Duration = Duration::from_secs(2);
+pub(crate) const RETRY_FIRST_PAUSE: Duration = Duration::from_secs(2);
 
 /// Runs `attempt` until it answers with anything but a `Transient` failure, or
 /// [`RETRY_ATTEMPTS`] times, pausing between attempts; and returns the last
@@ -209,8 +222,12 @@ impl SendExchange for HttpExchange {
     type Error = HttpError;
 
     async fn exchange(&self, route: Route, request: Vec<u8>) -> Result<Vec<u8>, Self::Error> {
-        self.call(Method::POST, &format!("{SYNC_PATH_PREFIX}{route}"), request)
-            .await
+        self.call(
+            Method::POST,
+            &format!("{}{route}", self.sync_prefix),
+            request,
+        )
+        .await
     }
 }
 
@@ -283,6 +300,18 @@ impl core::fmt::Display for HttpError {
                 body,
             } => write!(f, "the object answered {status} ({class:?}): {body}"),
         }
+    }
+}
+
+impl HttpError {
+    /// Whether the object never answered: a platform miss, no connection, a
+    /// body that broke off, or no answer in time. A [`Refused`](Self::Refused)
+    /// is an answer, whatever class its status reads as.
+    pub(crate) const fn is_unanswered(&self) -> bool {
+        matches!(
+            self,
+            Self::PlatformMiss { .. } | Self::Transport(_) | Self::Body(_) | Self::Timeout { .. }
+        )
     }
 }
 
