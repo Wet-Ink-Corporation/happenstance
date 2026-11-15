@@ -18,12 +18,13 @@
 use std::collections::BTreeSet;
 use std::sync::{Arc, Mutex};
 
-use happenstance_core::{EventId, StoreId};
+use happenstance_core::{EventId, RecordedAt, StoreId};
 use happenstance_sync::{
     Ack, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled, PushBatch, SendSyncPeer,
 };
 use happenstance_sync_testkit::{
-    MemorySyncFixture, MemorySyncHandle, RefusalsOf, SyncFixture, oversized_push_refusal, rules,
+    MemorySyncFixture, MemorySyncHandle, RefusalsOf, SyncFixture, Violation,
+    oversized_push_refusal, rules,
 };
 use happenstance_testkit::{Capability, Reopened, RuleOutcome, block_on};
 
@@ -153,6 +154,22 @@ impl BuffersAcrossHandles {
             resume = Some(pulled.resume);
         }
     }
+
+    /// Commits the buffer, then compacts the reference peer behind it: a
+    /// compaction is over everything the peer acknowledged, and a batch still
+    /// in the buffer is part of that. Either failure is reported as SY-32's.
+    async fn compact(&self, cutoff: RecordedAt) -> Result<(), Violation> {
+        self.flush().await.map_err(|error| sy_32(&error))?;
+        self.inner
+            .compact_recorded_before(cutoff)
+            .map(drop)
+            .map_err(|error| sy_32(&error))
+    }
+}
+
+/// A reference peer's failure while compacting, reported as SY-32's.
+fn sy_32(error: &MemoryPeerError) -> Violation {
+    Violation::new("SY-32", error.to_string())
 }
 
 impl SendSyncPeer for BuffersAcrossHandles {
@@ -223,6 +240,17 @@ impl SyncFixture for ReopensTheBuffer {
     async fn reopen(&self) -> Reopened {
         self.0.discard()
     }
+
+    /// The reference peer's compaction, so SY-32's rule runs here too.
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    async fn compact_recorded_before(
+        &self,
+        peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        peer.compact(cutoff).await
+    }
 }
 
 /// The same peer, under a fixture that declines the reopen.
@@ -243,6 +271,17 @@ impl SyncFixture for DeclinesTheReopen {
 
     async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
         oversized_push_refusal(peer).await
+    }
+
+    /// The reference peer's compaction, so SY-32's rule runs here too.
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    async fn compact_recorded_before(
+        &self,
+        peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        peer.compact(cutoff).await
     }
 }
 
@@ -268,6 +307,17 @@ impl SyncFixture for ReopensHonestly {
     async fn reopen(&self) -> Reopened {
         Reopened::Discarded
     }
+
+    /// The reference fixture's compaction, so SY-32's rule runs here too.
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    async fn compact_recorded_before(
+        &self,
+        peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        self.0.compact_recorded_before(peer, cutoff).await
+    }
 }
 
 /// The reference peer under a fixture that declares a reopen and forgets to
@@ -286,6 +336,17 @@ impl SyncFixture for ClaimsTheReopen {
 
     async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
         oversized_push_refusal(peer).await
+    }
+
+    /// The reference fixture's compaction, so SY-32's rule runs here too.
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    async fn compact_recorded_before(
+        &self,
+        peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        self.0.compact_recorded_before(peer, cutoff).await
     }
 }
 
