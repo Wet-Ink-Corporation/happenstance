@@ -63,6 +63,8 @@ no sync service in the middle.
 
 Pick the pieces your app needs. Every arrangement keeps the same guarantees.
 
+![A device's SQLite log, an edge Durable Object and a central Postgres or Neon database, linked by sync, each holding the views it needs](site/static/img/topology.svg)
+
 | You want | How it looks | Status |
 |---|---|---|
 | An app that works offline and syncs when it is back | Each device keeps a SQLite log that syncs with Neon or Postgres | ✅ today |
@@ -74,8 +76,9 @@ Pick the pieces your app needs. Every arrangement keeps the same guarantees.
 | A lean device and a complete cloud | The device prunes history the hub has confirmed | 🛣️ 0.7 |
 | Edge hubs close to your users | A Durable Object per tenant, syncing devices nearby and forwarding to Neon | 🛣️ roadmap |
 
-[Choosing a store](https://wet-ink-corporation.github.io/happenstance/guide/choose-a-store/) walks through where each piece can
-run, and [running on a Durable Object](https://wet-ink-corporation.github.io/happenstance/guide/run-on-a-durable-object/)
+[Choose a topology](https://wet-ink-corporation.github.io/happenstance/guide/choose-a-topology/)
+explains each shape and the rule it keeps, [choosing a store](https://wet-ink-corporation.github.io/happenstance/guide/choose-a-store/)
+walks through where each piece can run, and [running on a Durable Object](https://wet-ink-corporation.github.io/happenstance/guide/run-on-a-durable-object/)
 covers the edge.
 
 ## Quick start

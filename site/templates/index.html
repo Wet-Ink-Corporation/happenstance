@@ -55,6 +55,7 @@
     <p class="hs-kicker">What you can build</p>
     <h2 class="display" id="topologies-title">Design your data topology, not your sync code</h2>
     <p>Pick the pieces your app needs: where each log lives, which logs sync, where each view lives and where each decision is made. Every arrangement keeps the same guarantees.</p>
+    <figure class="topology-figure"><img src="{{ get_url(path='img/topology.svg') }}" alt="A device's SQLite log, an edge Durable Object and a central Postgres or Neon database, linked by sync, each holding the views it needs" width="960" height="360" loading="lazy"></figure>
     <div class="grid grid--4">
       <div class="hs-card hs-feature">
         <span class="hs-label">Works today</span>
@@ -97,7 +98,7 @@
         <p class="hs-feature__body">A Durable Object per tenant syncs the devices nearby and forwards to Neon.</p>
       </div>
     </div>
-    <p><a href="{{ get_url(path='@/guide/choose-a-store.md') }}">Choosing a store</a> walks through where each piece can run.</p>
+    <p><a href="{{ get_url(path='@/guide/choose-a-topology.md') }}">Choose a topology</a> explains each shape and the rule it keeps, and <a href="{{ get_url(path='@/guide/choose-a-store.md') }}">choosing a store</a> walks through where each piece can run.</p>
   </section>
 
   <section class="story" aria-labelledby="story-title">

@@ -67,7 +67,7 @@ struct Reservable {
 const RESERVABLE: &[Reservable] = &[
     Reservable {
         name: "happenstance",
-        description: "DCB-compliant event sourcing with batteries: typed events, decision models and projection runners over a storage-agnostic contract.",
+        description: "Your data stays true, everywhere it lives: event-sourced data for Rust apps on devices, at the edge and in the cloud, with typed events, decision models and projection runners.",
         blurb: "the crate an application programs against",
         phase: 0,
     },

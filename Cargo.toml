@@ -38,7 +38,7 @@ repository = "https://github.com/Wet-Ink-Corporation/happenstance"
 # `docs.rs/<name>` on its own. Each publishable crate names its own below.
 homepage = "https://wet-ink-corporation.github.io/happenstance/"
 authors = ["Ryan Britton"]
-keywords = ["event-sourcing", "dcb", "cqrs", "event-store"]
+keywords = ["event-sourcing", "local-first", "sqlite", "cqrs", "dcb"]
 categories = ["database", "data-structures"]
 
 # Single source of truth for every third-party version. Members write
