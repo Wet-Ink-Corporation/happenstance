@@ -103,8 +103,8 @@ pub mod rules {
     use futures_core::Stream;
 
     use happenstance_core::{
-        AppendError, Event, EventId, EventStore, MAX_EVENT_TYPE_LEN, MAX_TAG_LEN, Query,
-        ReadOptions, SequencePosition, SequencedEvent, StoreId, StoreLimit, collect,
+        AppendCondition, AppendError, Event, EventId, EventStore, MAX_EVENT_TYPE_LEN, MAX_TAG_LEN,
+        Query, ReadOptions, SequencePosition, SequencedEvent, StoreId, StoreLimit, collect,
     };
 
     use crate::fixtures::{
@@ -7632,6 +7632,184 @@ pub mod rules {
             Some(restarted),
             "`head` names the one event the store holds, at {restarted}. Got {head:?}"
         );
+        Ok(())
+    }
+
+    /// A condition over the `ClaimRegistered` event tagged `claim` = `claim`.
+    fn over(claim: &str) -> AppendCondition {
+        condition(query_of(&["ClaimRegistered"], &[("claim", claim)]))
+    }
+
+    /// An event outside [`over`]'s query that names `claim`, so admitting it
+    /// never creates a match for the condition it was appended under.
+    fn note(claim: &str) -> Event {
+        tagged_event("EngineerNoteFiled", &[("claim", claim)])
+    }
+
+    /// ES-40 (ADR-0028, decision 2): a condition whose only matching event
+    /// was removed outside the port **admits** the append, and a condition
+    /// over an event the store still holds still refuses it.
+    ///
+    /// # Why admission, and not ES-40's MAY
+    ///
+    /// The MAY is the caller's reading: a caller must not rely on a refusal
+    /// over history the store may have lost. On the store's side, a refusal
+    /// there names an event its own `read` does not yield and its own
+    /// `contains_event_id` denies, which contradicts ES-38's "every clause of
+    /// this section with respect to the events it still holds" and is half a
+    /// removal, the guard's membership argument again. ADR-0028 rejects the
+    /// fail-closed outcome for 1.x. So the rule asserts the vacuous pass as
+    /// specified behaviour, and it has two readers: an adapter author reads it
+    /// as what the store must do, and an ingest author reads it as the hazard
+    /// E2E-47 describes, a condition that says nothing about events the log
+    /// no longer has.
+    ///
+    /// # The arrangement
+    ///
+    /// Three registrations, and the interior one is removed, so survivors sit
+    /// on both sides of the hole. That reaches both of CF-27's evaluation
+    /// paths, at or below the highest withheld position and above it, and a
+    /// SQL store's index range on either side of a gap. Before the removal the
+    /// probe must be refused, so the pass after it is not vacuous by accident.
+    /// The survivors are compared by content: positions are ES-38's business,
+    /// so a store that renumbered passes here and fails there.
+    ///
+    /// The wrong implementations, each in
+    /// `tests/mutation_coverage/removed_history.rs`:
+    ///
+    /// * `RememberingConditionFixture` is a soft delete whose condition path
+    ///   still sees what was removed: `WithholdingStore` without its condition
+    ///   rewrite.
+    /// * `FailClosedFixture` refuses every condition once it knows it has been
+    ///   pruned, which is E2E-47's third outcome spelled as
+    ///   `ConditionViolated`.
+    /// * `ConditionBlindFixture` stops evaluating conditions once it has lost
+    ///   history, and admits an append over a survivor.
+    ///
+    /// It stands on
+    /// [`removal_outside_the_port_removes_exactly_the_named_events`]: a store
+    /// the removal did not leave with exactly the survivors is refused, not
+    /// judged.
+    pub async fn condition_over_removed_history_does_not_reject<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        require!(F: REMOVAL);
+
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let below = append_ok(
+            &store,
+            &[tagged_event("ClaimRegistered", &[("claim", "kept-below")])],
+        )
+        .await;
+        let gone = append_ok(
+            &store,
+            &[tagged_event("ClaimRegistered", &[("claim", "removed")])],
+        )
+        .await;
+        let above = append_ok(
+            &store,
+            &[tagged_event("ClaimRegistered", &[("claim", "kept-above")])],
+        )
+        .await;
+
+        let live = store
+            .append(&[note("removed")], Some(&over("removed")))
+            .await;
+        assert!(
+            live.is_err(),
+            "the probe is live: while the store holds the matching event the \
+             condition must refuse, or the vacuous pass below proves nothing. \
+             Got {live:?}"
+        );
+
+        settle!(fixture);
+        let before = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&before),
+            [below, gone, above].map(SequencePosition::get),
+            "the anchor: three registrations were appended and the probe was \
+             refused, so a read must show exactly the three, at the positions \
+             their appends returned. Got {:?}",
+            types_of(&before)
+        );
+        let survivors: Vec<&Event> = before
+            .iter()
+            .filter(|event| event.position != gone)
+            .map(|event| &event.event)
+            .collect();
+
+        remove_outside_port_or_fail(&fixture, &[gone]).await;
+        settle!(fixture);
+        let after = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        // By content, not by position: positions after a removal are ES-38's
+        // business, and the guard names a store that moved them.
+        assert_eq!(
+            after.iter().map(|event| &event.event).collect::<Vec<_>>(),
+            survivors,
+            "the removal did not leave exactly the survivors: the registration \
+             at {gone} was removed, so a read must show the other two and nothing \
+             else. This rule judges only a store the named event has left; \
+             `removal_outside_the_port_removes_exactly_the_named_events` names \
+             this defect. Got {:?}",
+            types_of(&after)
+        );
+
+        if let Err(skip) = assert_the_vacuous_pass(&fixture, &store).await {
+            return skip;
+        }
+
+        for claim in ["kept-below", "kept-above"] {
+            let refused = store.append(&[note(claim)], Some(&over(claim))).await;
+            assert!(
+                refused.is_err(),
+                "a removal is not a licence: the store still holds the {claim:?} \
+                 registration, so a condition over it MUST still refuse. A store \
+                 that stops evaluating conditions once it has lost history has \
+                 read ES-40's vacuous pass as 'conditions no longer apply'. Got \
+                 {refused:?}"
+            );
+        }
+        RuleOutcome::Ran
+    }
+
+    /// The vacuous pass: a condition over the removed registration admits the
+    /// append, and the admitted event reads back at the position the append
+    /// returned.
+    ///
+    /// A `Result` for [`assert_emptied_store_does_not_restart`]'s reason.
+    async fn assert_the_vacuous_pass<F: Fixture>(
+        fixture: &F,
+        store: &F::Store,
+    ) -> Result<(), RuleOutcome> {
+        let admitted = store
+            .append(&[note("removed")], Some(&over("removed")))
+            .await;
+        assert!(
+            admitted.is_ok(),
+            "ES-40, ADR-0028: a condition over removed history passes \
+             vacuously. This store refused it ({admitted:?}). It is still judging \
+             the condition against an event that `read` no longer yields and \
+             `contains_event_id` no longer holds: a soft delete the condition \
+             path never learned about, or E2E-47's 'this log cannot evaluate' \
+             outcome, which ADR-0028 rejects for 1.x"
+        );
+        if let Ok(note_at) = admitted {
+            crate::settle::settled(fixture).await?;
+            let named = read_ok(
+                store,
+                &query_tagged(&[("claim", "removed")]),
+                ReadOptions::new(),
+            )
+            .await;
+            assert_eq!(
+                (positions_of(&named), types_of(&named)),
+                (vec![note_at.get()], vec!["EngineerNoteFiled"]),
+                "the admitted append must be in the log: the only event still \
+                 naming the removed claim is the note admitted at {note_at}"
+            );
+        }
         Ok(())
     }
 }

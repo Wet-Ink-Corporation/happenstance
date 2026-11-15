@@ -483,24 +483,24 @@ read or `head` that must reflect an append made since the last one.
 
 **Commit 2: #154 (ES-40)**
 
-- [ ] **T13.** `MUST_SKIP` gains `"condition_over_removed_history_does_not_reject"`. The
+- [x] **T13.** `MUST_SKIP` gains `"condition_over_removed_history_does_not_reject"`. The
   skeleton rule, registry and `READS_BACK` (87) entries are added, as in T2.
-- [ ] **T14.** `RememberingConditionFixture`. Red: it passes the skeleton. Green: steps 1 to 7
+- [x] **T14.** `RememberingConditionFixture`. Red: it passes the skeleton. Green: steps 1 to 7
   (the anchor, the content check and the vacuous pass with its read-back).
-- [ ] **T15.** `FailClosedFixture`. It should already be red against T14's body. Confirm the
+- [x] **T15.** `FailClosedFixture`. It should already be red against T14's body. Confirm the
   pin "passes vacuously" and record it in the Progress section; no new code.
-- [ ] **T16.** `ConditionBlindFixture`. Red: it passes. Green: step 8 (survivors still guard).
-- [ ] **T17.** Existing rows for Forgotten, Noop and OverRemoving have ES-40 added, with pins.
+- [x] **T16.** `ConditionBlindFixture`. Red: it passes. Green: step 8 (survivors still guard).
+- [x] **T17.** Existing rows for Forgotten, Noop and OverRemoving have ES-40 added, with pins.
   Confirm that `RenumberingFixture` passes ES-40, as predicted.
-- [ ] **T18.** `GappedPositionFixture` and the instrument (pass list: one more `ran` line) are
+- [x] **T18.** `GappedPositionFixture` and the instrument (pass list: one more `ran` line) are
   green. SQLite `--test conformance` is green.
-- [ ] **T19.** `AppendCondition` paragraph. `cargo test -p happenstance-core --doc` and the core
+- [x] **T19.** `AppendCondition` paragraph. `cargo test -p happenstance-core --doc` and the core
   doc builds (`--no-default-features` and default) are green with `-D warnings`.
-- [ ] **T20.** `spec_trace.rs`: delete the ES-40 entry and set the length to 65. Make the spec
+- [x] **T20.** `spec_trace.rs`: delete the ES-40 entry and set the length to 65. Make the spec
   edits (ES-40 bullet, CF-27, §3.8) line-neutral, then run `cargo xtask spec-trace --write`,
   then `cargo xtask spec-trace` (green). Also run `cargo xtask lint-constitution`,
   `cargo xtask lints` (CF-29 changelog) and `cargo xtask lint-kb`.
-- [ ] **T21.** `proof.rs` list, CHANGELOG entry and README count (one hundred).
+- [x] **T21.** `proof.rs` list, CHANGELOG entry and README count (one hundred).
 
 **The gate.** Disk is tight, so drive the work with
 `CARGO_INCREMENTAL=0 cargo test -p happenstance-testkit --test mutation_coverage` and
@@ -596,3 +596,20 @@ About 19 files and about 1,050 added lines (about 60 removed or changed):
   precedent) rather than deleted, so `spec_trace.rs:N` citations below it hold.
   Registry insertions moved five `registry.rs:N` citations in
   `standards/rust/`; repointed (lint-constitution green).
+- 2026-11-15, commit 2 (#154). T13/T14 red, skeleton rule against the three
+  new rows: "`RememberingConditionFixture` declares that it fails
+  `condition_over_removed_history_does_not_reject`, but the rule passed", plus
+  the two lagging tests. T17 rows for Forgotten, Noop and OverRemoving updated
+  to the predicted sets before the body was written. Steps 1-7 written: the
+  meta-test's only complaint was "`ConditionBlindFixture` declares ... but the
+  rule passed" (it is last in `for_each_mutant!`), so every row before it,
+  including FailClosed with "passes vacuously" (T15) and Renumbering passing
+  ES-40, matched exactly. Step 8 -> green. T18: instrument pass list gains the
+  `ran` line, 113 green; SQLite runs ES-40 green, so no `tag_cardinality`
+  finding. T19: `AppendCondition`'s paragraph is line-neutral (12 lines for 12,
+  the section tightened), so no `append.rs:N` citation moves. T20: ES-40 entry
+  replaced by a five-line comment, table length 65; spec edits line-neutral
+  (`assert` on newline count); `spec-trace --write` then green;
+  lint-constitution green after repointing the five `registry.rs:N`
+  citations once more; `mutation_coverage.rs:5538` citations now point at
+  `:5717`.

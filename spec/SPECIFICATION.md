@@ -4937,10 +4937,10 @@ passes **vacuously**. That is what actually happened in E2E-47: three engineer
 notes landed on a claim with no registration, no policy, no reserve and no
 closure, and the desktop projection materialised a row for it in four seconds.
 
-- **Rule:** `condition_over_removed_history_does_not_reject` **(new)**, against
-  ES-38's completeness fixture — an asserted-and-documented outcome rather than a
-  desired one, so that an adapter author reads the vacuous pass as specified
-  behaviour and an ingest author reads it as a hazard.
+- **Rule:** `condition_over_removed_history_does_not_reject` (#154), against
+  CF-27's instrument and every fixture granting `REMOVAL` — an asserted-and-documented
+  outcome rather than a desired one, so that an adapter author reads the vacuous pass
+  as specified behaviour and an ingest author reads it as a hazard.
 - **Cases:** E2E-47, E2E-56, E2E-44.
 - **Rejects:** an ingest path that re-evaluates an origin condition against a
   pruned slice and concludes "no match" — which, given the unconditional-ingest
@@ -5111,11 +5111,11 @@ that is itself the finding: this group held only rules the instrument was
 missing, and it emptied when the instrument landed rather than when anybody
 found more effort.
 
-**~~Blocked on the completeness instrument (CF-27)~~, unwritten since #144 built it:**
-`positions_are_not_reused_after_removal` (ES-38) and
-`condition_over_removed_history_does_not_reject` (ES-40). Both are written against
-a store that holds only a scattered subset of its own log; `WithholdingStore` is that
-store, and the two rules are owed by #151 (ES-38) and #154 (ES-40), not blocked.
+**~~Blocked on the completeness instrument (CF-27)~~, written at phase 14:**
+~~`positions_are_not_reused_after_removal`~~ (ES-38, #151) and
+~~`condition_over_removed_history_does_not_reject`~~ (ES-40, #154). Both run against
+`WithholdingStore` and against every fixture granting `REMOVAL`, so this group has
+emptied too: the instrument and the capability were all it was missing.
 
 **Blocked on a hostile fixture in the testkit's own `tests/`:**
 ~~`query_items_share_one_snapshot`~~. It ships with the store that can fail it or
@@ -9887,8 +9887,8 @@ refusal it asserts two things: the full suite passes against the instrument, so
 that indistinguishability at the port is the specified outcome with the recorded
 pass list as the evidence; and the instrument's own report is accurate. This is
 the instrument, not a primitive. ES-39 keeps the question of a port surface, and
-ES-38's `positions_are_not_reused_after_removal` and ES-40's `condition_over_removed_history_does_not_reject` are the two rules that already
-have assertions and are waiting only on this instrument to be written against. The capability's guard (#147) is
+ES-38's `positions_are_not_reused_after_removal` and ES-40's `condition_over_removed_history_does_not_reject` are the two rules
+written against it and against every fixture granting `REMOVAL` (#151, #154). The capability's guard (#147) is
 `removal_outside_the_port_removes_exactly_the_named_events`, which fails a fixture that declares `REMOVAL` and removes nothing, too much, or rebuilds the log from its survivors.
 Cases: E2E-46, E2E-47, E2E-56, E2E-33.
 Rejects: an instrument whose inherent report misstates what it withholds — one
@@ -10598,7 +10598,7 @@ between them because its *shape* does not wait on a transport but its
 | ES-37 | FROZEN | *(none — see clause)* | E2E-48, E2E-49, E2E-46 |
 | ES-38 | FROZEN | `positions_are_not_reused_after_removal` | E2E-46, E2E-10 |
 | ES-39 | DEFERRED | `a_store_reports_the_history_it_does_not_hold` † | E2E-46, E2E-47, E2E-56 |
-| ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` † | E2E-47, E2E-56, E2E-44 |
+| ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` | E2E-47, E2E-56, E2E-44 |
 | ES-41 | FROZEN | `contains_event_id_reports_membership`, `contains_event_id_reports_a_held_row_… | E2E-32, E2E-34, E2E-36 |
 | ES-42 | FROZEN | compile-level — the erasure wrapper of ADR-0011's E11 compiles and round-trips… | *(none — see clause)* |
 | ES-43 | FROZEN | `a_busy_append_left_nothing_behind`, `positions_are_unique_under_concurrent_ap… | E2E-08, E2E-07 |

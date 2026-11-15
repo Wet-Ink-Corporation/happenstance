@@ -1,11 +1,12 @@
-//! The wrong stores ES-38's rule rejects (#151): stores whose removal is
-//! right and whose behaviour **after** it is not.
+//! The wrong stores ES-38's and ES-40's rules reject (#151, #154): stores
+//! whose removal is right and whose behaviour **after** it is not.
 //!
 //! `removal.rs` holds the fixtures whose removal itself is wrong, and the
 //! guard rejects them. Every store here removes exactly the named events, so
-//! the guard passes it, and gets one later step wrong: the next position, or
-//! `head`. A module of its own for `removal.rs`'s reason, declared at the end
-//! of `mutants.rs` so that no cited line there moves.
+//! the guard passes it, and gets one later step wrong: the next position,
+//! `head`, or the condition an append evaluates. A module of its own for
+//! `removal.rs`'s reason, declared at the end of `mutants.rs` so that no cited
+//! line there moves.
 //!
 //! One generic fixture over one [`AfterRemoval`] step, on
 //! `mutants::Defect`'s pattern: each wrong store overrides exactly one of the
@@ -19,32 +20,51 @@ use std::rc::Rc;
 
 use futures_core::Stream;
 use happenstance_core::{
-    AppendCondition, AppendError, Event, EventId, EventStore, Query, ReadOptions, SequencePosition,
-    SequencedEvent,
+    AppendCondition, AppendError, ConditionViolated, Event, EventId, EventStore, Query,
+    ReadOptions, SequencePosition, SequencedEvent,
 };
 use happenstance_testkit::{Capability, Fixture, Removed};
 
-use crate::correct::{Log, LogError, Snapshot, dense};
+use crate::correct::{Log, LogError, Snapshot, dense, violation};
 use crate::harness::Subject;
 use crate::mutants::removal::NO_DURABLE_MEDIUM;
 
-/// What a store here holds.
+/// What a store here holds, plus a copy of what removals took from it.
 ///
-/// A struct of one field for now, so that a defect's signature names the
-/// store's state rather than its log, and a later field does not change every
-/// override.
+/// The copy is what a soft delete keeps: a correct store never reads it,
+/// and a defect that consults it is a store whose removal did not reach
+/// every seam.
 #[derive(Debug)]
 pub(crate) struct Removable {
     /// The events the store holds, and the high-water mark a correct removal
     /// keeps.
     pub(crate) log: Log,
+    /// Every event a removal took, in the order removed.
+    pub(crate) removed: Vec<SequencedEvent>,
 }
 
 impl Removable {
     fn new() -> Self {
         Self {
             log: Log::new(dense),
+            removed: Vec::new(),
         }
+    }
+
+    /// Copies every held event at one of `positions` into `removed`, before
+    /// the removal that takes them from the log.
+    fn tombstone(&mut self, positions: &[SequencePosition]) {
+        let gone = self
+            .log
+            .select(&Query::all(), ReadOptions::new())
+            .into_iter()
+            .filter(|event| positions.contains(&event.position));
+        self.removed.extend(gone);
+    }
+
+    /// The highest position a removal took, if any.
+    fn highest_removed(&self) -> Option<SequencePosition> {
+        self.removed.iter().map(|event| event.position).max()
     }
 
     /// The positions this store holds, ascending.
@@ -89,6 +109,7 @@ pub(crate) trait AfterRemoval: 'static {
 
 /// The correct removal: the high-water mark first, then the events.
 fn remove_correctly(state: &mut Removable, positions: &[SequencePosition]) -> Removed {
+    state.tombstone(positions);
     let removed = state.log.remove(positions);
     removed_every_named(positions, removed)
 }
@@ -227,6 +248,7 @@ impl AfterRemoval for RowidReuse {
     const NAME: &'static str = "RowidReuseFixture";
 
     fn remove(state: &mut Removable, positions: &[SequencePosition]) -> Removed {
+        state.tombstone(positions);
         // THE DEFECT: `discard` without `remember_high_water`.
         let removed = state.log.discard(positions);
         removed_every_named(positions, removed)
@@ -267,9 +289,104 @@ impl AfterRemoval for TruncatingWhenEmpty {
         if held.is_empty() || !held.iter().all(|position| positions.contains(position)) {
             return remove_correctly(state, positions);
         }
+        state.tombstone(positions);
         // THE DEFECT: every held event is named, so the store is replaced by
         // an empty one whose allocator starts again.
         state.log = Log::new(dense);
         removed_every_named(positions, held.len())
+    }
+}
+
+// =====================================================================
+// ES-40: the condition an append evaluates after a removal (#154)
+//
+// Each `append` override hands an empty batch to the correct path first, so
+// that `NoEvents` still comes before any condition (ES-20) and the override
+// carries no second defect, `ConditionBeforeEmptinessStore`'s.
+// =====================================================================
+
+/// A condition path that still sees what was removed.
+///
+/// A soft delete (`deleted_at`) whose read, head and membership queries
+/// learned to filter it and whose condition `EXISTS` did not. It is also
+/// `WithholdingStore` without its condition rewrite. ES-40's vacuous pass is
+/// refused: the store judges the condition against an event `read` no longer
+/// yields.
+#[derive(Debug)]
+pub(crate) struct RememberingCondition;
+
+impl AfterRemoval for RememberingCondition {
+    const NAME: &'static str = "RememberingConditionFixture";
+
+    fn append(
+        state: &mut Removable,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<LogError>> {
+        // THE DEFECT: the removed rows still count against the condition.
+        if !events.is_empty()
+            && let Some(condition) = condition
+            && let Some(conflict) = violation(&state.removed, condition)
+        {
+            return Err(AppendError::ConditionViolated(ConditionViolated::at(
+                conflict,
+            )));
+        }
+        state.log.append(events, condition)
+    }
+}
+
+/// A store that refuses every condition once it knows it has been pruned.
+///
+/// The sympathetic one: an adapter that knows history is missing and refuses
+/// rather than risk an unsound admit. That is E2E-47's third outcome, "this
+/// log cannot evaluate", which ADR-0028 rejects for 1.x, spelled in the only
+/// refusal the port has.
+#[derive(Debug)]
+pub(crate) struct FailClosed;
+
+impl AfterRemoval for FailClosed {
+    const NAME: &'static str = "FailClosedFixture";
+
+    fn append(
+        state: &mut Removable,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<LogError>> {
+        // THE DEFECT: any condition at all, once anything has been removed.
+        if !events.is_empty()
+            && condition.is_some()
+            && let Some(highest) = state.highest_removed()
+        {
+            return Err(AppendError::ConditionViolated(ConditionViolated::at(
+                highest,
+            )));
+        }
+        state.log.append(events, condition)
+    }
+}
+
+/// A store that stops evaluating conditions once it has lost history.
+///
+/// The opposite misreading of ES-40: "a pruned store's conditions are
+/// unsound, so stop evaluating them". It admits a write the store still holds
+/// the evidence to refuse.
+#[derive(Debug)]
+pub(crate) struct ConditionBlind;
+
+impl AfterRemoval for ConditionBlind {
+    const NAME: &'static str = "ConditionBlindFixture";
+
+    fn append(
+        state: &mut Removable,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<LogError>> {
+        if state.removed.is_empty() {
+            return state.log.append(events, condition);
+        }
+        // THE DEFECT: the condition is dropped. An empty batch still reaches
+        // the correct `NoEvents`, because the log checks emptiness first.
+        state.log.append(events, None)
     }
 }
