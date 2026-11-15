@@ -100,7 +100,10 @@ not the same as what a user needed to be told.
   after it. `SyncFixture` gains `COMPACTION`, declined by default in
   `UNSTATED_COMPACTION`'s words, and a provided `compact_recorded_before`;
   `MemorySyncFixture` and `KvCappedFixture` support it. **Every other fixture
-  compiles unchanged and reports the rule skipped**, so no adapter goes red.
+  compiles unchanged and reports the rule skipped.** A runner that fails on
+  any skip goes red: this workspace's `workerd` harness did, and now tolerates
+  this rule's skip with `UNSTATED_COMPACTION`'s reason and no other (D10)
+  until its Durable Object can compact.
   `tests/wrong_retention.rs` carries six wrong peers it rejects.
 
 ### Changed

@@ -1787,8 +1787,8 @@ jobs:
       # (`happenstance_cloudflare::sync_http::serve_sync_request`), served over
       # `CloudflareIngestStore` on the ingest family's fixtures, so each push is
       # one real `transactionSync`. The names come from `/sync-peer-rules`, the
-      # testkit's own enumeration. Strict, with the ingest steps' vacuity
-      # guard: every rule must answer `ran` (no skip is tolerated).
+      # testkit's own enumeration. Strict, with the ingest steps' vacuity guard: every
+      # rule must answer `ran`, but SY-32's may skip for the suite's reason (D10, #158).
       - name: The sync peer family under local workerd
         if: always()
         run: |

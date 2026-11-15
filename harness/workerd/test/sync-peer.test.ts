@@ -8,14 +8,25 @@
 // the sync testkit's enumeration, so this file names no rule and cannot drop
 // one. Every rule must answer `ran`: under `PeerLimits::minimum` this peer
 // shows a page boundary and confirms what it acknowledges, so a skip is a
-// regression and none is tolerated. A violation answers 422 with its clause,
-// never a trap.
+// regression. One skip is tolerated, SY-32's, and only for the suite's own
+// reason (D10, #158): the object serves a `StoreSyncPeer`, which cannot read a
+// retention floor through the port (ADR-0028), so the object has no compaction
+// to offer until follow-up F1 builds one. A violation answers 422 with its
+// clause, never a trap.
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 function object(name: string) {
   return env.CONFORMANCE.get(env.CONFORMANCE.idFromName(name));
 }
+
+// The one rule allowed to skip, and the exact body it must skip with:
+// `skipped`, then the testkit's skip line carrying `UNSTATED_COMPACTION`
+// word for word. `src/sync_peer.rs`'s host test holds this text to the
+// testkit's const, so a reworded reason turns the gate red, not this job.
+const TOLERATED_SKIP = "retention_gap_is_reported_not_silent";
+const UNSTATED_COMPACTION = "this fixture cannot make its peer forget a prefix of its log; nothing in the port compacts, so compaction has to come from the adapter and this one has none to offer";
+const TOLERATED_BODY = `skipped\nSKIP ${TOLERATED_SKIP}: fixture declines \`COMPACTION\` — ${UNSTATED_COMPACTION}`;
 
 const listing = await object("sync-peer-rules").fetch("https://harness/sync-peer-rules");
 const rules = (await listing.text()).split("\n").filter((name) => name.length > 0);
@@ -34,7 +45,13 @@ describe("sync peer conformance under workerd", () => {
       );
       const body = await response.text();
       expect(response.status, body).toBe(200);
-      expect(body, "every sync rule runs; none is skipped").toBe("ran");
+      if (rule === TOLERATED_SKIP) {
+        expect(body, "SY-32's rule skips only for the suite's compaction reason").toBe(
+          TOLERATED_BODY,
+        );
+      } else {
+        expect(body, "every other sync rule runs; none is skipped").toBe("ran");
+      }
     });
   }
 
