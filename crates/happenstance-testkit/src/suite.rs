@@ -113,7 +113,7 @@ pub mod rules {
         tagged_event, tags,
     };
     use crate::settle::settle;
-    use crate::{Armed, Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, RuleOutcome};
+    use crate::{Armed, Fixture, NO_CEILING_REASON, NO_STORE_LIMITS, Removed, RuleOutcome};
 
     // ---------------------------------------------------------------------
     // The four guaranteed minima (VT-21 – VT-24)
@@ -7220,5 +7220,198 @@ pub mod rules {
         );
 
         RuleOutcome::Ran
+    }
+
+    // ---------------------------------------------------------------------
+    // Removal outside the port (CF-27, ADR-0028)
+    //
+    // At the end of the module for the frontier rule's reason above: the
+    // specification's `suite.rs:N` citations into the rules before it stay
+    // where they point.
+    // ---------------------------------------------------------------------
+
+    /// CF-27 (ADR-0028): a fixture that declares
+    /// [`REMOVAL`](crate::Fixture::REMOVAL) removes **exactly** the events it
+    /// is told to, from the store a caller already holds, and leaves every
+    /// other event as it was.
+    ///
+    /// This is the guard on the capability, CF-39's shape one capability over.
+    /// ES-38's and ES-40's rules stand on a fixture's removal, and a fixture
+    /// that removed nothing, or too much, or rebuilt the store from its
+    /// survivors, would hand them a store other than the one they describe.
+    ///
+    /// The removal is **interior and tail** together. The interior removal
+    /// rejects a fixture that can only cut a suffix, because a purge is
+    /// scattered (ES-39's argument). The tail removal is the case ES-38's rule
+    /// needs, so a fixture that refuses it fails here first.
+    ///
+    /// The wrong implementations, each in `tests/mutation_coverage/removal.rs`:
+    ///
+    /// * `ForgottenRemovalFixture` declares the capability and leaves the
+    ///   provided body, which answers [`Removed::Nothing`]. The answer check
+    ///   fails it before anything is read back.
+    /// * `NoopRemovalFixture` overrides with a body that answers
+    ///   [`Removed::Deleted`] and deletes nothing.
+    /// * `OverRemovingFixture` deletes everything from the lowest named
+    ///   position up, which is `DELETE … WHERE position >= ?`: the shape of
+    ///   the workspace's one existing raw delete, a discard rather than a
+    ///   removal of named positions.
+    /// * `RenumberingFixture` rebuilds the log from its survivors through
+    ///   `append`, which is the obvious removal on a store with no delete, and
+    ///   ES-38's *Rejects*.
+    ///
+    /// It asserts nothing about `head`, which is ES-38's and is a frontier on
+    /// some stores, and nothing about the next position, which is
+    /// `positions_are_not_reused_after_removal`'s.
+    pub async fn removal_outside_the_port_removes_exactly_the_named_events<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        require!(F: REMOVAL);
+
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let first = append_ok(&store, &[tagged_event("Kept", &[("removal", "kept")])]).await;
+        let interior = append_ok(
+            &store,
+            &[tagged_event("RemovedInterior", &[("removal", "interior")])],
+        )
+        .await;
+        let between = append_ok(
+            &store,
+            &[tagged_event("KeptBetween", &[("removal", "between")])],
+        )
+        .await;
+        let tail = append_ok(
+            &store,
+            &[tagged_event("RemovedTail", &[("removal", "tail")])],
+        )
+        .await;
+
+        settle!(fixture);
+        let before = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        // The anchor, compared only against positions this store returned. It
+        // is also what makes the pattern below irrefutable in practice: a read
+        // of any other length has already failed here.
+        assert_eq!(
+            positions_of(&before),
+            [first, interior, between, tail].map(SequencePosition::get),
+            "the anchor: four events were appended before anything was removed, \
+             so a read must show exactly those four, at the positions their \
+             appends returned. Got {:?}",
+            types_of(&before)
+        );
+        if let [kept, removed_interior, kept_between, removed_tail] = before.as_slice() {
+            let answer = fixture.remove_outside_port(&[interior, tail]).await;
+            assert_eq!(
+                answer,
+                Removed::Deleted,
+                "the answer: a fixture declaring `REMOVAL` supported MUST override \
+                 `remove_outside_port` and return `Removed::Deleted` once it has \
+                 removed the named events. This fixture left the provided body, \
+                 which removes nothing"
+            );
+
+            let after = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+            assert_removed_exactly(
+                &before,
+                &after,
+                [kept, kept_between],
+                [removed_interior, removed_tail],
+            );
+            assert_membership_follows_removal(&store, kept, [removed_interior, removed_tail]).await;
+        }
+
+        RuleOutcome::Ran
+    }
+
+    /// Fails, with the message that names the defect, unless `after` is
+    /// `before` with exactly the `removed` events gone and every survivor
+    /// unchanged.
+    ///
+    /// A survivor is found by its [`Event`], not by its position, so that a
+    /// store which renumbered its survivors is told apart from one that lost
+    /// them.
+    fn assert_removed_exactly(
+        before: &[SequencedEvent],
+        after: &[SequencedEvent],
+        survivors: [&SequencedEvent; 2],
+        removed: [&SequencedEvent; 2],
+    ) {
+        let shown: Vec<&SequencedEvent> = after.iter().collect();
+        if shown == survivors {
+            return;
+        }
+        assert!(
+            after != before,
+            "the removal: the fixture answered `Removed::Deleted` and removed \
+             nothing. A read on the handle the rule already held still shows all \
+             four events, including the two it named at positions {:?}. CF-39's \
+             shape: a fixture whose removal cannot reach the store's own storage \
+             MUST decline `REMOVAL`",
+            removed.map(|event| event.position.get())
+        );
+        for survivor in survivors {
+            let found = after.iter().find(|shown| shown.event == survivor.event);
+            assert!(
+                found.is_some(),
+                "a survivor is missing: {:?} at position {} was not named, and the \
+                 removal took it too. `DELETE … WHERE position >= ?` is the \
+                 discard shape, not the removal of named positions. Shown after \
+                 the removal: {:?}",
+                survivor.event_type().as_str(),
+                survivor.position,
+                types_of(after)
+            );
+            assert!(
+                found == Some(survivor),
+                "a survivor's position or id changed: {:?} was at position {} with \
+                 identity {:?}, and after the removal it reads back as {found:?}. A \
+                 store rebuilt from its survivors is a different store (ES-38's \
+                 Rejects, VT-6): its positions and identities are not the ones \
+                 every reader and checkpoint already holds",
+                survivor.event_type().as_str(),
+                survivor.position,
+                survivor.id
+            );
+        }
+        assert_eq!(
+            positions_of(after),
+            survivors.map(|event| event.position.get()),
+            "a named event is still there: the removal was told to remove \
+             positions {:?}, and every survivor is unchanged, but the read does \
+             not show the survivors alone",
+            removed.map(|event| event.position.get())
+        );
+    }
+
+    /// Fails unless `contains_event_id` answers `false` for every removed
+    /// identity and `true` for the survivor's.
+    ///
+    /// An event removed from `read` and still reported held is half a removal,
+    /// and ES-40's rule, which conditions on removed history, would be judging
+    /// a store that still has it.
+    async fn assert_membership_follows_removal<S: EventStore>(
+        store: &S,
+        survivor: &SequencedEvent,
+        removed: [&SequencedEvent; 2],
+    ) {
+        for gone in removed {
+            let held = store.contains_event_id(gone.id).await;
+            assert!(
+                matches!(held, Ok(false)),
+                "removal is from the store, not from `read`: {:?} was removed and \
+                 `read` no longer shows it, so `contains_event_id` MUST answer \
+                 `false` for it. Got {held:?}",
+                gone.id
+            );
+        }
+        let kept = store.contains_event_id(survivor.id).await;
+        assert!(
+            matches!(kept, Ok(true)),
+            "a survivor is still held: {:?} was not named, so `contains_event_id` \
+             MUST still answer `true` for it. Got {kept:?}",
+            survivor.id
+        );
     }
 }

@@ -820,6 +820,12 @@ const PROJECTION_WASM_RULES: &[&str] = &[
 /// state through a `RefCell` that is *tried*, and ADR-0011's ceiling-and-page is
 /// what keeps a cursor off a suspension point. They are the rules that look
 /// hardest here and the first any narrowing would reach for.
+///
+/// `removal_outside_the_port_removes_exactly_the_named_events` is the
+/// atomicity pair's argument one capability over (#147). This fixture grants
+/// `REMOVAL` with raw SQL against the object's own SQLite, and a regression
+/// turning the constant back to a decline would leave the guard green as a
+/// skip, along with ES-38's rule that stands on it.
 const CLOUDFLARE_WASM_RULES: &[&str] = &[
     "two_fixture_instances_observe_none_of_each_others_appends",
     "two_handles_observe_each_others_appends",
@@ -831,6 +837,7 @@ const CLOUDFLARE_WASM_RULES: &[&str] = &[
     "append_reports_exceeded_store_limits",
     "read_result_is_stable_under_concurrent_append",
     "a_live_read_stream_does_not_block_an_append",
+    "removal_outside_the_port_removes_exactly_the_named_events",
 ];
 
 /// The sync rules named for the replication row.

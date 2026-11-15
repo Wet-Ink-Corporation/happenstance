@@ -45,7 +45,7 @@ defining crate and resolve it — the failure only appears in the first adapter
 crate outside the workspace, months later, and reads as though the adapter did
 something wrong.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:668 (for_each_event_store_rule!($emit))` ·
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:669 (for_each_event_store_rule!($emit))` ·
 `crates/happenstance-testkit/src/registry.rs:82 (bare name resolves in *your* scope)` ·
 [SPECIFICATION CF-23](../../spec/SPECIFICATION.md) *(why the emitter is a
 parameter at all)*
@@ -90,7 +90,7 @@ emitter, and arrives at "a macro cannot return a value", which is false.
 
 **Evidence.** `crates/happenstance-testkit/src/registry.rs:95 (captured as raw token trees)` ·
 `crates/happenstance-testkit/src/registry.rs:101 (meta-test below needs)` ·
-`crates/happenstance-testkit/src/registry.rs:442 (for_each_event_store_rule!(crate::__rule_names))`
+`crates/happenstance-testkit/src/registry.rs:445 (for_each_event_store_rule!(crate::__rule_names))`
 
 ## RS-41-3. Order arms most-literal-first; the first arm that matches is the one that expands.
 
@@ -142,11 +142,11 @@ general arm's expansion happens to type-check anyway, or an
 macro expansion they did not write, naming a binding they never declared. Nothing
 anywhere points at the arm order that caused it.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:618 (macro_rules! event_store_conformance)`
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:619 (macro_rules! event_store_conformance)`
 *(the comment there attributes the order to never having to back out of
 `fixture = $fixture:expr`; measured on 1.97.1 that arm backs out either way —
 the order is load-bearing for the reason above, not that one)* ·
-`crates/happenstance-testkit/src/lib.rs:680 (mod_name = dcb_conformance,)` ·
+`crates/happenstance-testkit/src/lib.rs:681 (mod_name = dcb_conformance,)` ·
 [Reference — macros by example, transcription](https://doc.rust-lang.org/reference/macros-by-example.html)
 *(checked 2026-08-09, rustc 1.97.1)*
 
@@ -192,7 +192,7 @@ backing store, so `two_fixture_instances_observe_none_of_each_others_appends`
 cannot be written at all — and the isolation defect it exists to catch becomes
 untestable rather than undetected.
 
-**Evidence.** `crates/happenstance-testkit/src/lib.rs:639 (__conformance_fixture() -> impl $crate::__private::Fixture)` ·
+**Evidence.** `crates/happenstance-testkit/src/lib.rs:640 (__conformance_fixture() -> impl $crate::__private::Fixture)` ·
 `crates/happenstance-testkit/src/registry.rs:40 (which it could not know)` ·
 `crates/happenstance-testkit/src/concurrency.rs:1521 (impl $crate::__private::ConcurrentFixture)`
 
@@ -237,7 +237,7 @@ the result. Every capability-gated rule then passes silently, and the adapter's
 CI reports a full green suite in which `acknowledged_writes_survive_a_reopen`
 never ran and nothing anywhere says so.
 
-**Evidence.** `crates/happenstance-testkit/src/contract.rs:1450 (a rule's outcome must be reported)` ·
+**Evidence.** `crates/happenstance-testkit/src/contract.rs:1552 (a rule's outcome must be reported)` ·
 `crates/happenstance-testkit/src/registry.rs:51 (It is not asked politely)` ·
 [SPECIFICATION CF-18](../../spec/SPECIFICATION.md) *(the reporting
 obligation this attribute mechanises)*

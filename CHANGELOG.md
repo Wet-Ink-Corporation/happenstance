@@ -106,6 +106,32 @@ not the same as what a user needed to be told.
   this rule's skip with `UNSTATED_COMPACTION`'s reason and no other (D10)
   until its Durable Object can compact.
   `tests/wrong_retention.rs` carries seven wrong peers it rejects.
+- `happenstance-testkit`: a removal capability on `Fixture` (#147). The
+  defaulted `const REMOVAL: Capability`, declined in `UNSTATED_REMOVAL`'s
+  words on `MID_BATCH_FAULT`'s precedent, and the provided
+  `remove_outside_port(&self, &[SequencePosition]) -> impl Future<Output = Removed>`,
+  through which a fixture deletes events from its store outside the port, as
+  a retention job's raw `DELETE` does (ADR-0028). `Removed { Deleted, Nothing }`
+  is what the method reports; the provided body answers `Nothing`. A new rule,
+  `removal_outside_the_port_removes_exactly_the_named_events`, is its guard: a
+  fixture that declares the capability must remove exactly the named events,
+  interior and tail, from a handle the rule already holds, leave every survivor
+  byte-identical, and stop reporting the removed identities as held. Four
+  wrong fixtures in the testkit's own tests fail it (a forgotten override, an
+  empty one, `DELETE … WHERE position >= ?`, and a rebuild from the
+  survivors). A fixture that says nothing skips the rule with the testkit's
+  reason and CF-18's emitted check accepts the silence, so no existing
+  adapter's CI changes colour. `MemoryFixture` declines it in its own words: it
+  allocates from its log's length, so a removal would reuse positions. This is
+  what ES-38's and ES-40's rules (#151, #154) will stand on against the real
+  adapters.
+- `happenstance-sqlite`, `happenstance-postgres`, `happenstance-neon`,
+  `happenstance-cloudflare`: the conformance fixture grants `REMOVAL` with a
+  raw `DELETE` on the adapter's own storage, and a smoke test records that the
+  `StoreId` survives a removal and the next append lands above the removed
+  tail. No API change. The Cloudflare fixture's documentation says that a
+  Durable Object wiped by `delete_all()` is a different store, with a new
+  `StoreId` and positions restarting under it (VT-6, ADR-0086), not a removal.
 
 ### Changed
 

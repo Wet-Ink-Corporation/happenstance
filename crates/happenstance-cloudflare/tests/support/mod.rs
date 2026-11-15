@@ -70,7 +70,7 @@ use core::future::Future;
 
 use happenstance_cloudflare::host::DurableObjectHost;
 use happenstance_cloudflare::{CloudflareEventStore, SqlStorage, SqlValue};
-use happenstance_testkit::{Capability, Fixture};
+use happenstance_testkit::{Capability, Fixture, Removed};
 
 /// The text the armed trigger raises with.
 ///
@@ -336,6 +336,28 @@ impl Fixture for CloudflareFixture {
     /// holds it to the walls and to the other two ceilings.
     const MAX_TAGS_PER_BATCH: Option<usize> = Some(256 * 1024);
 
+    /// Supported: raw SQL against the object's own SQLite reaches the store's
+    /// own storage, through the same `sql.exec` the mid-batch trigger is armed
+    /// with.
+    ///
+    /// # Same store, not a new one
+    ///
+    /// This is a removal from the **same** store. `store_meta` and
+    /// `sqlite_sequence` are not touched, so the `StoreId` and the
+    /// `AUTOINCREMENT` high-water mark both survive it, and a removed position
+    /// is never handed out again; `CloudflareEventStore::discard_from` already
+    /// relies on that.
+    ///
+    /// A Durable Object wiped by `ctx.storage.deleteAll()` (`delete_all()` in
+    /// `worker`) is a **different** store. Every table goes, `store_meta` with
+    /// them, so the next `migrate` mints a new `StoreId`; `AUTOINCREMENT`
+    /// restarts with it, and positions restart under the new incarnation
+    /// (VT-6, ADR-0086, ADR-0028). A checkpoint held elsewhere can then sit
+    /// above the new head. That is a checkpoint and `StoreId` mismatch for the
+    /// typed runner, and the remedy is `reset`. It is not ES-38's case, and
+    /// this capability does not model it.
+    const REMOVAL: Capability = Capability::SUPPORTED;
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // `ready` rather than `async move`: acquiring this handle is a refcount
         // bump and one JS property read, and pretending otherwise would hide
@@ -416,5 +438,47 @@ impl Fixture for CloudflareFixture {
         )
         .expect("the fault trigger applies");
         core::future::ready(())
+    }
+
+    fn remove_outside_port(
+        &self,
+        // Spelled out rather than imported, so that the lines above keep the
+        // numbers the knowledge base cites.
+        positions: &[happenstance_core::SequencePosition],
+    ) -> impl Future<Output = Removed> {
+        // Raw SQL against the object's own SQLite, which is where a retention
+        // job on a Durable Object would delete from. Per position, the tag rows
+        // first and then the event row: `event_tag.position REFERENCES
+        // event(position)`, so this order is right whether or not the object
+        // enforces the reference. It is `CloudflareEventStore::discard_from`'s
+        // order and its exact-set sibling, not a copy: `discard_from` deletes
+        // `>= from`, which is the over-removal the guard rule rejects.
+        //
+        // No rows-affected check, because `SqlCursor` reports rows read and not
+        // rows written. The guard rule's read-back is the backstop.
+        //
+        // The borrow is taken and dropped inside this synchronous body and the
+        // future is `ready`, so nothing holds it across an await.
+        let mut distinct: Vec<i64> = positions
+            .iter()
+            .map(|position| i64::try_from(position.get()).expect("a SQLite position fits i64"))
+            .collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+
+        let sql = self.sql.borrow();
+        for position in distinct {
+            sql.exec(
+                "DELETE FROM event_tag WHERE position = ?",
+                &[SqlValue::Integer(position)],
+            )
+            .expect("the event's tag rows are deleted");
+            sql.exec(
+                "DELETE FROM event WHERE position = ?",
+                &[SqlValue::Integer(position)],
+            )
+            .expect("the event row is deleted");
+        }
+        core::future::ready(Removed::Deleted)
     }
 }
