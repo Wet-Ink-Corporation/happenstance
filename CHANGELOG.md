@@ -97,6 +97,35 @@ not the same as what a user needed to be told.
   tail. No API change. The Cloudflare fixture's documentation says that a
   Durable Object wiped by `delete_all()` is a different store, with a new
   `StoreId` and positions restarting under it (VT-6, ADR-0086), not a removal.
+- `happenstance-testkit`: a new event-store rule,
+  `positions_are_not_reused_after_removal` (ES-38, #151), run by every fixture
+  that grants `REMOVAL`. It removes the tail outside the port, then
+  everything, and requires each next append to land above every position the
+  store has ever assigned, `head` to name an event the store still holds (or
+  be `None` once it holds none), and the removed identity to stay unheld. It
+  detects an event table keyed by `INTEGER PRIMARY KEY` without
+  `AUTOINCREMENT`, which hands a deleted tail's position out again (ES-38's
+  named wrong implementation, measured on real SQLite in
+  `happenstance-sqlite`'s migration test), a `head` read from the allocator
+  rather than the rows, and a purge that rewinds the allocator with `TRUNCATE
+  … RESTART IDENTITY`. A fixture that declines `REMOVAL` skips it with its own
+  reason, so no adapter that says nothing goes red. CF-27's instrument now
+  grants `REMOVAL` by forwarding to `withhold`, and the rule passes there by
+  delegation.
+- `happenstance-testkit`: a new event-store rule,
+  `condition_over_removed_history_does_not_reject` (ES-40, #154), run by every
+  fixture that grants `REMOVAL`. It removes the only event a condition
+  matches, outside the port, and requires the conditional append to be
+  admitted (ADR-0028's vacuous pass), while conditions over the events on
+  either side of the hole still refuse. It detects a soft delete whose
+  condition path still sees the removed rows, a store that refuses every
+  condition once it knows it has been pruned (E2E-47's fail-closed outcome,
+  which ADR-0028 rejects for 1.x), and a store that stops evaluating
+  conditions once it has lost history. A fixture that declines `REMOVAL` skips
+  it with its own reason. It passes on CF-27's instrument and on
+  `happenstance-sqlite`.
+- `happenstance-core`: `AppendCondition`'s documentation names the rule that
+  checks its vacuous pass over removed history. Documentation only.
 
 ### Changed
 

@@ -2188,60 +2188,206 @@ const REGISTRY: &[Declared] = &[
     Declared {
         name: "ForgottenRemovalFixture",
         kind: Kind::Mutant,
-        fails: &["removal_outside_the_port_removes_exactly_the_named_events"],
+        fails: &[
+            "removal_outside_the_port_removes_exactly_the_named_events",
+            "positions_are_not_reused_after_removal",
+            "condition_over_removed_history_does_not_reject",
+        ],
         provenance: "a fixture that declares `REMOVAL` supported and leaves \
              `remove_outside_port` to the trait's provided body, which answers \
              `Removed::Nothing`. It is the author who claims the capability first and means \
              to write the `DELETE` later. The answer check fails it on every run, before \
-             anything is read back, with a message naming the method.",
+             anything is read back, with a message naming the method, and ES-38's and \
+             ES-40's rules share that check, so they fail with the same message.",
         mode: FailureMode::Assertion,
-        expect: &[(
-            "removal_outside_the_port_removes_exactly_the_named_events",
-            "MUST override `remove_outside_port`",
-        )],
+        expect: &[
+            (
+                "removal_outside_the_port_removes_exactly_the_named_events",
+                "MUST override `remove_outside_port`",
+            ),
+            (
+                "positions_are_not_reused_after_removal",
+                "MUST override `remove_outside_port`",
+            ),
+            (
+                "condition_over_removed_history_does_not_reject",
+                "MUST override `remove_outside_port`",
+            ),
+        ],
     },
     Declared {
         name: "NoopRemovalFixture",
         kind: Kind::Mutant,
-        fails: &["removal_outside_the_port_removes_exactly_the_named_events"],
+        fails: &[
+            "removal_outside_the_port_removes_exactly_the_named_events",
+            "positions_are_not_reused_after_removal",
+            "condition_over_removed_history_does_not_reject",
+        ],
         provenance: "`NoopFaultFixture`'s author one capability over: an override that \
              answers `Removed::Deleted` with an empty body, written while stubbing the \
              method. The answer check passes. Without the read-back, ES-38's and ES-40's \
-             rules would then run against a store nothing was removed from, and pass.",
+             rules would then run against a store nothing was removed from, and pass; \
+             both read back too, and refuse to judge a store nothing left.",
         mode: FailureMode::Assertion,
-        expect: &[(
-            "removal_outside_the_port_removes_exactly_the_named_events",
-            "removed nothing",
-        )],
+        expect: &[
+            (
+                "removal_outside_the_port_removes_exactly_the_named_events",
+                "removed nothing",
+            ),
+            (
+                "positions_are_not_reused_after_removal",
+                "the removal did not take",
+            ),
+            (
+                "condition_over_removed_history_does_not_reject",
+                "the removal did not leave exactly the survivors",
+            ),
+        ],
     },
     Declared {
         name: "OverRemovingFixture",
         kind: Kind::Mutant,
-        fails: &["removal_outside_the_port_removes_exactly_the_named_events"],
+        fails: &[
+            "removal_outside_the_port_removes_exactly_the_named_events",
+            "condition_over_removed_history_does_not_reject",
+        ],
         provenance: "a removal written by copying `CloudflareEventStore::discard_from`, the \
              workspace's one existing raw delete: `DELETE … WHERE position >= ?` from the \
              lowest named position. It removes the named events and every survivor above \
              the first of them. A tail-only removal could not tell it from a correct one; \
-             the rule's interior removal can.",
+             the rule's interior removal can, and so can ES-40's, which removes an interior \
+             event. ES-38's rule removes only the tail and then everything, where it is \
+             exact, so it passes there.",
         mode: FailureMode::Assertion,
-        expect: &[(
-            "removal_outside_the_port_removes_exactly_the_named_events",
-            "a survivor is missing",
-        )],
+        expect: &[
+            (
+                "removal_outside_the_port_removes_exactly_the_named_events",
+                "a survivor is missing",
+            ),
+            (
+                "condition_over_removed_history_does_not_reject",
+                "the removal did not leave exactly the survivors",
+            ),
+        ],
     },
     Declared {
         name: "RenumberingFixture",
         kind: Kind::Mutant,
-        fails: &["removal_outside_the_port_removes_exactly_the_named_events"],
+        fails: &[
+            "removal_outside_the_port_removes_exactly_the_named_events",
+            "positions_are_not_reused_after_removal",
+        ],
         provenance: "the obvious removal on a store with no delete: read the whole log, drop \
              the named events, and append the survivors into a fresh one. The survivors \
              are all there, by content, and every one above the first hole has a new \
              position and a new identity. That is ES-38's Rejects, a store rebuilt from \
-             its survivors, and VT-6's different store under the same name.",
+             its survivors, and VT-6's different store under the same name. After a tail \
+             removal the survivors keep their positions, and the fresh log hands the \
+             tail's out again, which ES-38's rule refuses.",
+        mode: FailureMode::Assertion,
+        expect: &[
+            (
+                "removal_outside_the_port_removes_exactly_the_named_events",
+                "a survivor's position or id changed",
+            ),
+            (
+                "positions_are_not_reused_after_removal",
+                "a removed position was handed out again",
+            ),
+        ],
+    },
+    // --- After a removal (#151) -----------------------------------------
+    //
+    // Fixtures whose removal is exactly right, so the guard passes them, and
+    // whose store gets one step after it wrong. Each overrides one provided
+    // step of `removed_history::AfterRemoval`.
+    Declared {
+        name: "RowidReuseFixture",
+        kind: Kind::Mutant,
+        fails: &["positions_are_not_reused_after_removal"],
+        provenance: "ES-38's named wrong implementation: an event table keyed by \
+             `INTEGER PRIMARY KEY` without `AUTOINCREMENT`. SQLite keeps `sqlite_sequence` \
+             only for `AUTOINCREMENT` tables, so after a retention job deletes the tail the \
+             next insert takes one above the largest rowid still held, which is the deleted \
+             tail's position. `happenstance-sqlite`'s migration test shows it on real SQLite.",
         mode: FailureMode::Assertion,
         expect: &[(
-            "removal_outside_the_port_removes_exactly_the_named_events",
-            "a survivor's position or id changed",
+            "positions_are_not_reused_after_removal",
+            "a removed position was handed out again",
+        )],
+    },
+    Declared {
+        name: "SequenceHeadFixture",
+        kind: Kind::Mutant,
+        fails: &["positions_are_not_reused_after_removal"],
+        provenance: "an O(1) `head` read from the allocator, `SELECT seq FROM \
+             sqlite_sequence` or a Postgres sequence's `last_value`, instead of \
+             `max(position)` over the rows. It agrees with every rule until something is \
+             removed, and then names a tail the store no longer holds.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "positions_are_not_reused_after_removal",
+            "head names an event the store no longer holds",
+        )],
+    },
+    Declared {
+        name: "TruncatingWhenEmptyFixture",
+        kind: Kind::Mutant,
+        fails: &["positions_are_not_reused_after_removal"],
+        provenance: "a retention job that purges a whole store with `TRUNCATE … \
+             RESTART IDENTITY` because it is faster than a `DELETE`, or that resets the \
+             sequence once the table is empty. Every partial removal is correct; removing \
+             everything restarts positions under the same identity, which `REMOVAL`'s \
+             documentation already calls a different store.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "positions_are_not_reused_after_removal",
+            "a store emptied by removal",
+        )],
+    },
+    // --- A condition over removed history (#154) -------------------------
+    //
+    // The same shape: the removal is right, and the condition an append
+    // evaluates afterwards is not.
+    Declared {
+        name: "RememberingConditionFixture",
+        kind: Kind::Mutant,
+        fails: &["condition_over_removed_history_does_not_reject"],
+        provenance: "a soft delete: a retention job sets `deleted_at`, and the read, head \
+             and membership queries learn to filter on it while the condition's `EXISTS` \
+             does not. The store refuses an append over an event its own `read` no longer \
+             yields. It is also `WithholdingStore` without its condition rewrite.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "condition_over_removed_history_does_not_reject",
+            "passes vacuously",
+        )],
+    },
+    Declared {
+        name: "FailClosedFixture",
+        kind: Kind::Mutant,
+        fails: &["condition_over_removed_history_does_not_reject"],
+        provenance: "the sympathetic adapter: it knows it has been pruned and refuses every \
+             conditional append rather than risk an unsound admit. That is E2E-47's third \
+             outcome, 'this log cannot evaluate', which ADR-0028 rejects for 1.x, spelled as \
+             `ConditionViolated` because that is the only refusal the port has.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "condition_over_removed_history_does_not_reject",
+            "passes vacuously",
+        )],
+    },
+    Declared {
+        name: "ConditionBlindFixture",
+        kind: Kind::Mutant,
+        fails: &["condition_over_removed_history_does_not_reject"],
+        provenance: "the opposite misreading of ES-40's MAY: a pruned store's conditions are \
+             unsound, so it stops evaluating them. It admits an append over an event it \
+             still holds, which a condition over a survivor must refuse.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "condition_over_removed_history_does_not_reject",
+            "a removal is not a licence",
         )],
     },
     // --- Value edges ---------------------------------------------------
@@ -2979,6 +3125,25 @@ macro_rules! for_each_mutant {
             crate::mutants::removal::WrongRemovalFixture<crate::mutants::removal::NoopRemoval>,
             crate::mutants::removal::WrongRemovalFixture<crate::mutants::removal::OverRemoving>,
             crate::mutants::removal::WrongRemovalFixture<crate::mutants::removal::Renumbering>,
+
+            crate::mutants::removed_history::AfterRemovalFixture<
+                crate::mutants::removed_history::RowidReuse,
+            >,
+            crate::mutants::removed_history::AfterRemovalFixture<
+                crate::mutants::removed_history::SequenceHead,
+            >,
+            crate::mutants::removed_history::AfterRemovalFixture<
+                crate::mutants::removed_history::TruncatingWhenEmpty,
+            >,
+            crate::mutants::removed_history::AfterRemovalFixture<
+                crate::mutants::removed_history::RememberingCondition,
+            >,
+            crate::mutants::removed_history::AfterRemovalFixture<
+                crate::mutants::removed_history::FailClosed,
+            >,
+            crate::mutants::removed_history::AfterRemovalFixture<
+                crate::mutants::removed_history::ConditionBlind,
+            >,
         }
     };
 }
@@ -3184,9 +3349,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Sixty-six rows below are marked [`ModelOutcome::Agreed`] at this commit;
+/// Seventy-two rows below are marked [`ModelOutcome::Agreed`] at this commit;
 /// four of them are the conformant controls and *must* be, which leaves
-/// **sixty-two misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// **sixty-eight misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -3252,6 +3417,10 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 ///   `RenumberingFixture` — the same shape as `NoTransactionStore`: each
 ///   defect is in what the fixture's `remove_outside_port` does, and the model
 ///   never calls it. Unremoved, each store is an ordinary correct one.
+///   `RowidReuseFixture`, `SequenceHeadFixture`,
+///   `TruncatingWhenEmptyFixture`, `RememberingConditionFixture`,
+///   `FailClosedFixture` and `ConditionBlindFixture` are wrong only after a
+///   removal, so the same argument covers them.
 /// * The ten value edges, from `EmptyPayloadIsNullStore` to
 ///   `ChunkLosingBatchStore` — one shape rather than ten. Every one of them is
 ///   wrong only at a boundary `fixtures::strategies::any_event` does not reach:
@@ -3386,6 +3555,14 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("NoopRemovalFixture", ModelOutcome::Agreed),
     ("OverRemovingFixture", ModelOutcome::Agreed),
     ("RenumberingFixture", ModelOutcome::Agreed),
+    // The stores ES-38's and ES-40's rules reject (#151, #154): the model
+    // never removes, so for the same reason each is its correct store.
+    ("RowidReuseFixture", ModelOutcome::Agreed),
+    ("SequenceHeadFixture", ModelOutcome::Agreed),
+    ("TruncatingWhenEmptyFixture", ModelOutcome::Agreed),
+    ("RememberingConditionFixture", ModelOutcome::Agreed),
+    ("FailClosedFixture", ModelOutcome::Agreed),
+    ("ConditionBlindFixture", ModelOutcome::Agreed),
     ("EmptyPayloadIsNullStore", ModelOutcome::Agreed),
     ("MetadataConflatingStore", ModelOutcome::Agreed),
     ("NarrowIdentifierColumnStore", ModelOutcome::Agreed),
@@ -4199,15 +4376,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 66,
-            "`MODEL_COVERAGE`'s heading says sixty-six rows are `Agreed` and the \
+            agreed, 72,
+            "`MODEL_COVERAGE`'s heading says seventy-two rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            62,
-            "`MODEL_COVERAGE`'s heading says sixty-two misses and the table \
+            68,
+            "`MODEL_COVERAGE`'s heading says sixty-eight misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls
@@ -5134,6 +5311,8 @@ mod mutation_coverage {
         "arming_a_mid_batch_fault_makes_the_append_fail",
         "append_reports_exceeded_store_limits",
         "removal_outside_the_port_removes_exactly_the_named_events",
+        "positions_are_not_reused_after_removal",
+        "condition_over_removed_history_does_not_reject",
     ];
 
     /// CF-18. A capability-gated rule is still emitted, still answered, and
