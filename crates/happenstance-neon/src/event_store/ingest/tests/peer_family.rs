@@ -103,9 +103,11 @@ impl SyncFixture for NeonPeerFixture {
     }
 
     /// Drops the transport, and with it the client's pooled HTTPS
-    /// connections.
+    /// connections. Taken out of the cell first, so the destructor runs after
+    /// the guard is released.
     async fn reopen(&self) -> Reopened {
-        drop(self.current().take());
+        let dropped = self.current().take();
+        drop(dropped);
         Reopened::Discarded
     }
 }

@@ -18,8 +18,6 @@
 //! `live-postgres` job already runs and counts every `#[ignore]`d test of this
 //! target, so mounting here needs no change to CI.
 
-use std::sync::{Mutex, MutexGuard};
-
 use happenstance_core::{Event, EventStore, Query, ReadOptions, SequencedEvent, Tags, collect};
 use happenstance_sync::{
     EventGroup, IngestGroup, IngestStore, PushBatch, StoreSyncPeer, SyncPeer, Waiting,
@@ -30,6 +28,7 @@ use happenstance_sync_testkit::{
 };
 use happenstance_testkit::{Capability, Reopened};
 use sqlx::PgPool;
+use tokio::sync::Mutex;
 
 use super::server;
 use crate::event_store::PostgresEventStore;
@@ -53,9 +52,10 @@ struct PostgresPeerFixture {
     ///
     /// A `Mutex` because the state really is shared and mutable (OWN-11):
     /// `connect` fills it and `reopen` empties it, both through `&self`, and
-    /// the fixture's futures may run on a multi-threaded runtime. A
-    /// `std::sync::Mutex`, not tokio's: every guard is a statement long and
-    /// none is held across an `.await`.
+    /// the fixture's futures may run on a multi-threaded runtime. Tokio's
+    /// `Mutex`, not `std`'s, because [`pool`](Self::pool) holds the guard
+    /// across the open and the migrations, which await: it is the once-guard
+    /// that keeps two connects from migrating one schema at the same time.
     pool: Mutex<Option<PgPool>>,
 }
 
@@ -70,25 +70,24 @@ impl PostgresPeerFixture {
     /// The pool onto this fixture's schema, opening one and applying the
     /// event log's migrations if there is none. The migrations are idempotent,
     /// so a pool opened after a reopen applies nothing.
+    ///
+    /// The guard is held across the open and the migrations, so connects are
+    /// serialised here: two racing connects would otherwise both run
+    /// `migration::apply` on one schema at once, and Postgres can reject a
+    /// concurrent `CREATE ... IF NOT EXISTS` with a unique violation on its
+    /// catalogue. The second connect waits, then finds the first one's pool.
     async fn pool(&self) -> PgPool {
-        let current = self.current().clone();
-        if let Some(pool) = current {
-            return pool;
+        let mut current = self.pool.lock().await;
+        if let Some(pool) = current.as_ref() {
+            // A cheap handle onto the pool, which the cell keeps.
+            return pool.clone();
         }
         let opened = server::pool_onto(&self.schema).await;
         migration::apply(&opened).await.unwrap_or_else(|error| {
             panic!("a broken test environment: the event log's migrations failed ({error})")
         });
-        // A cheap handle onto the pool, which the cell keeps. Should two
-        // connects race, the first pool stored wins and the other is dropped.
-        self.current().get_or_insert(opened).clone()
-    }
-
-    /// The cell, locked for one statement.
-    fn current(&self) -> MutexGuard<'_, Option<PgPool>> {
-        self.pool
-            .lock()
-            .expect("no test thread panics while holding the fixture's pool")
+        // A cheap handle onto the pool, which the cell keeps.
+        current.insert(opened).clone()
     }
 }
 
@@ -120,7 +119,7 @@ impl SyncFixture for PostgresPeerFixture {
     /// Closes the pool. Taken out of the cell first, so no guard is held
     /// across the close.
     async fn reopen(&self) -> Reopened {
-        let closing = self.current().take();
+        let closing = self.pool.lock().await.take();
         if let Some(pool) = closing {
             pool.close().await;
         }

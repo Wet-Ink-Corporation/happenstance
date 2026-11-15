@@ -24,9 +24,12 @@
 //! # No declension check
 //!
 //! `sync_peer_conformance!` emits one since #448, over `SyncFixture::REOPEN`,
-//! and this runner does not mount the macro, so it runs none: the fixture here
-//! keeps the default declension, and SY-31's rule runs without a reopen, as it
-//! did before the capability existed. A rule may still answer `skipped` with
+//! and this runner does not mount the macro, so it runs none. The fixture
+//! states its declension anyway, with its own reason rather than the default's
+//! ([`fixture::WorkerdSyncFixture`]'s `REOPEN`): each connect already
+//! re-derives its store from the object's state, and restarting the object is
+//! beyond a runner inside one request. So SY-31's rule runs without a reopen,
+//! as it did before the capability existed. A rule may still answer `skipped` with
 //! the reason the suite writes for it (`NO_SECOND_PAGE`, `NO_CONFIRMATION`),
 //! and the runner fails any skip: under `PeerLimits::minimum` this peer shows
 //! a page boundary and confirms what it acknowledges, so every rule must
