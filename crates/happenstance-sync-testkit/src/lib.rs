@@ -210,13 +210,16 @@
 //! convergent, by implementing
 //! [`ConvergentProjection`](happenstance::ConvergentProjection), is run under
 //! two interleavings of one set of events from two origins, and its read
-//! models must be byte-identical. The rule is called directly over a
+//! models must be byte-identical; and run over one arrival order numbered
+//! twice, densely and offset with gaps, and its read models must again be
+//! byte-identical. The rules are called directly over a
 //! [`ConvergenceFixture`]; there is no mounting macro, because there is no
-//! adapter to mount it beside and no capability to decline.
+//! adapter to mount them beside and no capability to decline.
 //!
 //! | Rule | Clause | What it rejects |
 //! |---|---|---|
 //! | [`convergent_projection_is_interleaving_independent`](convergence_rules::convergent_projection_is_interleaving_independent) | SY-20 | `unit-ledger`, and any declared fold whose answer depends on arrival order |
+//! | [`convergent_projection_cannot_observe_local_position`](convergence_rules::convergent_projection_cannot_observe_local_position) | SY-21 | a declared fold that writes its checkpoint, a local position, into its read model |
 //! | [`non_convergent_projections_are_excluded_not_failed`](convergence_rules::non_convergent_projections_are_excluded_not_failed) | SY-22 | a check with no exclusion, which fails FIFO cost layers, and a check that does not really reorder |
 //!
 //! A payload is decoded here, and only by the projection under test: a fold

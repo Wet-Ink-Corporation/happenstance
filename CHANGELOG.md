@@ -58,6 +58,22 @@ not the same as what a user needed to be told.
   `directional_merge_rules_compose` (SY-10) mount their merge rules through
   the shipped `Adjudicate` hook and `Accept`, rather than a private enum of
   their own. No rule's verdict changes against any store (#450).
+- `happenstance-sync-testkit`:
+  `convergence_rules::convergent_projection_cannot_observe_local_position`
+  (SY-21), the rule SY-21's Rule line has named since phase 18 (#457). It runs
+  a projection declared `happenstance::ConvergentProjection` over one arrival
+  order numbered twice, densely from the first position and offset with gaps,
+  one event per commit, and requires byte-identical read models. `Delivered`
+  already withholds the position. The rule compares read models, so any
+  channel that lets the local numbering reach them fails it; the one the port
+  a fold is given offers is its store's checkpoint. SY-21's text forbids the
+  position only in the value a fold folds over, so the rule takes a reading:
+  a fold may read its checkpoint but must not let it reach the read model.
+  `tests/wrong_projections.rs` fails a fold that writes its checkpoint into
+  its read model, which SY-20's rule passes, and shows that every fold SY-20's
+  rule fails passes this one. Joins `for_each_convergence_rule!`. The
+  convergence family has no mounting macro, so no adapter or fixture goes red;
+  a projection author calls the rule over a `ConvergenceFixture` of their own.
 - `happenstance-testkit`: `WithholdingStore` and `WithholdError`, CF-27's
   completeness instrument (#144). A decorator over any `EventStore` that holds
   a suffix or a scattered retained set of the inner store's log: a withheld
