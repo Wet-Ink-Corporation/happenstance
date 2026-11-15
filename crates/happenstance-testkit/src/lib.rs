@@ -407,15 +407,15 @@
 //! | `RecordingProjectionStore` (`memory`) | a log that tells a rollback from a bare drop, and injected `begin` and commit failures | a projection runner that drops a write set bare, or ends it after another view commits |
 //! | [`WithholdingStore`] | a log with an arbitrary retained set, whose withheld events no port value reveals | a runner or ingest path that infers completeness from any port value (ES-39, ES-40) |
 //!
-//! The faulty wrapper comes in two flavours, two *types* rather than one, for
-//! the coherence reason [`Fixture`]'s own page records; the recording and
-//! withholding stores are bare only, their pages say why. All four run their
-//! port's conformance suite themselves — the faulty and recording wrappers
-//! unarmed, so a disarmed one is proved not to be lying; the gapped store with
-//! its stride, so its gaps are the freedom the specification grants; and the
-//! withholding store pruned of its whole prior history, so pruning is invisible.
+//! The faulty wrapper comes in two flavours, two *types*, for the coherence reason
+//! [`Fixture`]'s page records; the recording and withholding stores are bare only.
+//! All four run their port's conformance suite themselves — the faulty and
+//! recording wrappers unarmed, so a disarmed one is proved not to be lying; the
+//! gapped store with its stride, so its gaps are a freedom the specification
+//! grants; the withholding store pruned of its history, so pruning is invisible.
 //!
-//! The two `memory` stores are named in plain text: a link behind a feature breaks some doc builds.
+//! The two `memory` stores are named in plain text, not linked: a link behind a
+//! feature breaks some doc builds. Each page carries the `doc_cfg` badge that says so.
 //!
 //! # Which flavour to test
 //!

@@ -2,7 +2,8 @@
 #
 # Every rule of the event-store, concurrency and model families, run against
 # `PrunedMemoryFixture`: a memory store behind a `WithholdingStore` that
-# withholds the six events seeded before each rule begins. A rule that `ran`
+# withholds the twelve events seeded before each rule begins, whose types and
+# tags are the ones the rules' append conditions name. A rule that `ran`
 # is a rule that cannot tell a pruned store from a young one, which is the
 # outcome CF-27 specifies. A rule that `skipped` names the capability the
 # fixture declines; the reason lives in the fixture's code, not here.

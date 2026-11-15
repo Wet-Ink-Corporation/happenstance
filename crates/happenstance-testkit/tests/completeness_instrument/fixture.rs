@@ -18,11 +18,38 @@ use happenstance_core::EventStore;
 use happenstance_testkit::fixtures::{MemoryFixture, MemoryHandle, tagged_event};
 use happenstance_testkit::{Capability, Fixture, WithholdingStore};
 
-/// The seeded history: three batches, of one, two and three events.
+/// The seeded history: three batches of the event types the suite's rules
+/// put in their append conditions.
+///
+/// Chosen so that the history is *dangerous*: were a withheld event still seen
+/// by a condition, rules that expect an append to land would be refused. A
+/// history no rule's condition matches would leave the condition rewrite
+/// untested by every family but the model (the review finding on #144).
 const SEEDED: [&[&str]; 3] = [
-    &["Opened"],
-    &["Moved", "Moved"],
-    &["Closed", "Closed", "Closed"],
+    &["Blocker"],
+    &["Existing", "Anything", "First", "A"],
+    &[
+        "Enrolled",
+        "StudentSubscribed",
+        "CourseCapacityChanged",
+        "Written",
+        "Hit",
+        "TariffPublished",
+        "MeterReadingTaken",
+    ],
+];
+
+/// The tags those conditions name. Every seeded event carries all of them, so
+/// a tag query matches it whatever its type (a superset matches).
+const TAGS: &[(&str, &str)] = &[
+    ("course", "c1"),
+    ("course", "c0"),
+    ("student", "s1"),
+    ("enrolment", "c1-s1"),
+    ("writer", "b0"),
+    ("k", "v"),
+    ("tariff", "t1"),
+    ("meter", "m1"),
 ];
 
 /// One isolated memory store behind a `WithholdingStore` that withholds
@@ -32,19 +59,19 @@ pub(crate) struct PrunedMemoryFixture {
 }
 
 impl PrunedMemoryFixture {
-    /// Seeds six events in three batches, then withholds every one of them.
+    /// Seeds twelve events in three batches, then withholds every one of them.
     ///
     /// # Panics
     ///
-    /// If the instrument reports anything but the six positions it was asked
-    /// to withhold: the suite would then be measuring a broken fixture.
+    /// If the instrument reports anything but the positions it was asked to
+    /// withhold: the suite would then be measuring a broken fixture.
     pub(crate) async fn pruned() -> Self {
         let memory = MemoryFixture::new();
         let store = WithholdingStore::new(memory.connect().await);
         for batch in SEEDED {
             let events: Vec<_> = batch
                 .iter()
-                .map(|event_type| tagged_event(event_type, &[("pruned", "yes")]))
+                .map(|event_type| tagged_event(event_type, TAGS))
                 .collect();
             store
                 .append(&events, None)

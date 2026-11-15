@@ -38,7 +38,8 @@ impl Defect for LastCallReport {
 }
 
 /// Answers membership from the inner store: the decorator that forgot ES-41.
-/// The suite cannot catch it, because the suite never withholds.
+/// The suite cannot reach it: no rule asks `contains_event_id` of an event it
+/// did not itself append, and only withheld history was appended before the rule.
 pub(crate) struct LeakyMembership;
 
 impl Defect for LeakyMembership {

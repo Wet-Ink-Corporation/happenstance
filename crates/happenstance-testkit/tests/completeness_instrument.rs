@@ -16,8 +16,9 @@
 //!
 //! Three wrong instruments are rejected by the second half's own code path:
 //! a report of a range, a report of the last call only, and a decorator that
-//! forgot to answer membership itself. The suite cannot catch the third, which
-//! is why the report half exists.
+//! forgot to answer membership itself. The suite cannot reach the third: no rule
+//! asks `contains_event_id` of an event it did not itself append. That is why
+//! the report half exists.
 //!
 //! The same fixture is also mounted through each family's macro, so a failing
 //! rule names itself as a test of its own.

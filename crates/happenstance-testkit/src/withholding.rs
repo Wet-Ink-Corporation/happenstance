@@ -143,6 +143,10 @@ impl<E: core::error::Error + 'static> core::error::Error for WithholdError<E> {
 /// same arguments. Cloning it produces a second handle onto the **same**
 /// withheld set.
 ///
+/// **Cost.** Each conditional append made while anything is withheld first reads
+/// the inner log up to the highest withheld position, which is what an
+/// instrument can afford and an adapter could not.
+///
 /// # What it cannot model
 ///
 /// - **Ingest deduplication.** The inner store still holds what is withheld, so
@@ -355,7 +359,7 @@ impl<S: EventStore> WithholdingStore<S> {
     ///
     ///     // Withhold a prefix of history: the store now holds only a suffix.
     ///     let withheld = store.withhold_where(|event| event.position <= cut).await?;
-    ///     assert_eq!(withheld, assigned[..2]);
+    ///     assert_eq!(withheld, assigned.get(..2).ok_or("four were appended")?);
     ///
     ///     let retained = collect(store.read(&Query::all(), ReadOptions::new())).await?;
     ///     assert!(retained.iter().all(|event| event.position > cut));

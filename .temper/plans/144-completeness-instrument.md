@@ -725,3 +725,20 @@ production code with docs.
   seeded (withheld) events match no rule's own query; the model family's `Query::all`
   conditions are what catch it.
 - [x] Spec edits line-neutral; spec-trace --write then spec-trace green.
+
+### Review round 1 (changes-requested on tree 517859db4d86fe89)
+
+- [x] F1: the withheld history now carries the types and tags the rules condition on
+  (Blocker, Existing, Anything, First, A, Enrolled, StudentSubscribed, CourseCapacityChanged,
+  Written, Hit, TariffPublished, MeterReadingTaken; course c1/c0, student s1, enrolment c1-s1,
+  writer b0, k v, tariff t1, meter m1). `pass_list.txt` record lines unchanged; green under
+  `--features memory`. Red, under `--features memory` (no proptest), with `append` delegated
+  unrewritten: the rule lists event-store failures, among them
+  `reissued_conditional_batch_lands_once`, `condition_without_after_allows_non_match`,
+  `condition_matches_on_every_tag_in_an_item` and
+  `condition_against_an_empty_store_admits_the_append`. The optional suite-half wrong
+  instrument was not added (over the ~80-line budget once `run_families` is made generic).
+- [x] F2: the LeakyMembership wording says why the suite cannot reach it.
+- [x] F3: the `doc_cfg` badge pointer restored under 100 columns, line-neutral.
+- [x] F4: `assigned.get(..2)` in the `withhold_where` doctest.
+- [x] F5: a cost sentence on `WithholdingStore`.
