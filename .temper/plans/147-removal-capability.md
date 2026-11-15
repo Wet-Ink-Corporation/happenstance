@@ -480,8 +480,8 @@ and `--test removal_declension` (`CARGO_INCREMENTAL=0`). T13 is
 | # | Decision | Door | Options | Recommendation | Decided by | Outcome |
 |---|---|---|---|---|---|---|
 | D0 | Name and shape | one-way (published trait) | as given | `REMOVAL` + `remove_outside_port(&self, &[SequencePosition]) -> impl Future<Output = Removed>`, `Removed { Deleted, Nothing }` exhaustive, `UNSTATED_REMOVAL` | owner chose the name, 2026-11-15; the return enum was delegated | Return shape chosen here, on the `Armed` precedent. Flag it if you want a different enum name. |
-| D1 | Does CF-18's `assert_declensions_are_stated` reject a fixture that is silent on `REMOVAL`? | two-way in code, but either flip changes downstream CI colour | **A.** No, the default's words are true of silence (`HELD_ABOVE_FRONTIER`'s argument). **B.** Yes, unconditionally, like `MID_BATCH_FAULT` and `READ_FAULT`: every third-party fixture turns red on `0.7.0` until it states a reason, and about 12 in-workspace suite-mounting fixtures need a stated reason. **C.** Conditionally (no natural condition exists). | **A** | owner | open |
-| D2 | Which clause owns the guard rule (spec-trace check 6)? | two-way (CF-27 is `[DEFERRED]`, editable until #163) | **A.** Add it to CF-27's `Rule:` line as `(new)`, and reconcile CF-27's capability sentence to name `Fixture::REMOVAL` / `remove_outside_port`. **B.** Mint a new CF clause mirroring CF-39 (adds a row to #163's freeze set). **C.** List it as owing a decision in `spec_trace.rs`, as the read-fault rule is (debt). | **A**: ADR-0028 already places the capability inside CF-27 | owner (spec) | open |
+| D1 | Does CF-18's `assert_declensions_are_stated` reject a fixture that is silent on `REMOVAL`? | two-way in code, but either flip changes downstream CI colour | **A.** No, the default's words are true of silence (`HELD_ABOVE_FRONTIER`'s argument). **B.** Yes, unconditionally, like `MID_BATCH_FAULT` and `READ_FAULT`: every third-party fixture turns red on `0.7.0` until it states a reason, and about 12 in-workspace suite-mounting fixtures need a stated reason. **C.** Conditionally (no natural condition exists). | **A** | owner | defaulted to A (weigh-in ledger), pending owner sign-off |
+| D2 | Which clause owns the guard rule (spec-trace check 6)? | two-way (CF-27 is `[DEFERRED]`, editable until #163) | **A.** Add it to CF-27's `Rule:` line as `(new)`, and reconcile CF-27's capability sentence to name `Fixture::REMOVAL` / `remove_outside_port`. **B.** Mint a new CF clause mirroring CF-39 (adds a row to #163's freeze set). **C.** List it as owing a decision in `spec_trace.rs`, as the read-fault rule is (debt). | **A**: ADR-0028 already places the capability inside CF-27 | owner (spec) | defaulted to A (weigh-in ledger), pending owner sign-off |
 | D3 | `MemoryFixture` | two-way (declining now, granting later stays additive only through a non-breaking route) | **A.** Decline with the length-allocation reason. **B.** Grant through `WithholdingStore` (breaks `MemoryFixture::Store`). **C.** Add removal to `MemoryEventStore` in core (a core API addition, and it still needs a high-water mark). | **A** | architect (H-16-adjacent: published reason text) | recommended |
 | D4 | The workerd harness grants | two-way (never published) | grant / keep the default | **grant**: the only real-Durable-Object run of the guard and of #151 | architect | recommended |
 | D5 | The honest control | two-way (tests only) | grant on `GappedPositionFixture` (restore-not-replay) / a new control (changes a test expectation) | **grant on `GappedPositionFixture`** | architect | recommended |
@@ -546,3 +546,20 @@ About 26 files and about 1,300 lines, most of them docs and test code:
   replaying. D4: workerd grants. D6: SQLite decrements `tag_cardinality`.
   `PrunedMemoryFixture` declines (hiding is not deleting). Answer enum named
   `Removed { Deleted, Nothing }`.
+- 2026-11-15: review minors (implementer).
+  F1: D1/D2 Outcome set to defaulted-to-A, pending owner sign-off.
+  F2: `a_removed_tail_is_not_handed_out_again` observed red with `Log::append`
+  passing `None` for the floor: `correct.rs:800:5: the append after removing
+  the tail at 2 took 2, at or below it: the allocator went back to the survivor
+  at 1`. Reverted to `self.high_water`; green.
+  F3: `GappedPositionStore::append` now decides and allocates against the
+  durable log and mirrors only the new rows into the handle's live view
+  (`Log::append_mirrored`), so an append no longer clones the whole log and a
+  handle taken before a reopen no longer replaces the durable copy. Red first:
+  the new `variants::a_handle_from_before_a_reopen_keeps_the_newer_handles_writes`
+  failed at `variants.rs:416:9: two acknowledged appends to one store were
+  both given 4096`. Green after; all 37 `mutation_coverage` tests pass, so no
+  mutant's declared set moved.
+  F4: the guard's ownership is stated in the prose of CF-27's `Rule:`
+  paragraph ("The capability's guard (#147) is ...") rather than on its first
+  line; spec-trace accepts it there, so the first line was left alone.

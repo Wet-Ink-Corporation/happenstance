@@ -592,6 +592,33 @@ impl Log {
             self.high_water,
         )
     }
+
+    /// The correct append path over this log, with the rows it sequenced
+    /// copied to `mirror` as well.
+    ///
+    /// For a fixture whose durable medium is the store and whose live log is
+    /// one handle's view of it: the append is decided and allocated here, and
+    /// only the new rows reach `mirror`, so the cost is the batch rather than
+    /// the log.
+    ///
+    /// # Errors
+    ///
+    /// As [`commit`]. On an error neither log moves.
+    pub(crate) fn append_mirrored(
+        &mut self,
+        mirror: &mut Self,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<LogError>> {
+        let held = self.events.len();
+        let position = self.append(events, condition)?;
+        // Cloned because the rows really are held twice: once in the durable
+        // medium and once in the handle's view a read is served from.
+        mirror
+            .events
+            .extend(self.events.get(held..).unwrap_or_default().iter().cloned());
+        Ok(position)
+    }
 }
 
 /// The stream a store built on [`Log`] returns from `read`.

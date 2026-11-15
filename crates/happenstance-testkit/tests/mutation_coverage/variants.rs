@@ -96,8 +96,9 @@ fn gapped(previous: Option<SequencePosition>) -> SequencePosition {
 ///
 /// Two things are separated here that a naive fixture conflates. `live` is the
 /// process state a reopen throws away; `committed` is the durable medium a
-/// reopen restores. The durable side is a copy of the whole [`Log`], taken
-/// after every acknowledged append and every removal, so a reopen reproduces
+/// reopen restores. The durable side is a whole [`Log`] that every append is
+/// decided against and every removal reaches, and each append's new rows are
+/// mirrored into the appending handle's live view, so a reopen reproduces
 /// the *positions*, identities and recorded times and not merely the payloads —
 /// which is what `acknowledged_writes_survive_a_reopen`'s second assertion
 /// checks, and the reason this variant can support `REOPEN` honestly where
@@ -181,7 +182,7 @@ impl EventStore for GappedPositionStore {
         // require every store to document a limit and to refuse beyond it
         // distinguishably.
         //
-        // It precedes the write and returns before `self.committed` is replaced,
+        // It precedes the write and returns before `self.committed` is touched,
         // so a refused append moves neither the live log nor the durable record
         // and `acknowledged_writes_survive_a_reopen` is untouched. The comparisons
         // are `>`, so the three guaranteed-minimum rules — which write exactly the
@@ -221,26 +222,25 @@ impl EventStore for GappedPositionStore {
             });
         }
 
-        let (position, durable) = {
-            let mut log = self
-                .live
-                .try_borrow_mut()
-                .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
-            let position = log.append(events, condition)?;
-            // A copy, because the durable medium really does hold a second
-            // copy of the log: a reopen restores it and discards `live`.
-            (position, log.clone())
-        };
-
-        // Recorded only on success, and only after the live store has accepted
-        // the batch. Acknowledging before this line is `LosingFixture`'s defect
-        // in `tests/fixture_instruments.rs`; this store is the correct sibling.
-        *self
+        // Decided and allocated against the durable side, which is the store,
+        // and only then mirrored into this handle's live view. Both borrows are
+        // taken before either log moves, so a refused borrow leaves both as
+        // they were. A handle taken before a reopen therefore still writes to
+        // the one store: its rows land beside the newer handles' at fresh
+        // positions, rather than its stale view replacing the durable copy
+        // (`a_handle_from_before_a_reopen_keeps_the_newer_handles_writes`).
+        // Acknowledging before the durable side holds the rows is
+        // `LosingFixture`'s defect in `tests/fixture_instruments.rs`; this
+        // store is the correct sibling.
+        let mut durable = self
             .committed
             .try_borrow_mut()
-            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))? = durable;
-
-        Ok(position)
+            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
+        let mut live = self
+            .live
+            .try_borrow_mut()
+            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
+        durable.append_mirrored(&mut live, events, condition)
     }
 
     // Both forwarded to the correct store over the same log rather than written
@@ -250,8 +250,8 @@ impl EventStore for GappedPositionStore {
     // Note what forwarding buys here specifically: `head_of` answers with the
     // last position *assigned*, which under [`gapped`] is 4096 + 7n and never a
     // count of events. `live` and not `committed`, because head and identity are
-    // properties of what this handle can read back, and a reopen is what replays
-    // one into the other.
+    // properties of what this handle can read back, and a reopen is what
+    // restores one into the other.
     async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
         LogStore::over(&self.live).head().await
     }
@@ -375,6 +375,59 @@ impl Subject for GappedPositionFixture {
             read_fault: Rc::new(Cell::new(None)),
         }
     }
+}
+
+/// Every position a handle reads back, in order.
+fn read_positions(store: &GappedPositionStore) -> Vec<SequencePosition> {
+    let query = Query::all();
+    let mut stream = core::pin::pin!(store.read(&query, ReadOptions::new()));
+    let mut positions = Vec::new();
+    while let Some(item) =
+        happenstance_testkit::block_on(core::future::poll_fn(|cx| stream.as_mut().poll_next(cx)))
+    {
+        positions.push(item.expect("an unarmed read yields no error").position);
+    }
+    positions
+}
+
+/// A handle taken before a reopen still writes to the one store.
+///
+/// The durable side is the store, so an append through a handle that predates
+/// a reopen lands beside the writes of the handles taken after it: distinct
+/// positions, both surviving the next reopen. Replacing the durable copy with
+/// the appending handle's own view of the log would hand the stale handle a
+/// position already taken and discard the newer handle's write.
+#[test]
+fn a_handle_from_before_a_reopen_keeps_the_newer_handles_writes() {
+    happenstance_testkit::block_on(async {
+        let fixture = GappedPositionFixture::open();
+        let stale = fixture.connect().await;
+        fixture.reopen().await;
+        let current = fixture.connect().await;
+
+        let newer = current
+            .append(&[happenstance_testkit::fixtures::event("Newer")], None)
+            .await
+            .expect("an unconditional append lands");
+        let older = stale
+            .append(&[happenstance_testkit::fixtures::event("Older")], None)
+            .await
+            .expect("an unconditional append lands");
+        assert_ne!(
+            newer, older,
+            "two acknowledged appends to one store were both given {newer}"
+        );
+
+        fixture.reopen().await;
+        let mut expected = vec![newer, older];
+        expected.sort_unstable();
+        assert_eq!(
+            read_positions(&fixture.connect().await),
+            expected,
+            "after the reopen, the write through the newer handle and the one \
+             through the stale handle are both there"
+        );
+    });
 }
 
 // =====================================================================
