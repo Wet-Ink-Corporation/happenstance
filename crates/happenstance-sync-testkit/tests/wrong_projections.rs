@@ -332,7 +332,7 @@ fn cost_layers_declared_convergent_is_failed() {
 }
 
 // ---------------------------------------------------------------------------
-// SY-21: the local position, reached through the one channel left open
+// SY-21: the local position, reached through the checkpoint the port offers
 // ---------------------------------------------------------------------------
 
 fn sy_21_verdict<F: ConvergenceFixture>(fixture: impl Fn() -> F) -> Result<RuleOutcome, Violation>
@@ -471,18 +471,22 @@ impl ConvergentProjection for RecordsItsCheckpoint {}
 
 /// [`RecordsItsCheckpoint`] over the contested case.
 struct RecordsItsCheckpointFixture {
-    // The rule opens a store and then builds the projection it runs into it,
-    // through two `&self` methods, and this projection must hold the store
-    // the runner commits into. So the fixture keeps the store it opened last:
-    // `Rc` because the test is single-threaded, `RefCell` because each run
-    // opens a fresh one.
-    opened: RefCell<Rc<MemoryProjectionStore>>,
+    // This projection must hold the store the runner commits into, and the
+    // fixture hands the two out through separate `&self` methods. So `store`
+    // parks the store it opened here and `projection` takes it: `Rc` because
+    // the test is single-threaded and the store has two holders, `RefCell`
+    // because each run opens a fresh one. `ConvergenceFixture` does not
+    // promise that a rule opens the store first, so a rule that builds the
+    // projection before opening its store, or builds two per store, finds
+    // nothing parked and panics, rather than handing the fold another run's
+    // store and failing for a reason that is not this mutant's.
+    opened: RefCell<Option<Rc<MemoryProjectionStore>>>,
 }
 
 impl RecordsItsCheckpointFixture {
     fn new() -> Self {
         Self {
-            opened: RefCell::new(Rc::new(MemoryProjectionStore::new())),
+            opened: RefCell::new(None),
         }
     }
 }
@@ -495,7 +499,10 @@ impl ConvergenceFixture for RecordsItsCheckpointFixture {
         RecordsItsCheckpoint {
             id: ProjectionId::from_static("records_its_checkpoint"),
             scope: Tags::empty(),
-            models: Rc::clone(&self.opened.borrow()),
+            models: self.opened.borrow_mut().take().expect(
+                "this fixture builds its projection over the store `store` opened, so a rule \
+                 must call `store` once before each `projection`",
+            ),
             writes: 0,
         }
     }
@@ -510,7 +517,8 @@ impl ConvergenceFixture for RecordsItsCheckpointFixture {
 
     async fn store(&self) -> Result<Shared, Violation> {
         let models = Rc::new(MemoryProjectionStore::new());
-        *self.opened.borrow_mut() = Rc::clone(&models);
+        // A cheap handle: the projection `projection` builds holds the other.
+        *self.opened.borrow_mut() = Some(Rc::clone(&models));
         Ok(Shared(models))
     }
 

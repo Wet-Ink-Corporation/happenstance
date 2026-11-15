@@ -64,8 +64,11 @@ not the same as what a user needed to be told.
   a projection declared `happenstance::ConvergentProjection` over one arrival
   order numbered twice, densely from the first position and offset with gaps,
   one event per commit, and requires byte-identical read models. `Delivered`
-  already withholds the position, so this checks the one channel left: a fold
-  may read its store's checkpoint and must not let it reach the read model.
+  already withholds the position. The rule compares read models, so any
+  channel that lets the local numbering reach them fails it; the one the port
+  a fold is given offers is its store's checkpoint. SY-21's text forbids the
+  position only in the value a fold folds over, so the rule takes a reading:
+  a fold may read its checkpoint but must not let it reach the read model.
   `tests/wrong_projections.rs` fails a fold that writes its checkpoint into
   its read model, which SY-20's rule passes, and shows that every fold SY-20's
   rule fails passes this one. Joins `for_each_convergence_rule!`. The

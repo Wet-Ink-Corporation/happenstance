@@ -26,11 +26,13 @@
 //! same arrivals, origin one's first, are written to two replicas: one
 //! numbered densely from the first position, one from far past it with gaps
 //! between, which the event-store contract permits. `Delivered` hands a fold
-//! no position, so the one channel left to the local position is the
-//! projection store's checkpoint, and a fold that lets it reach the read model
-//! commits two. SY-20's interleavings cannot see that fold: both are numbered
-//! densely over the same count of events, so the checkpoint runs through the
-//! same values in each.
+//! no position; the channel to the local position that the port a fold is
+//! given offers is the projection store's checkpoint. The rule compares read
+//! models, not channels, so a fold that lets the local numbering reach its
+//! read model by any route commits two, and the checkpoint is the route the
+//! wrong projection in `tests/` takes. SY-20's interleavings cannot see that
+//! fold: both are numbered densely over the same count of events, so the
+//! checkpoint runs through the same values in each.
 //!
 //! Every event carries one [`RecordedAt`]. `Delivered` does not hand a fold
 //! the time, and a fold that found it another way could order by it only
@@ -388,8 +390,15 @@ pub mod convergence_rules {
     /// first replica numbers the events densely from the first position; the
     /// second numbers them from far past it, with gaps between. `Delivered`
     /// already withholds the position from the fold (SY-21's compile-fail
-    /// fences), so what this checks is every other channel: a fold may read
-    /// its store's checkpoint, and must not let it reach the read model.
+    /// fences). The rule compares read models, so any channel that lets the
+    /// local numbering reach them fails it; the one the port a fold is given
+    /// offers is its store's checkpoint.
+    ///
+    /// That is a reading of SY-21, not its letter. The clause forbids handing
+    /// the arrival position "in the value it folds over", and its reopening
+    /// condition grants a fold the store's own checkpoint. This rule takes
+    /// the clause to mean that a fold may read its checkpoint but must not
+    /// let it reach the read model: SY-20's property, applied to positions.
     ///
     /// Rejects a projection that writes its checkpoint into its read model,
     /// which SY-20's rule passes, since both of its interleavings number the
