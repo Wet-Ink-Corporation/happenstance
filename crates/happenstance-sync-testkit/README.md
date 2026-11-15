@@ -22,8 +22,9 @@ with programs you can run.
 > rule names the clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > it checks; two of those are still `[PROVISIONAL]` (SY-7 and SY-10 among the
-> ones a rule here checks, ADR-0107),
-> and a rule over a provisional clause moves when its clause does. The
+> ones a rule here checks, ADR-0107), and one is `[DEFERRED]` (SY-32, whose
+> rule `retention_gap_is_reported_not_silent` is the evidence its freeze waits
+> on), and a rule over an unfrozen clause moves when its clause does. The
 > watermark family plays `happenstance-sync`'s shipped runner, `runner::Edge`,
 > and holds a projection store to what that runner asks of it (SY-31).
 >

@@ -4,6 +4,7 @@ use happenstance_core::{SequencePosition, StoreId};
 
 use super::error::Failure;
 use super::incarnation::StopCause;
+use super::retention::RetentionGap;
 use crate::identity::Watermark;
 use crate::ingest::Ingested;
 use crate::peer::Waiting;
@@ -46,8 +47,9 @@ pub enum Pending {
 /// One edge's status, as of its last step.
 ///
 /// Held by the edge and updated by every step, so reading it costs no round
-/// trip. `#[non_exhaustive]`: a retention-gap flag for SY-32 is still to come,
-/// and a field added then must not break a reader.
+/// trip. `#[non_exhaustive]`, so a field added later does not break a reader.
+/// SY-32's retention gap is not a field: it is read from `state` by
+/// [`retention_gap`](Self::retention_gap), so the two cannot disagree.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SyncStatus {
@@ -110,6 +112,19 @@ impl SyncStatus {
         self.state == EdgeState::Running
             && self.pending == Pending::Exactly(0)
             && self.waiting == Waiting::Nothing
+    }
+
+    /// The retention gap that stopped this edge, if one did (SY-32): the far
+    /// side had forgotten history the edge's token had not reached.
+    ///
+    /// Derived from [`state`](Self::state), so the two cannot disagree, and a
+    /// caller that reads only [`EdgeState::Stopped`] still halts.
+    #[must_use]
+    pub const fn retention_gap(&self) -> Option<RetentionGap> {
+        match self.state {
+            EdgeState::Stopped(StopCause::RetentionGap(gap)) => Some(gap),
+            _ => None,
+        }
     }
 }
 

@@ -15,6 +15,7 @@ mod drive;
 mod groups;
 mod incarnation;
 mod probe;
+mod retention;
 mod unchanged;
 mod watermark;
 mod wrong_runners;

@@ -8333,7 +8333,7 @@ does not have to describe a scattered purge, which E2E-46 shows no floor can.
 Owning phase: 14, which builds the instrument, and phase 13's two peer adapters
 if it lands first. That reconciles the owner this marker named before phase 16
 (the phase that builds the peers) with the ledger's `freeze-by-14`. Confirmed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md): neither of phase 13's peers built the instrument, every shipped peer declares `retention_floor: None` and the runner reads none, so the experiment stays phase 14's (#158, #163).]`
-Rule: `retention_gap_is_reported_not_silent` (new,
+Rule: `retention_gap_is_reported_not_silent` (#158,
 `happenstance-sync-testkit`).
 Cases: E2E-44, E2E-46, E2E-47.
 
@@ -10682,7 +10682,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-29 | PROVISIONAL | `ingest_refuses_an_unbounded_peer_query` † | E2E-40 |
 | SY-30 | FROZEN | `push_envelope_preserves_group_boundaries`, `ingest_group_is_atomic_under_a_mi… | E2E-35, E2E-39 |
 | SY-31 | FROZEN | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
-| SY-32 | DEFERRED | `retention_gap_is_reported_not_silent` † | E2E-44, E2E-46, E2E-47 |
+| SY-32 | DEFERRED | `retention_gap_is_reported_not_silent` | E2E-44, E2E-46, E2E-47 |
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
 | SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |

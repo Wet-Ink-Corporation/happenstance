@@ -16,14 +16,15 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use happenstance_core::bytes::Bytes;
-use happenstance_core::{Event, MIN_SUPPORTED_EVENT_DATA_LEN};
+use happenstance_core::{Event, MIN_SUPPORTED_EVENT_DATA_LEN, RecordedAt};
 use happenstance_sync::{
     Ack, EventGroup, MemoryResume, PeerLimits, Pulled, PushBatch, ReplicatedEvent, SendSyncPeer,
 };
 use happenstance_sync_testkit::{
-    KV_VALUE_CAP, KvCappedFixture, KvCappedPeer, KvPeerError, RefusalsOf, SyncFixture, rules,
+    KV_VALUE_CAP, KvCappedFixture, KvCappedPeer, KvPeerError, RefusalsOf, SyncFixture, Violation,
+    rules,
 };
-use happenstance_testkit::{RuleOutcome, block_on};
+use happenstance_testkit::{Capability, RuleOutcome, block_on};
 
 /// Workers KV's cap on the metadata stored beside a value: 1,024 bytes.
 const KV_METADATA_CAP: usize = 1024;
@@ -204,6 +205,20 @@ impl SyncFixture for LyingKvFixture {
     /// beneath the mistake: the mistake is about limits, not about classes.
     async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
         self.inner.refusals(&peer.inner).await
+    }
+
+    /// The honest fixture's compaction, so SY-32's rule runs here too: the
+    /// mistake is about limits, not retention.
+    const COMPACTION: Capability = <KvCappedFixture as SyncFixture>::COMPACTION;
+
+    async fn compact_recorded_before(
+        &self,
+        peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        self.inner
+            .compact_recorded_before(&peer.inner, cutoff)
+            .await
     }
 }
 

@@ -531,6 +531,7 @@ mod tests {
             FailureClass::Split,
             FailureClass::Park,
             FailureClass::Stop,
+            FailureClass::Reseed,
         ] {
             let error = StorePeerError::<Answers, Answers>::Identity(Answers(class));
 

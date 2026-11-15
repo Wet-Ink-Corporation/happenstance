@@ -20,6 +20,9 @@ use crate::violation::{Violation, ensure};
 /// under: the rule that asked for it.
 const SY_36: &str = "SY-36";
 
+/// The clause a fixture's failure to compact is reported under.
+const SY_32: &str = "SY-32";
+
 /// One isolated far side, and a way to reach it.
 ///
 /// One fixture instance is one isolated backing peer, and each
@@ -65,6 +68,44 @@ pub trait SyncFixture {
     /// A [`Violation`] if the fixture cannot build a provocation — its own
     /// failure, reported under SY-36 because that is the rule that asked.
     fn refusals(&self, peer: &Self::Peer) -> impl Future<Output = RefusalsOf<Self::Peer>>;
+
+    /// Whether this fixture can make its peer forget a prefix of its log, as
+    /// a peer with a retention window does. SY-32's rule,
+    /// [`retention_gap_is_reported_not_silent`](crate::rules::retention_gap_is_reported_not_silent),
+    /// needs it, and reports [`Skipped`](happenstance_testkit::RuleOutcome::Skipped)
+    /// with the stated reason when it is declined.
+    ///
+    /// Nothing in the port compacts, so the operation is the adapter's.
+    const COMPACTION: Capability = Capability::declined(UNSTATED_COMPACTION);
+
+    /// Makes `peer` forget the longest prefix of its log, in its forwarding
+    /// order, in which every event was recorded before `cutoff`, as the
+    /// fixture's adapter compacts on a retention window (SY-32).
+    ///
+    /// `cutoff` is a window predicate on each event's
+    /// [`RecordedAt`], never an order: `RecordedAt` orders nothing. A fixture
+    /// that declares [`COMPACTION`](Self::COMPACTION) supported overrides this.
+    ///
+    /// # Errors
+    ///
+    /// The provided body always returns a [`Violation`] of SY-32 naming the
+    /// two ways to reach it: a fixture that declares the capability and does
+    /// not compact, or a rule that compacts without checking it.
+    fn compact_recorded_before(
+        &self,
+        _peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> impl Future<Output = Result<(), Violation>> {
+        core::future::ready(Err(Violation::new(
+            SY_32,
+            format!(
+                "`SyncFixture::compact_recorded_before({})` was called and not overridden: \
+                 either this fixture declares COMPACTION supported and does not compact, or \
+                 a rule compacted without checking the capability",
+                cutoff.as_millis()
+            ),
+        )))
+    }
 
     /// Whether this fixture can close and reopen its backing peer, discarding
     /// every handle's process-level state.
@@ -130,8 +171,16 @@ pub const UNSTATED_SYNC_REOPEN: &str = "this fixture has not said whether its pe
      no medium outside the process has nothing a reopen could read back, and this \
      is that answer given by default rather than by its author";
 
-/// CF-18's machine-checked half for the sync-peer family: no capability `F`
-/// declines carries the reason it would inherit by saying nothing.
+/// CF-18's machine-checked half for the sync-peer family, for
+/// [`SyncFixture::REOPEN`] only: `F` must not decline it with the reason it
+/// would inherit by saying nothing.
+///
+/// [`SyncFixture::COMPACTION`] is not checked. Its inherited
+/// [`UNSTATED_COMPACTION`] is accepted for now because every adapter fixture
+/// in this workspace (Postgres, Neon, Cloudflare and the workerd harness)
+/// inherits it today, so checking it here would turn every mounted sync suite
+/// red in the change that added the capability. Requiring a stated reason for
+/// it is follow-up issue #480.
 ///
 /// [`ingest_declensions_are_stated`](crate::ingest_declensions_are_stated)'s
 /// twin. Emitted once per mounted suite by
@@ -144,7 +193,7 @@ pub const UNSTATED_SYNC_REOPEN: &str = "this fixture has not said whether its pe
 ///
 /// # Errors
 ///
-/// A [`Violation`] of CF-18 naming each capability `F` declines with the
+/// A [`Violation`] of CF-18 if `F` declines [`SyncFixture::REOPEN`] with the
 /// inherited reason.
 pub fn sync_declensions_are_stated<F: SyncFixture>(
     _opener: impl AsyncFn() -> F,
@@ -164,6 +213,15 @@ pub fn sync_declensions_are_stated<F: SyncFixture>(
         )
     })
 }
+
+/// What [`SyncFixture::COMPACTION`] says when a fixture says nothing.
+///
+/// `pub` so an adapter author can read what their silence says. Unlike
+/// [`UNSTATED_SYNC_REOPEN`], it is not checked: [`sync_declensions_are_stated`]
+/// accepts a fixture that inherits it, until #480.
+pub const UNSTATED_COMPACTION: &str = "this fixture cannot make its peer forget a prefix of its log; nothing \
+     in the port compacts, so compaction has to come from the adapter and this one has none to \
+     offer";
 
 /// What [`SyncFixture::refusals`] resolves to for a peer `P`.
 ///
@@ -343,6 +401,33 @@ impl SyncFixture for MemorySyncFixture {
     async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
         oversized_push_refusal(peer).await
     }
+
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    /// [`MemorySyncPeer::compact_recorded_before`] on the peer behind `peer`.
+    async fn compact_recorded_before(
+        &self,
+        peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        compact_memory_peer(&peer.peer, cutoff)
+    }
+}
+
+/// [`MemorySyncPeer::compact_recorded_before`], its one failure reported as a
+/// violation of SY-32: the body of every fixture here over the reference peer.
+pub(crate) fn compact_memory_peer(
+    peer: &MemorySyncPeer,
+    cutoff: RecordedAt,
+) -> Result<(), Violation> {
+    peer.compact_recorded_before(cutoff)
+        .map(drop)
+        .map_err(|error| {
+            Violation::new(
+                SY_32,
+                format!("the reference peer could not compact: {error}"),
+            )
+        })
 }
 
 /// One handle onto a [`MemorySyncFixture`]'s peer.
@@ -375,12 +460,14 @@ impl SendSyncPeer for MemorySyncHandle {
 
 #[cfg(test)]
 mod tests {
+    use happenstance_core::RecordedAt;
     use happenstance_sync::PeerLimits;
-    use happenstance_testkit::{Capability, Reopened};
+    use happenstance_testkit::{Capability, Reopened, block_on};
 
     use super::{
         MAX_PROVOKED_BATCH_BYTES, MemorySyncFixture, MemorySyncHandle, RefusalsOf, SyncFixture,
-        batch_over_the_limit, oversized_push_refusal, sync_declensions_are_stated,
+        UNSTATED_COMPACTION, batch_over_the_limit, oversized_push_refusal,
+        sync_declensions_are_stated,
     };
 
     /// A fixture over the reference peer whose `REOPEN` is `$reopen`, or the
@@ -411,6 +498,22 @@ mod tests {
         Capability::declined("a test fixture over the reference peer, which keeps no medium")
     );
 
+    /// A fixture that says nothing declines compaction in this crate's words,
+    /// and its provided compaction is a violation of SY-32, never a silent
+    /// no-op a rule could mistake for a compaction that dropped nothing.
+    #[test]
+    fn a_silent_fixture_declines_compaction_and_cannot_compact() {
+        let fixture = Silent(MemorySyncFixture::new());
+        let peer = block_on(fixture.connect());
+
+        let compacted =
+            block_on(fixture.compact_recorded_before(&peer, RecordedAt::from_millis(0)));
+
+        assert_eq!(Silent::COMPACTION.reason(), Some(UNSTATED_COMPACTION));
+        let violation = compacted.expect_err("the provided body never compacts");
+        assert_eq!(violation.clause(), "SY-32");
+    }
+
     #[test]
     fn a_fixture_that_inherits_the_default_reopen_declension_is_rejected() {
         let checked = sync_declensions_are_stated(async || Silent(MemorySyncFixture::new()));
@@ -437,7 +540,7 @@ mod tests {
     /// rule reports a declared-and-forgotten override by.
     #[test]
     fn the_default_reopen_reopens_nothing() {
-        let reopened = happenstance_testkit::block_on(Silent(MemorySyncFixture::new()).reopen());
+        let reopened = block_on(Silent(MemorySyncFixture::new()).reopen());
 
         assert_eq!(reopened, Reopened::Nothing);
     }

@@ -221,11 +221,12 @@ mod tests {
         }
     }
 
-    const EVERY_CLASS: [FailureClass; 4] = [
+    const EVERY_CLASS: [FailureClass; 5] = [
         FailureClass::Transient,
         FailureClass::Split,
         FailureClass::Park,
         FailureClass::Stop,
+        FailureClass::Reseed,
     ];
 
     #[test]

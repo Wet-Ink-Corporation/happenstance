@@ -50,6 +50,7 @@ impl fmt::Display for Failure {
             FailureClass::Split => "split",
             FailureClass::Park => "park",
             FailureClass::Stop => "stop",
+            FailureClass::Reseed => "reseed",
         };
         write!(f, "a {class}-class failure in the {} phase", self.phase)
     }
@@ -148,10 +149,33 @@ impl<P: Classify, R: Classify, I: Classify, A: Classify> StepError<P, R, I, A> {
 }
 
 /// The class of the failure inside, so a step's error is handled like a peer's
-/// (ADR-0026 §2.4). A stopped edge, and a changed incarnation, answer
-/// [`Stop`](FailureClass::Stop); a parked edge answers the class that parked it.
+/// (ADR-0026 §2.4). A changed incarnation answers [`Stop`](FailureClass::Stop);
+/// an edge stopped by a retention gap answers [`Reseed`](FailureClass::Reseed)
+/// (SY-32); any other stopped edge answers the class it stopped on; a parked
+/// edge answers the class that parked it.
 impl<P: Classify, R: Classify, I: Classify, A: Classify> Classify for StepError<P, R, I, A> {
     fn class(&self) -> FailureClass {
         self.failure().class
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::string::ToString;
+
+    use super::{Failure, Phase};
+    use crate::classify::FailureClass;
+
+    /// The fifth class reads as its remedy, not as a stop (SY-32). Rejects a
+    /// `Display` that folds `Reseed` into "stop", which would tell an
+    /// operator to fix configuration that is not broken.
+    #[test]
+    fn a_reseed_failure_names_its_class() {
+        let failure = Failure::new(Phase::Pull, FailureClass::Reseed);
+
+        assert_eq!(
+            failure.to_string(),
+            "a reseed-class failure in the pull phase"
+        );
     }
 }
