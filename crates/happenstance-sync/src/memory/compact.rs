@@ -295,6 +295,24 @@ mod tests {
         assert_eq!(SendSyncPeer::limits(&peer).retention_floor, Some(id(4)));
     }
 
+    /// Rejects a peer that reports a floor it was handed and does not
+    /// enforce: that is the silent failure SY-32 forbids.
+    #[test]
+    fn a_declared_floor_is_replaced_by_the_compacted_one() {
+        let mut limits = crate::PeerLimits::minimum();
+        limits.retention_floor = Some(id(9));
+        let peer = MemorySyncPeer::with_limits(HUB, limits);
+        peer.seed(EventGroup::new(None, vec![recorded(1, 0)]))
+            .expect("an unpoisoned peer");
+
+        let before = SendSyncPeer::limits(&peer).retention_floor;
+        peer.compact_recorded_before(day(40)).expect("compacts");
+        let after = SendSyncPeer::limits(&peer).retention_floor;
+
+        assert_eq!(before, None, "nothing has been forgotten yet");
+        assert_eq!(after, Some(id(1)));
+    }
+
     /// A forgotten identity is forgotten: pushed again, it is appended, and
     /// the high-water mark the peer confirms does not move back.
     #[tokio::test]

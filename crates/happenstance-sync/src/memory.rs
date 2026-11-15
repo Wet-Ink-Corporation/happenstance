@@ -221,6 +221,11 @@ impl MemorySyncPeer {
     /// Useful for the case the port exists to make survivable: an origin that
     /// has already durably committed an event larger than the far side can
     /// represent.
+    ///
+    /// `limits.retention_floor` is not reported: the floor this peer's own
+    /// [compaction](Self::compact_recorded_before) sets replaces it, `None`
+    /// until then. A floor a peer declares and does not enforce is the silent
+    /// failure SY-32 forbids.
     #[must_use]
     pub fn with_limits(store: StoreId, limits: PeerLimits) -> Self {
         Self {
@@ -387,9 +392,7 @@ impl SendSyncPeer for MemorySyncPeer {
             .unwrap_or_else(PoisonError::into_inner)
             .compaction;
         PeerLimits {
-            retention_floor: compaction
-                .map(|compaction| compaction.floor)
-                .or(self.limits.retention_floor),
+            retention_floor: compaction.map(|compaction| compaction.floor),
             ..self.limits.clone()
         }
     }
