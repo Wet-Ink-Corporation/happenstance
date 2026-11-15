@@ -76,9 +76,10 @@ not the same as what a user needed to be told.
   forgotten history an edge's resume token has not reached. The runner never
   compares a token with `PeerLimits::retention_floor` itself (tokens are
   opaque, and an `EventId` orders authorship within one origin, not
-  forwarding): the peer refuses, and a step failing with `Reseed` stops the
-  edge with the new `StopCause::RetentionGap(runner::RetentionGap)`, carrying
-  the far side's floor as it read at the refusal. `SyncStatus::retention_gap()`
+  forwarding): the peer refuses, and a pull or push failing with `Reseed`
+  stops the edge with the new `StopCause::RetentionGap(runner::RetentionGap)`,
+  carrying the far side's floor as it read at the refusal (a `Reseed` from
+  any other phase stops on `StopCause::Failure`). `SyncStatus::retention_gap()`
   reads it back, derived from `state`, and `Edge::run` returns it without
   waiting. `MemorySyncPeer` stands in for a compacting peer:
   `compact_recorded_before(RecordedAt)` drops the longest prefix of its log
