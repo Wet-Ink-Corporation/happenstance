@@ -7718,10 +7718,10 @@ pub mod rules {
             .append(&[note("removed")], Some(&over("removed")))
             .await;
         assert!(
-            live.is_err(),
+            matches!(live, Err(AppendError::ConditionViolated(_))),
             "the probe is live: while the store holds the matching event the \
-             condition must refuse, or the vacuous pass below proves nothing. \
-             Got {live:?}"
+             condition must refuse, as `ConditionViolated`, or the vacuous pass \
+             below proves nothing. Got {live:?}"
         );
 
         settle!(fixture);
@@ -7763,9 +7763,10 @@ pub mod rules {
         for claim in ["kept-below", "kept-above"] {
             let refused = store.append(&[note(claim)], Some(&over(claim))).await;
             assert!(
-                refused.is_err(),
+                matches!(refused, Err(AppendError::ConditionViolated(_))),
                 "a removal is not a licence: the store still holds the {claim:?} \
-                 registration, so a condition over it MUST still refuse. A store \
+                 registration, so a condition over it MUST still refuse, as \
+                 `ConditionViolated` rather than a store error. A store \
                  that stops evaluating conditions once it has lost history has \
                  read ES-40's vacuous pass as 'conditions no longer apply'. Got \
                  {refused:?}"

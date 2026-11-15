@@ -16,7 +16,7 @@
 //!
 //! Three wrong instruments are rejected by the second half's own code path:
 //! a report of a range, a report of the last call only, and a decorator that
-//! forgot to answer membership itself. The suite reaches the third only through
+//! forgot to answer membership itself. The suite can reach the third only through
 //! the removal rules, which ask `contains_event_id` of an event they had the
 //! fixture withhold; every other rule asks only of events it appended and still
 //! sees. That is why the report half exists.

@@ -650,12 +650,10 @@ impl Log {
     ) -> Result<SequencePosition, AppendError<LogError>> {
         let held = self.events.len();
         let position = self.append(events, condition)?;
-        // No empty case to hide: `held` was read under the same `&mut self`,
-        // and a successful `append` only extends `self.events` (by one row or
-        // more, since it refuses an empty batch), so the rows after `held` are
-        // exactly the ones it sequenced. `get(held..)` with a default had a
-        // `None` arm that could only have meant a bug, silently mirrored as
-        // nothing. Cloned because the rows really are held twice: once in the
+        // `held` was read under the same `&mut self`, and a successful `append`
+        // only extends `self.events` (by one row or more, since it refuses an
+        // empty batch), so the rows after `held` are exactly the ones it
+        // sequenced. Cloned because the rows really are held twice: once in the
         // durable medium and once in the handle's view a read is served from.
         mirror.events.extend(self.events.iter().skip(held).cloned());
         Ok(position)

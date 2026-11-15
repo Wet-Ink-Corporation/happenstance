@@ -755,9 +755,9 @@ pub trait Fixture {
     /// CF-27's instrument, the `WithholdingStore` decorator, **hides** events
     /// from a store that still holds them, so only a deletion from an adapter's
     /// own storage can show its allocator surviving one (the `INTEGER PRIMARY
-    /// KEY` without `AUTOINCREMENT` shape ADR-0028 names). A fixture over it may
-    /// still grant this by forwarding to `withhold`, as CF-27's own does: the
-    /// guard and ES-40's rule judge it fully, and ES-38's passes by delegation.
+    /// KEY` without `AUTOINCREMENT` shape ADR-0028 names). CF-27's own
+    /// instrument, and only it, grants this by forwarding to `withhold`; its
+    /// ES-38 pass is by delegation and certifies nothing about an allocator.
     ///
     /// # What declaring it commits the fixture to
     ///
@@ -767,10 +767,10 @@ pub trait Fixture {
     /// it already held to read back exactly the other two, unchanged, and the
     /// membership probe to answer `false` for the removed identities.
     ///
-    /// CF-39's shape, one capability over: a fixture whose removal misses a
-    /// seam of the port (`read`, `head`, `contains_event_id`, or the condition
-    /// `append` evaluates) MUST decline this capability, rather than contribute
-    /// a green result about a store nothing was removed from.
+    /// CF-39's shape, one capability over: an adapter fixture whose removal
+    /// does not delete from the adapter's own storage MUST decline this
+    /// capability, rather than declare it and contribute a green result about
+    /// a store nothing was removed from.
     ///
     /// # Same store, not a new one
     ///
@@ -792,12 +792,12 @@ pub trait Fixture {
     /// provided body answers [`Removed::Nothing`].
     const REMOVAL: Capability = Capability::declined(UNSTATED_REMOVAL);
 
-    /// Removes the events this store holds at `positions`, by a mechanism
-    /// outside [`EventStore`] — a raw `DELETE` on the adapter's own storage —
-    /// and says whether it did.
+    /// Removes the events this store holds at `positions` outside [`EventStore`]
+    /// (a raw `DELETE` on the adapter's own storage), and says whether it did.
     ///
     /// An override returns [`Removed::Deleted`] once every named event is gone
-    /// from the store's own storage, and nothing else is.
+    /// from the store's own storage, and nothing else is (CF-27's instrument,
+    /// named under [`REMOVAL`](Self::REMOVAL), once each is withheld instead).
     ///
     /// # The contract on the argument
     ///

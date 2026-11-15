@@ -35,12 +35,12 @@ use crate::query::Query;
 ///
 /// Where matching history has been removed (pruned, archived, truncated, or
 /// never replicated here) the store MAY admit an append it would otherwise have
-/// rejected. The condition neither fails nor reports uncertainty: it passes
-/// **vacuously**, because the information is missing from the store, not merely
-/// from the API, and a pruned store and a young one are the same value at every
-/// seam of this port. That is checked: the testkit's rule
-/// `condition_over_removed_history_does_not_reject` (ES-40) requires a store to
-/// admit an append whose condition's only match it no longer holds.
+/// rejected. That MAY is the caller's reading: a caller must not rely on a
+/// refusal. A conformant store admits: the condition passes **vacuously**,
+/// because the information is missing from the store, not merely from the API,
+/// and a pruned store and a young one are the same value at every seam of this
+/// port. The testkit's `condition_over_removed_history_does_not_reject` (ES-40)
+/// checks it, requiring the append once the condition's only match is removed.
 ///
 /// The sharp consequence is for replication: re-evaluating an origin's condition
 /// against a partial local log answers "nothing matched" for history that exists
