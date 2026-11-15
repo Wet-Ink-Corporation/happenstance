@@ -1,5 +1,6 @@
 //! SY-20's rule, failing the projections that declare convergence and do not
-//! converge, and the cases too weak to tell.
+//! converge, and the cases too weak to tell; and SY-21's, failing the one that
+//! lets its checkpoint, a local position, reach its read model.
 //!
 //! Every mutant is one projection type with one mistake, declared convergent:
 //! the declaration is the lie the rule exists to catch. The honest fold, which
@@ -7,12 +8,16 @@
 //! that shows the plumbing is not what fails the others. Each mutant's verdict
 //! is asserted whole: the clause, and the sentence that names the mistake.
 
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fmt;
+use std::rc::Rc;
 
 use happenstance::bytes::Bytes;
 use happenstance::{
-    Codec, CodecError, ConvergentProjection, Delivered, DomainEvent, EventId, EventType, Postcard,
-    Projection, ProjectionId, Tag, Tags,
+    Authority, Checkpoint, Codec, CodecError, CommitError, ConvergentProjection, Delivered,
+    DomainEvent, EventId, EventType, InvalidCheckpointId, Postcard, Projection, ProjectionId,
+    ProjectionStore, ResetError, SequencePosition, Tag, Tags, checkpoint_id,
 };
 use happenstance_core::{MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError};
 use happenstance_sync_testkit::{
@@ -187,8 +192,13 @@ fn verdict(fixture: impl Fn() -> KeyedFixture) -> Result<RuleOutcome, Violation>
 
 /// Asserts the rule failed under SY-20 with a message containing `because`.
 fn fails_because(verdict: Result<RuleOutcome, Violation>, because: &str) {
+    fails_under("SY-20", verdict, because);
+}
+
+/// Asserts the rule failed under `clause` with a message containing `because`.
+fn fails_under(clause: &str, verdict: Result<RuleOutcome, Violation>, because: &str) {
     let violation = verdict.expect_err("the rule passed a projection it must fail");
-    assert_eq!(violation.clause(), "SY-20", "{violation}");
+    assert_eq!(violation.clause(), clause, "{violation}");
     assert!(
         violation.message().contains(because),
         "the rule failed for another reason: {violation}"
@@ -319,4 +329,259 @@ fn cost_layers_declared_convergent_is_failed() {
         }),
     );
     fails_because(verdict, DIVERGED);
+}
+
+// ---------------------------------------------------------------------------
+// SY-21: the local position, reached through the one channel left open
+// ---------------------------------------------------------------------------
+
+fn sy_21_verdict<F: ConvergenceFixture>(fixture: impl Fn() -> F) -> Result<RuleOutcome, Violation>
+where
+    F::Projection: ConvergentProjection,
+{
+    block_on(
+        convergence_rules::convergent_projection_cannot_observe_local_position(async || fixture()),
+    )
+}
+
+const OBSERVED: &str = "its answer depends on where this replica numbered the events";
+
+/// A memory store behind a shared handle. The runner commits through this
+/// one, and [`RecordsItsCheckpoint`] reads the same store's checkpoint
+/// through its own.
+struct Shared(Rc<MemoryProjectionStore>);
+
+impl ProjectionStore for Shared {
+    type Error = MemoryProjectionStoreError;
+    type Batch = MemoryProjectionBatch;
+
+    async fn begin(&self) -> Result<MemoryProjectionBatch, MemoryProjectionStoreError> {
+        self.0.begin().await
+    }
+
+    async fn checkpoint(
+        &self,
+        id: &ProjectionId,
+    ) -> Result<Checkpoint, MemoryProjectionStoreError> {
+        self.0.checkpoint(id).await
+    }
+
+    async fn commit(
+        &self,
+        batch: MemoryProjectionBatch,
+        id: &ProjectionId,
+        position: SequencePosition,
+        authority: Authority,
+    ) -> Result<(), CommitError<MemoryProjectionStoreError>> {
+        self.0.commit(batch, id, position, authority).await
+    }
+
+    async fn reset(
+        &self,
+        batch: MemoryProjectionBatch,
+        id: &ProjectionId,
+    ) -> Result<(), ResetError<MemoryProjectionStoreError>> {
+        self.0.reset(batch, id).await
+    }
+
+    async fn rollback(
+        &self,
+        batch: MemoryProjectionBatch,
+    ) -> Result<(), MemoryProjectionStoreError> {
+        self.0.rollback(batch).await
+    }
+}
+
+/// Why [`RecordsItsCheckpoint`] could not apply an event.
+#[derive(Debug)]
+enum Unrecorded {
+    /// The store did not answer.
+    Store(MemoryProjectionStoreError),
+    /// The projection's checkpoint key could not be derived.
+    Key(InvalidCheckpointId),
+}
+
+impl fmt::Display for Unrecorded {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Store(error) => write!(f, "the store did not answer: {error}"),
+            Self::Key(error) => write!(f, "no checkpoint key: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for Unrecorded {}
+
+impl From<MemoryProjectionStoreError> for Unrecorded {
+    fn from(error: MemoryProjectionStoreError) -> Self {
+        Self::Store(error)
+    }
+}
+
+/// A count of writes, which commutes, beside the one mistake SY-21 names: it
+/// reads its own checkpoint, as SY-21's falsifier says a projection may, and
+/// lets it reach the read model.
+///
+/// `Delivered` carries no position, so this is the only channel to the local
+/// one. Under SY-20's two interleavings the checkpoint sequence is the same,
+/// because both logs number the same count of events densely from the first
+/// position, so SY-20's rule passes it. Only a second numbering of the same
+/// arrivals can tell.
+struct RecordsItsCheckpoint {
+    id: ProjectionId,
+    scope: Tags,
+    models: Rc<MemoryProjectionStore>,
+    writes: u64,
+}
+
+impl Projection for RecordsItsCheckpoint {
+    type Event = Wrote;
+    type Store = Shared;
+    type Error = Unrecorded;
+
+    fn id(&self) -> &ProjectionId {
+        &self.id
+    }
+
+    fn scope(&self) -> &Tags {
+        &self.scope
+    }
+
+    async fn apply(
+        &mut self,
+        _event: Delivered<Wrote>,
+        batch: &mut MemoryProjectionBatch,
+    ) -> Result<(), Unrecorded> {
+        let key = checkpoint_id(&*self).map_err(Unrecorded::Key)?;
+        let through = match self.models.checkpoint(&key).await? {
+            Checkpoint::Live { through } | Checkpoint::Rebuilding { through } => through.get(),
+            // `NeverRun`, and whatever a later `Checkpoint` adds: nothing
+            // committed yet, as far as this fold can say.
+            _ => 0,
+        };
+        self.writes += 1;
+        batch.write("writes", self.writes);
+        batch.write("checkpoint", through);
+        Ok(())
+    }
+}
+
+// The lie: a fold whose read model holds a local position is not convergent.
+impl ConvergentProjection for RecordsItsCheckpoint {}
+
+/// [`RecordsItsCheckpoint`] over the contested case.
+struct RecordsItsCheckpointFixture {
+    // The rule opens a store and then builds the projection it runs into it,
+    // through two `&self` methods, and this projection must hold the store
+    // the runner commits into. So the fixture keeps the store it opened last:
+    // `Rc` because the test is single-threaded, `RefCell` because each run
+    // opens a fresh one.
+    opened: RefCell<Rc<MemoryProjectionStore>>,
+}
+
+impl RecordsItsCheckpointFixture {
+    fn new() -> Self {
+        Self {
+            opened: RefCell::new(Rc::new(MemoryProjectionStore::new())),
+        }
+    }
+}
+
+impl ConvergenceFixture for RecordsItsCheckpointFixture {
+    type Projection = RecordsItsCheckpoint;
+    type Codec = Postcard;
+
+    fn projection(&self) -> RecordsItsCheckpoint {
+        RecordsItsCheckpoint {
+            id: ProjectionId::from_static("records_its_checkpoint"),
+            scope: Tags::empty(),
+            models: Rc::clone(&self.opened.borrow()),
+            writes: 0,
+        }
+    }
+
+    fn codec(&self) -> &Postcard {
+        &Postcard
+    }
+
+    fn authored(&self) -> [Vec<Wrote>; 2] {
+        contested()
+    }
+
+    async fn store(&self) -> Result<Shared, Violation> {
+        let models = Rc::new(MemoryProjectionStore::new());
+        *self.opened.borrow_mut() = Rc::clone(&models);
+        Ok(Shared(models))
+    }
+
+    async fn read_model(&self, store: &Shared) -> Result<Vec<u8>, Violation> {
+        Ok(format!("{:?}", store.0.snapshot()).into_bytes())
+    }
+}
+
+/// The checkpoint is the same under both of SY-20's interleavings, so SY-20's
+/// rule cannot see this mistake.
+#[test]
+fn a_recorded_checkpoint_passes_sy_20() {
+    let verdict = block_on(
+        convergence_rules::convergent_projection_is_interleaving_independent(async || {
+            RecordsItsCheckpointFixture::new()
+        }),
+    );
+    assert_eq!(verdict, Ok(RuleOutcome::Ran));
+}
+
+/// And SY-21's rule fails it: the same arrivals, numbered twice, commit two
+/// read models.
+#[test]
+fn a_recorded_checkpoint_is_failed_by_sy_21() {
+    fails_under(
+        "SY-21",
+        sy_21_verdict(RecordsItsCheckpointFixture::new),
+        OBSERVED,
+    );
+}
+
+/// SY-21's rule fails that projection and no other here: every fold SY-20's
+/// rule fails depends on arrival order, and SY-21's rule holds the order
+/// still.
+#[test]
+fn every_arrival_order_mistake_passes_sy_21() {
+    for mistake in [
+        Mistake::None,
+        Mistake::LastArrivalWins,
+        Mistake::FirstArrivalWins,
+        Mistake::ArrivalRank,
+    ] {
+        assert_eq!(
+            sy_21_verdict(|| KeyedFixture::new(mistake)),
+            Ok(RuleOutcome::Ran),
+            "{mistake:?}"
+        );
+    }
+}
+
+/// Cost layers declared convergent, too: FIFO over one arrival order is one
+/// answer however the replica numbered it.
+#[test]
+fn cost_layers_declared_convergent_passes_sy_21() {
+    assert_eq!(
+        sy_21_verdict(|| DeclaredCostLayersFixture(CostLayersFixture::new())),
+        Ok(RuleOutcome::Ran)
+    );
+}
+
+/// A run that applied nothing commits two empty read models, which agree.
+/// Refused under SY-21 as under SY-20, not passed.
+#[test]
+fn sy_21_refuses_a_case_outside_the_projections_scope() {
+    let out_of_scope = || KeyedFixture {
+        scope: || [Tag::from_static("elsewhere")].into_iter().collect(),
+        ..KeyedFixture::new(Mistake::None)
+    };
+    fails_under(
+        "SY-21",
+        sy_21_verdict(out_of_scope),
+        "applied 0 of the 3 events",
+    );
 }

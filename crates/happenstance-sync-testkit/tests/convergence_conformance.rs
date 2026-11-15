@@ -1,7 +1,7 @@
 //! The convergence family against its reference fixtures.
 //!
-//! `StockOnHandFixture` is the declared projection SY-20's rule is proven
-//! against before it may fail anyone's, and SY-22's rule carries its own
+//! `StockOnHandFixture` is the declared projection SY-20's and SY-21's rules
+//! are proven against before they may fail anyone's, and SY-22's rule carries its own
 //! cases: a rule red here is a wrong rule.
 
 use happenstance_sync_testkit::{StockOnHandFixture, Violation, convergence_rules};
@@ -12,6 +12,19 @@ use happenstance_testkit::{RuleOutcome, block_on};
 fn stock_on_hand_is_interleaving_independent() -> Result<(), Violation> {
     let outcome = block_on(
         convergence_rules::convergent_projection_is_interleaving_independent(async || {
+            StockOnHandFixture::new()
+        }),
+    )?;
+    assert_eq!(outcome, RuleOutcome::Ran);
+    Ok(())
+}
+
+/// A sum of stock movements commits one read model however the replica
+/// numbered the same arrivals.
+#[test]
+fn stock_on_hand_cannot_observe_local_position() -> Result<(), Violation> {
+    let outcome = block_on(
+        convergence_rules::convergent_projection_cannot_observe_local_position(async || {
             StockOnHandFixture::new()
         }),
     )?;
