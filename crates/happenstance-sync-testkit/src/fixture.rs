@@ -11,12 +11,16 @@ use happenstance_sync::{
     Ack, EventGroup, FailureClass, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits,
     Pulled, PushBatch, ReplicatedEvent, SendSyncPeer,
 };
+use happenstance_testkit::Capability;
 
 use crate::Violation;
 
 /// The clause a fixture's own failure to build a provocation is reported
 /// under: the rule that asked for it.
 const SY_36: &str = "SY-36";
+
+/// The clause a fixture's failure to compact is reported under.
+const SY_32: &str = "SY-32";
 
 /// One isolated far side, and a way to reach it.
 ///
@@ -63,7 +67,52 @@ pub trait SyncFixture {
     /// A [`Violation`] if the fixture cannot build a provocation — its own
     /// failure, reported under SY-36 because that is the rule that asked.
     fn refusals(&self, peer: &Self::Peer) -> impl Future<Output = RefusalsOf<Self::Peer>>;
+
+    /// Whether this fixture can make its peer forget a prefix of its log, as
+    /// a peer with a retention window does. SY-32's rule,
+    /// [`retention_gap_is_reported_not_silent`](crate::rules::retention_gap_is_reported_not_silent),
+    /// needs it, and reports [`Skipped`](happenstance_testkit::RuleOutcome::Skipped)
+    /// with the stated reason when it is declined.
+    ///
+    /// Nothing in the port compacts, so the operation is the adapter's.
+    const COMPACTION: Capability = Capability::declined(UNSTATED_COMPACTION);
+
+    /// Makes `peer` forget the longest prefix of its log, in its forwarding
+    /// order, in which every event was recorded before `cutoff`, as the
+    /// fixture's adapter compacts on a retention window (SY-32).
+    ///
+    /// `cutoff` is a window predicate on each event's
+    /// [`RecordedAt`], never an order: `RecordedAt` orders nothing. A fixture
+    /// that declares [`COMPACTION`](Self::COMPACTION) supported overrides this.
+    ///
+    /// # Errors
+    ///
+    /// The provided body always returns a [`Violation`] of SY-32 naming the
+    /// two ways to reach it: a fixture that declares the capability and does
+    /// not compact, or a rule that compacts without checking it.
+    fn compact_recorded_before(
+        &self,
+        _peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> impl Future<Output = Result<(), Violation>> {
+        core::future::ready(Err(Violation::new(
+            SY_32,
+            format!(
+                "`SyncFixture::compact_recorded_before({})` was called and not overridden: \
+                 either this fixture declares COMPACTION supported and does not compact, or \
+                 a rule compacted without checking the capability",
+                cutoff.as_millis()
+            ),
+        )))
+    }
 }
+
+/// What [`SyncFixture::COMPACTION`] says when a fixture says nothing.
+///
+/// `pub` so an adapter author can read what their silence says.
+pub const UNSTATED_COMPACTION: &str = "this fixture cannot make its peer forget a prefix of its log; nothing \
+     in the port compacts, so compaction has to come from the adapter and this one has none to \
+     offer";
 
 /// What [`SyncFixture::refusals`] resolves to for a peer `P`.
 ///
@@ -234,6 +283,33 @@ impl SyncFixture for MemorySyncFixture {
     async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
         oversized_push_refusal(peer).await
     }
+
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    /// [`MemorySyncPeer::compact_recorded_before`] on the peer behind `peer`.
+    async fn compact_recorded_before(
+        &self,
+        peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        compact_memory_peer(&peer.peer, cutoff)
+    }
+}
+
+/// [`MemorySyncPeer::compact_recorded_before`], its one failure reported as a
+/// violation of SY-32: the body of every fixture here over the reference peer.
+pub(crate) fn compact_memory_peer(
+    peer: &MemorySyncPeer,
+    cutoff: RecordedAt,
+) -> Result<(), Violation> {
+    peer.compact_recorded_before(cutoff)
+        .map(drop)
+        .map_err(|error| {
+            Violation::new(
+                SY_32,
+                format!("the reference peer could not compact: {error}"),
+            )
+        })
 }
 
 /// One handle onto a [`MemorySyncFixture`]'s peer.
@@ -266,9 +342,49 @@ impl SendSyncPeer for MemorySyncHandle {
 
 #[cfg(test)]
 mod tests {
-    use happenstance_sync::PeerLimits;
+    use alloc::sync::Arc;
 
-    use super::{MAX_PROVOKED_BATCH_BYTES, batch_over_the_limit};
+    use happenstance_core::{RecordedAt, StoreId};
+    use happenstance_sync::{MemorySyncPeer, PeerLimits};
+    use happenstance_testkit::block_on;
+
+    use super::{
+        MAX_PROVOKED_BATCH_BYTES, MemorySyncHandle, RefusalsOf, SyncFixture, UNSTATED_COMPACTION,
+        batch_over_the_limit,
+    };
+
+    /// A fixture that states nothing beyond what the trait requires.
+    struct Silent(Arc<MemorySyncPeer>);
+
+    impl SyncFixture for Silent {
+        type Peer = MemorySyncHandle;
+
+        async fn connect(&self) -> Self::Peer {
+            MemorySyncHandle {
+                peer: Arc::clone(&self.0),
+            }
+        }
+
+        async fn refusals(&self, _peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
+            Ok(Vec::new())
+        }
+    }
+
+    /// A fixture that says nothing declines compaction in this crate's words,
+    /// and its provided compaction is a violation of SY-32, never a silent
+    /// no-op a rule could mistake for a compaction that dropped nothing.
+    #[test]
+    fn a_silent_fixture_declines_compaction_and_cannot_compact() {
+        let fixture = Silent(Arc::new(MemorySyncPeer::new(StoreId::from_bytes([1; 16]))));
+        let peer = block_on(fixture.connect());
+
+        let compacted =
+            block_on(fixture.compact_recorded_before(&peer, RecordedAt::from_millis(0)));
+
+        assert_eq!(Silent::COMPACTION.reason(), Some(UNSTATED_COMPACTION));
+        let violation = compacted.expect_err("the provided body never compacts");
+        assert_eq!(violation.clause(), "SY-32");
+    }
 
     /// A peer declaring more than the ceiling is told to provoke its own
     /// refusal, and nothing is allocated for it.

@@ -18,7 +18,9 @@ use happenstance_sync::{
     Ack, Classify, EventGroup, FailureClass, MemoryPeerError, MemoryResume, MemorySyncPeer,
     PeerLimits, Pulled, PushBatch, ReplicatedEvent, SendSyncPeer,
 };
+use happenstance_testkit::Capability;
 
+use crate::fixture::compact_memory_peer;
 use crate::{Refusal, RefusalsOf, SyncFixture, Violation, oversized_push_refusal};
 
 /// The per-value cap of Turnstile peer D's KV store: 128 KiB.
@@ -172,6 +174,18 @@ impl SyncFixture for KvCappedFixture {
             outcome: peer.push(&batch).await.map(drop),
         });
         Ok(refusals)
+    }
+
+    /// The capped peer compacts as the reference peer behind it does: a cap
+    /// on values says nothing about retention.
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    async fn compact_recorded_before(
+        &self,
+        peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        compact_memory_peer(&peer.inner, cutoff)
     }
 }
 

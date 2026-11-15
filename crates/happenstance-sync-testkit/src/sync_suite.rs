@@ -135,6 +135,7 @@ pub mod rules {
     use crate::violation::{Violation, ensure};
     use crate::{MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, SyncFixture};
 
+    mod retention;
     mod whole_log;
 
     /// The most pulls a rule makes before it decides the peer will never say
@@ -1023,6 +1024,65 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-32: a peer that has forgotten history reports the floor, and
+    /// refuses a resume token below it with class
+    /// [`Reseed`](happenstance_sync::FailureClass::Reseed), so a peer that was
+    /// offline longer than its retention window is told it cannot converge
+    /// rather than converging on a strict subset in silence.
+    ///
+    /// The rule plays the vessel (SY-8). A shore origin's log is pushed one
+    /// group per day, on a test clock: days 0 and 10, then a pull to the end
+    /// whose token is the vessel that goes offline on day 10; days 20, 50 and
+    /// 70, then a pull from that token to the end whose token is a vessel that
+    /// last synced on day 70; then days 100 and 125. On day 130 the fixture
+    /// compacts on a 90-day window, forgetting days 0 to 20. Then:
+    ///
+    /// * the peer's [`retention_floor`](happenstance_sync::PeerLimits::retention_floor)
+    ///   names one of the events it was asked to forget;
+    /// * a pull from the day-10 token is refused with class `Reseed`;
+    /// * a pull from the day-70 token hands back exactly the events of days 100
+    ///   and 125, compared whole (SY-35), each once.
+    ///
+    /// A fixture that declines [`COMPACTION`](crate::SyncFixture::COMPACTION)
+    /// is reported [`Skipped`](RuleOutcome::Skipped) with its stated reason.
+    ///
+    /// # Rejects
+    ///
+    /// A peer that compacts and answers the stale token anyway: one that
+    /// drains its log without an offset, so the old index lands on a later
+    /// group, and one that declares a floor and answers a stale token from
+    /// it. Both converge on a strict subset in silence. Also a peer that
+    /// refuses and declares no floor, one that refuses as `Transient`, which
+    /// a runner retries for ever, and one that refuses every token once it has
+    /// compacted. `tests/wrong_retention.rs` carries all five.
+    ///
+    /// # Does not reject
+    ///
+    /// A floor naming the wrong forgotten event: any event the rule asked the
+    /// peer to forget passes, and the reference peer's unit tests pin which
+    /// one. Nor a scattered purge, which SY-32 does not report in 1.x.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-32 if the peer refuses a push or a resumable
+    /// pull, declares no floor or a floor it was not asked to forget, answers
+    /// the stale token, refuses it with a class other than `Reseed`, or hands
+    /// back anything but the events written after the recent token.
+    pub async fn retention_gap_is_reported_not_silent<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        let fixture = open().await;
+        if let Some(reason) = F::COMPACTION.reason() {
+            return Ok(RuleOutcome::Skipped {
+                capability: "COMPACTION",
+                reason,
+            });
+        }
+        let peer = fixture.connect().await;
+        retention::reported_not_silent(&fixture, &peer).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What one log SY-37's rule wrote showed it.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum Log {
@@ -1754,6 +1814,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- A round trip preserves the whole log (SY-27, SY-28) --------
             round_trip_preserves_the_whole_log,
+
+            // --- A retention gap is reported, not silent (SY-32) ------------
+            retention_gap_is_reported_not_silent,
         }
     };
 }

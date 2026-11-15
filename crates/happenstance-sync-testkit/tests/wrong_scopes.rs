@@ -17,13 +17,15 @@
 
 use std::sync::Arc;
 
-use happenstance_core::{EventType, Query, QueryItem, StoreId, Tag, Tags};
+use happenstance_core::{EventType, Query, QueryItem, RecordedAt, StoreId, Tag, Tags};
 use happenstance_sync::{
     Ack, EventGroup, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled, PushBatch,
     ReplicatedEvent, SendSyncPeer,
 };
-use happenstance_sync_testkit::{RefusalsOf, SyncFixture, oversized_push_refusal, rules};
-use happenstance_testkit::{RuleOutcome, block_on};
+use happenstance_sync_testkit::{
+    RefusalsOf, SyncFixture, Violation, oversized_push_refusal, rules,
+};
+use happenstance_testkit::{Capability, RuleOutcome, block_on};
 
 /// The reference peer, withholding from every pull the events `withheld`
 /// matches. `None` withholds nothing: the control.
@@ -113,6 +115,20 @@ impl SyncFixture for ScopedFixture {
     /// hands back, and its push and its errors are the reference peer's own.
     async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
         oversized_push_refusal(peer).await
+    }
+
+    /// The reference peer's compaction, so SY-32's rule runs here too.
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    async fn compact_recorded_before(
+        &self,
+        _peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        self.inner
+            .compact_recorded_before(cutoff)
+            .map(drop)
+            .map_err(|error| Violation::new("SY-32", error.to_string()))
     }
 }
 
