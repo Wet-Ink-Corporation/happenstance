@@ -167,7 +167,8 @@ back against the tree phases 4 and 5 had already changed.
   (`kb-reference-spec-trace-has-suite-001`) — `cargo xtask spec-trace`'s
   citation check runs only against clause families `has_suite` admits; `PS`
   sat outside that switch for two slices after its conformance suite was
-  written, with every gate green throughout. Added 2026-08-15.
+  written, with every gate green throughout, and `SY` repeated it until #458.
+  Added 2026-08-15.
 - [`phase-8-specification-reconciliation-census.md`](../reference/phase-8-specification-reconciliation-census.md)
   (`kb-reference-phase-8-spec-reconciliation-001`) — the second census of the
   standing post-phase reconciliation criterion, hand-run for phase 8: of 401

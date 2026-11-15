@@ -11,9 +11,12 @@ summary: >-
   projection suite did not exist, the exclusion outlived the suite by two slices, and until it was
   flipped a PS clause could cite a rule that had never existed with every gate in the repository
   green. The flip is now held by
-  spec_trace::tests::the_projection_family_is_checked_against_its_suite and the one family that
-  still abstains, SY, is held by the test beside it, so widening the switch to everything is a build
-  failure rather than a judgement call. The transferable shape is an exclusion written for a true
+  spec_trace::tests::the_projection_family_is_checked_against_its_suite. SY then sat outside the
+  switch the same way: phase 13 wrote seven sync-testkit families and ten FROZEN SY clauses named
+  rules that existed nowhere, with every gate green, until #458 admitted SY and declared the names
+  still unwritten in xtask/src/spec_trace/sync_family.rs. CF is now the one family that abstains,
+  held by the test beside the PS one, so widening the switch to everything is a build failure
+  rather than a judgement call. The transferable shape is an exclusion written for a true
   reason, kept after the reason expired, and structurally invisible because the thing it disables is
   itself a check — the same shape the ES-7 and VT-9 markers carry one level up, and the property a
   ratchet's fail-on-discharge exemption list exists to supply and this switch did not have.
@@ -33,8 +36,9 @@ source_paths:
   - .kb/_intake/2026-08-15-adr-0030-checkpoint-progress.md
   - references/adr/0030-the-checkpoint-reports-the-commits-that-happened.md
   - xtask/src/spec_trace.rs
+  - xtask/src/spec_trace/sync_family.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-08-15
+last_reviewed: 2026-11-15
 ---
 
 # spec-trace's has_suite is a per-family switch, and PS sat outside it for two slices
@@ -43,7 +47,7 @@ last_reviewed: 2026-08-15
 
 `cargo xtask spec-trace`'s check 4 — does every conformance rule a clause cites actually exist —
 does not run against every clause family uniformly. It runs only against families `has_suite`
-admits (`xtask/src/spec_trace.rs:2715-2720`):
+admits (`xtask/src/spec_trace.rs:2728-2734`):
 
 ```rust
 fn has_suite(clause_id: &str) -> bool {
@@ -51,6 +55,7 @@ fn has_suite(clause_id: &str) -> bool {
         || clause_id.starts_with("VT-")
         || clause_id.starts_with("WF-")
         || clause_id.starts_with("PS-")
+        || clause_id.starts_with("SY-")
 }
 ```
 
@@ -76,13 +81,23 @@ before this workspace noticed.
 (`xtask/src/spec_trace.rs:3777-3784`) now asserts `has_suite("PS-1")` and `has_suite("PS-37")`
 directly, so a future regression — narrowing the prefix list back to exclude `PS` — fails the build
 rather than silently reopening the blind spot. The companion test,
-`the_replication_family_still_abstains_and_the_rest_do_not` (`:3796-3812`), asserts the reverse for
-the one family still legitimately excluded: `has_suite("SY-1")` must stay `false`, because
-`happenstance-sync-testkit` carries only two of the family's rules (#111) and checking every `SY`
-rule name would report the unwritten rest as missing — exactly the false-positive noise the original
-`PS` exclusion was written to avoid (`:3803-3807`). It also pins `CF-1`'s abstention, on the different ground that `CF` clauses are about
+`the_replication_family_is_checked_and_cf_still_abstains` (`xtask/src/spec_trace.rs:3807-3823`),
+asserts `has_suite("SY-1")` and pins `CF-1`'s abstention, on the ground that `CF` clauses are about
 the suite rather than checked by it. Widening `has_suite` to admit every family unconditionally is
 therefore a build failure today, not a judgement call left to the next editor.
+
+## SY repeated the shape, and #458 closed it
+
+Until #458 that test asserted the opposite for `SY`: `has_suite("SY-1")` had to stay `false`,
+because `happenstance-sync-testkit` then carried two of the family's rules (#111) and checking every
+`SY` name would have reported the unwritten rest as missing. Phase 13 wrote the rest of the
+families — seven, all in `RULE_FILES` — and the exclusion outlived its reason exactly as `PS`'s had:
+the phase 13 exit reconciliation found ten `[FROZEN]` `SY` clauses naming rules that existed
+nowhere, with every gate green. #458 admitted `SY` and, rather than repeat the original trade, wrote
+the names nothing can resolve into a table in `xtask/src/spec_trace/sync_family.rs`, each with its
+reason (`Scheduled` with its owning issue, `Elsewhere` with the file that holds the test, or
+`NotARuleName`), reconciled in both directions on every run. The noise the exclusion was avoiding
+is answered by a list that can only shrink, not by switching the check off.
 
 ## The transferable shape
 

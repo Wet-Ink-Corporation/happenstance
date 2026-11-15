@@ -4580,4 +4580,53 @@ mod tests {
         assert!(!suites.contains(SUITE), "{suites}");
         assert_eq!(suites.matches(" or ").count(), 6, "{suites}");
     }
+
+    /// The defect #458 reports, as a fixture: a `[FROZEN]` `SY` clause names a
+    /// rule nobody wrote. Check 4 now says so, and sends the reader to the sync
+    /// testkit rather than to `suite.rs`, which can never define an `SY` rule.
+    #[test]
+    fn an_unwritten_sy_rule_is_reported_against_the_sync_suites() {
+        let mut problems = Vec::new();
+        check_named_rules(
+            &one_clause("SY-3", "`a_rule_nobody_ever_wrote`"),
+            &nothing_resolves(),
+            &mut problems,
+        );
+
+        assert_eq!(
+            problems.len(),
+            1,
+            "one name is unresolved; got {problems:?}"
+        );
+        let problem = problems.concat();
+        assert!(problem.contains("a_rule_nobody_ever_wrote"), "{problem}");
+        assert!(
+            problem.contains("crates/happenstance-sync-testkit/src/sync_suite.rs"),
+            "{problem}"
+        );
+        assert!(!problem.contains(SUITE), "{problem}");
+    }
+
+    /// The other side: a name the sync table declares is accounted for and not
+    /// reported, beside one that is not declared and is.
+    #[test]
+    fn a_declared_sy_name_is_not_reported_and_its_neighbour_is() {
+        let mut problems = Vec::new();
+        check_named_rules(
+            &one_clause("SY-18", "`max_batch_events`; `a_rule_nobody_ever_wrote`"),
+            &nothing_resolves(),
+            &mut problems,
+        );
+
+        assert!(
+            problems
+                .iter()
+                .any(|p| p.contains("a_rule_nobody_ever_wrote")),
+            "got {problems:?}"
+        );
+        assert!(
+            !problems.iter().any(|p| p.contains("max_batch_events")),
+            "got {problems:?}"
+        );
+    }
 }
