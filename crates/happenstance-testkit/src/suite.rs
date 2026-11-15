@@ -103,8 +103,8 @@ pub mod rules {
     use futures_core::Stream;
 
     use happenstance_core::{
-        AppendError, Event, EventId, EventStore, MAX_EVENT_TYPE_LEN, MAX_TAG_LEN, Query,
-        ReadOptions, SequencePosition, SequencedEvent, StoreId, StoreLimit, collect,
+        AppendCondition, AppendError, Event, EventId, EventStore, MAX_EVENT_TYPE_LEN, MAX_TAG_LEN,
+        Query, ReadOptions, SequencePosition, SequencedEvent, StoreId, StoreLimit, collect,
     };
 
     use crate::fixtures::{
@@ -7302,15 +7302,7 @@ pub mod rules {
             types_of(&before)
         );
         if let [kept, removed_interior, kept_between, removed_tail] = before.as_slice() {
-            let answer = fixture.remove_outside_port(&[interior, tail]).await;
-            assert_eq!(
-                answer,
-                Removed::Deleted,
-                "the answer: a fixture declaring `REMOVAL` supported MUST override \
-                 `remove_outside_port` and return `Removed::Deleted` once it has \
-                 removed the named events. This fixture left the provided body, \
-                 which removes nothing"
-            );
+            remove_outside_port_or_fail(&fixture, &[interior, tail]).await;
 
             let after = read_ok(&store, &Query::all(), ReadOptions::new()).await;
             assert_removed_exactly(
@@ -7413,5 +7405,412 @@ pub mod rules {
              MUST still answer `true` for it. Got {kept:?}",
             survivor.id
         );
+    }
+
+    /// Asks the fixture to remove `positions` outside the port, and fails,
+    /// naming the forgotten override, unless it answers [`Removed::Deleted`].
+    ///
+    /// Shared by the removal rules, so that a fixture which declares
+    /// `REMOVAL` and leaves the provided body fails every one of them with
+    /// the same message, before anything is read back.
+    async fn remove_outside_port_or_fail<F: Fixture>(fixture: &F, positions: &[SequencePosition]) {
+        let answer = fixture.remove_outside_port(positions).await;
+        assert_eq!(
+            answer,
+            Removed::Deleted,
+            "the answer: a fixture declaring `REMOVAL` supported MUST override \
+             `remove_outside_port` and return `Removed::Deleted` once it has \
+             removed the named events. This fixture left the provided body, \
+             which removes nothing"
+        );
+    }
+
+    /// ES-38 (ADR-0028, decision 2): a store that has had events removed
+    /// outside the port **never hands a removed position out again**, and its
+    /// `read(Query::all())` and `head` describe exactly the events it still
+    /// holds.
+    ///
+    /// The rule removes the tail, appends, then removes everything and
+    /// appends again. Each append must land above every position the store
+    /// has ever assigned, `head` must name the last event still held (or be
+    /// `None` once nothing is), and the removed tail's identity must stay
+    /// unheld after the position above it is taken.
+    ///
+    /// The wrong implementations, each in
+    /// `tests/mutation_coverage/removed_history.rs`, and each removing
+    /// exactly what it is told to, so the guard passes them:
+    ///
+    /// * `RowidReuseFixture` is ES-38's named wrong implementation: a rowid
+    ///   table without `AUTOINCREMENT`, which allocates one above the largest
+    ///   rowid it still holds and so hands the deleted tail's position out
+    ///   again. `happenstance-sqlite`'s migration test shows the shape on
+    ///   real SQLite.
+    /// * `SequenceHeadFixture` reads `head` from the allocator
+    ///   (`sqlite_sequence`, a sequence's `last_value`) rather than from the
+    ///   rows, so after the removal it names the tail that is gone.
+    /// * `TruncatingWhenEmptyFixture` removes a part correctly and rewinds the
+    ///   allocator when told to remove everything, which is `TRUNCATE …
+    ///   RESTART IDENTITY`.
+    ///
+    /// `RenumberingFixture`, which rebuilds the log from its survivors, fails
+    /// here too: after a tail removal its survivors keep their positions, and
+    /// the next append takes the tail's. That is ES-38's *Rejects*.
+    ///
+    /// Only the tail and everything are removed. An interior removal adds
+    /// nothing the guard does not already check, and the tail is where an
+    /// allocator that reads its last row goes wrong.
+    ///
+    /// It passes on CF-27's instrument by delegation, because the store under
+    /// the decorator still holds every withheld event, so the instrument's
+    /// pass is not evidence about any allocator; the adapters' passes are. It
+    /// asserts nothing about positions before the first removal, which are
+    /// other rules' business, and it stands on
+    /// [`removal_outside_the_port_removes_exactly_the_named_events`]: a store
+    /// the removal did not leave is refused, not judged.
+    pub async fn positions_are_not_reused_after_removal<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        require!(F: REMOVAL);
+
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        // One event per batch, so that SY-39's caveat on removing part of a
+        // write group stays vacuous here.
+        let first = append_ok(
+            &store,
+            &[tagged_event("BeforeTheTail", &[("reuse", "first")])],
+        )
+        .await;
+        let survivor = append_ok(
+            &store,
+            &[tagged_event("Survivor", &[("reuse", "survivor")])],
+        )
+        .await;
+        let tail = append_ok(&store, &[tagged_event("RemovedTail", &[("reuse", "tail")])]).await;
+
+        settle!(fixture);
+        let before = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&before),
+            [first, survivor, tail].map(SequencePosition::get),
+            "the anchor: three events were appended before anything was \
+             removed, so a read must show exactly those three, at the positions \
+             their appends returned. Got {:?}",
+            types_of(&before)
+        );
+        // `Some` by the anchor. Carried as an `Option` rather than unwrapped,
+        // so that the one answer that passes below is `Some(Ok(false))`.
+        let removed_tail = before.last().map(|event| event.id);
+
+        remove_outside_port_or_fail(&fixture, &[tail]).await;
+        settle!(fixture);
+        let after_tail = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&after_tail),
+            [first, survivor].map(SequencePosition::get),
+            "the removal did not take: the tail at {tail} was removed, so a read \
+             must show the two events before it and nothing else. This rule \
+             judges only a store the named events have left; \
+             `removal_outside_the_port_removes_exactly_the_named_events` names \
+             this defect. Got {:?}",
+            types_of(&after_tail)
+        );
+        assert_eq!(
+            head_ok(&store).await,
+            Some(survivor),
+            "head names an event the store no longer holds: `head` is the \
+             highest position visible in the store, which is now {survivor}. A \
+             head read from the allocator (`sqlite_sequence`, a sequence's \
+             `last_value`) still names the removed tail at {tail}"
+        );
+
+        let next = append_ok(
+            &store,
+            &[tagged_event("AfterTheTail", &[("reuse", "next")])],
+        )
+        .await;
+        assert!(
+            next > tail,
+            "a removed position was handed out again: the append after removing \
+             the tail at {tail} took {next}. A rowid table without \
+             `AUTOINCREMENT` allocates one above the largest rowid it still \
+             holds, so it hands the deleted tail's position out again (ES-38's \
+             named wrong implementation). A store rebuilt from its survivors \
+             does the same (ES-38's Rejects)"
+        );
+        let held = match removed_tail {
+            Some(id) => Some(store.contains_event_id(id).await),
+            None => None,
+        };
+        assert!(
+            matches!(held, Some(Ok(false))),
+            "the removed identity is held again: the tail removed at {tail} had \
+             identity {removed_tail:?}, and after the next append \
+             `contains_event_id` must still answer `false` for it (ES-41, \
+             store-relative). Got {held:?}"
+        );
+
+        settle!(fixture);
+        let after_next = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&after_next),
+            [first, survivor, next].map(SequencePosition::get),
+            "`Query::all()` means every event this store holds: the two survivors \
+             at the positions they were assigned, then the new event at the \
+             position its append returned. Got {:?}",
+            types_of(&after_next)
+        );
+
+        if let Err(skip) =
+            assert_emptied_store_does_not_restart(&fixture, &store, [first, survivor, next]).await
+        {
+            return skip;
+        }
+        RuleOutcome::Ran
+    }
+
+    /// The second stage of [`positions_are_not_reused_after_removal`]: removes
+    /// every event `everything` names, which is every event the store holds,
+    /// and requires an empty read, a `None` head, and the next append above
+    /// the highest of them.
+    ///
+    /// A `Result` so that a fixture which cannot settle reports its skip
+    /// (CF-42) from here as the rule would.
+    async fn assert_emptied_store_does_not_restart<F: Fixture>(
+        fixture: &F,
+        store: &F::Store,
+        everything: [SequencePosition; 3],
+    ) -> Result<(), RuleOutcome> {
+        let [.., highest] = everything;
+        remove_outside_port_or_fail(fixture, &everything).await;
+
+        crate::settle::settled(fixture).await?;
+        let emptied = read_ok(store, &Query::all(), ReadOptions::new()).await;
+        assert!(
+            emptied.is_empty(),
+            "the removal did not take: every event the store held, at {:?}, was \
+             removed, so a read must show nothing. Got {:?}",
+            everything.map(SequencePosition::get),
+            types_of(&emptied)
+        );
+        let head = head_ok(store).await;
+        assert_eq!(
+            head, None,
+            "head names an event the store no longer holds: every event was \
+             removed, so `head` must be `None`, as on a store that never held \
+             any. Got {head:?}"
+        );
+
+        let restarted = append_ok(
+            store,
+            &[tagged_event("AfterEverything", &[("reuse", "restarted")])],
+        )
+        .await;
+        assert!(
+            restarted > highest,
+            "a store emptied by removal handed out a position it had already \
+             assigned: after removing everything up to {highest}, the next append \
+             took {restarted}, restarting from the top of an empty table. That \
+             is what SQLite does without `AUTOINCREMENT` and what `TRUNCATE … \
+             RESTART IDENTITY` does to a Postgres sequence. `REMOVAL`'s contract \
+             forbids rewinding the allocator: that makes a different store"
+        );
+
+        crate::settle::settled(fixture).await?;
+        let shown = read_ok(store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&shown),
+            [restarted.get()],
+            "after everything was removed, the store holds only the event \
+             appended since, at the position its append returned. Got {:?}",
+            types_of(&shown)
+        );
+        let head = head_ok(store).await;
+        assert_eq!(
+            head,
+            Some(restarted),
+            "`head` names the one event the store holds, at {restarted}. Got {head:?}"
+        );
+        Ok(())
+    }
+
+    /// A condition over the `ClaimRegistered` event tagged `claim` = `claim`.
+    fn over(claim: &str) -> AppendCondition {
+        condition(query_of(&["ClaimRegistered"], &[("claim", claim)]))
+    }
+
+    /// An event outside [`over`]'s query that names `claim`, so admitting it
+    /// never creates a match for the condition it was appended under.
+    fn note(claim: &str) -> Event {
+        tagged_event("EngineerNoteFiled", &[("claim", claim)])
+    }
+
+    /// ES-40 (ADR-0028, decision 2): a condition whose only matching event
+    /// was removed outside the port **admits** the append, and a condition
+    /// over an event the store still holds still refuses it.
+    ///
+    /// # Why admission, and not ES-40's MAY
+    ///
+    /// The MAY is the caller's reading: a caller must not rely on a refusal
+    /// over history the store may have lost. On the store's side, a refusal
+    /// there names an event its own `read` does not yield and its own
+    /// `contains_event_id` denies, which contradicts ES-38's "every clause of
+    /// this section with respect to the events it still holds" and is half a
+    /// removal, the guard's membership argument again. ADR-0028 rejects the
+    /// fail-closed outcome for 1.x. So the rule asserts the vacuous pass as
+    /// specified behaviour, and it has two readers: an adapter author reads it
+    /// as what the store must do, and an ingest author reads it as the hazard
+    /// E2E-47 describes, a condition that says nothing about events the log
+    /// no longer has.
+    ///
+    /// # The arrangement
+    ///
+    /// Three registrations, and the interior one is removed, so survivors sit
+    /// on both sides of the hole. That reaches both of CF-27's evaluation
+    /// paths, at or below the highest withheld position and above it, and a
+    /// SQL store's index range on either side of a gap. Before the removal the
+    /// probe must be refused, so the pass after it is not vacuous by accident.
+    /// The survivors are compared by content: positions are ES-38's business,
+    /// so a store that renumbered passes here and fails there.
+    ///
+    /// The wrong implementations, each in
+    /// `tests/mutation_coverage/removed_history.rs`:
+    ///
+    /// * `RememberingConditionFixture` is a soft delete whose condition path
+    ///   still sees what was removed: `WithholdingStore` without its condition
+    ///   rewrite.
+    /// * `FailClosedFixture` refuses every condition once it knows it has been
+    ///   pruned, which is E2E-47's third outcome spelled as
+    ///   `ConditionViolated`.
+    /// * `ConditionBlindFixture` stops evaluating conditions once it has lost
+    ///   history, and admits an append over a survivor.
+    ///
+    /// It stands on
+    /// [`removal_outside_the_port_removes_exactly_the_named_events`]: a store
+    /// the removal did not leave with exactly the survivors is refused, not
+    /// judged.
+    pub async fn condition_over_removed_history_does_not_reject<F: Fixture>(
+        open: impl AsyncFn() -> F,
+    ) -> RuleOutcome {
+        require!(F: REMOVAL);
+
+        let fixture = open().await;
+        let store = fixture.connect().await;
+
+        let below = append_ok(
+            &store,
+            &[tagged_event("ClaimRegistered", &[("claim", "kept-below")])],
+        )
+        .await;
+        let gone = append_ok(
+            &store,
+            &[tagged_event("ClaimRegistered", &[("claim", "removed")])],
+        )
+        .await;
+        let above = append_ok(
+            &store,
+            &[tagged_event("ClaimRegistered", &[("claim", "kept-above")])],
+        )
+        .await;
+
+        let live = store
+            .append(&[note("removed")], Some(&over("removed")))
+            .await;
+        assert!(
+            matches!(live, Err(AppendError::ConditionViolated(_))),
+            "the probe is live: while the store holds the matching event the \
+             condition must refuse, as `ConditionViolated`, or the vacuous pass \
+             below proves nothing. Got {live:?}"
+        );
+
+        settle!(fixture);
+        let before = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        assert_eq!(
+            positions_of(&before),
+            [below, gone, above].map(SequencePosition::get),
+            "the anchor: three registrations were appended and the probe was \
+             refused, so a read must show exactly the three, at the positions \
+             their appends returned. Got {:?}",
+            types_of(&before)
+        );
+        let survivors: Vec<&Event> = before
+            .iter()
+            .filter(|event| event.position != gone)
+            .map(|event| &event.event)
+            .collect();
+
+        remove_outside_port_or_fail(&fixture, &[gone]).await;
+        settle!(fixture);
+        let after = read_ok(&store, &Query::all(), ReadOptions::new()).await;
+        // By content, not by position: positions after a removal are ES-38's
+        // business, and the guard names a store that moved them.
+        assert_eq!(
+            after.iter().map(|event| &event.event).collect::<Vec<_>>(),
+            survivors,
+            "the removal did not leave exactly the survivors: the registration \
+             at {gone} was removed, so a read must show the other two and nothing \
+             else. This rule judges only a store the named event has left; \
+             `removal_outside_the_port_removes_exactly_the_named_events` names \
+             this defect. Got {:?}",
+            types_of(&after)
+        );
+
+        if let Err(skip) = assert_the_vacuous_pass(&fixture, &store).await {
+            return skip;
+        }
+
+        for claim in ["kept-below", "kept-above"] {
+            let refused = store.append(&[note(claim)], Some(&over(claim))).await;
+            assert!(
+                matches!(refused, Err(AppendError::ConditionViolated(_))),
+                "a removal is not a licence: the store still holds the {claim:?} \
+                 registration, so a condition over it MUST still refuse, as \
+                 `ConditionViolated` rather than a store error. A store \
+                 that stops evaluating conditions once it has lost history has \
+                 read ES-40's vacuous pass as 'conditions no longer apply'. Got \
+                 {refused:?}"
+            );
+        }
+        RuleOutcome::Ran
+    }
+
+    /// The vacuous pass: a condition over the removed registration admits the
+    /// append, and the admitted event reads back at the position the append
+    /// returned.
+    ///
+    /// A `Result` for [`assert_emptied_store_does_not_restart`]'s reason.
+    async fn assert_the_vacuous_pass<F: Fixture>(
+        fixture: &F,
+        store: &F::Store,
+    ) -> Result<(), RuleOutcome> {
+        let admitted = store
+            .append(&[note("removed")], Some(&over("removed")))
+            .await;
+        assert!(
+            admitted.is_ok(),
+            "ES-40, ADR-0028: a condition over removed history passes \
+             vacuously. This store refused it ({admitted:?}). It is still judging \
+             the condition against an event that `read` no longer yields and \
+             `contains_event_id` no longer holds: a soft delete the condition \
+             path never learned about, or E2E-47's 'this log cannot evaluate' \
+             outcome, which ADR-0028 rejects for 1.x"
+        );
+        if let Ok(note_at) = admitted {
+            crate::settle::settled(fixture).await?;
+            let named = read_ok(
+                store,
+                &query_tagged(&[("claim", "removed")]),
+                ReadOptions::new(),
+            )
+            .await;
+            assert_eq!(
+                (positions_of(&named), types_of(&named)),
+                (vec![note_at.get()], vec!["EngineerNoteFiled"]),
+                "the admitted append must be in the log: the only event still \
+                 naming the removed claim is the note admitted at {note_at}"
+            );
+        }
+        Ok(())
     }
 }

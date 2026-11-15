@@ -14,9 +14,9 @@
 use core::future::{Future, ready};
 use std::collections::BTreeSet;
 
-use happenstance_core::EventStore;
+use happenstance_core::{EventStore, SequencePosition};
 use happenstance_testkit::fixtures::{MemoryFixture, MemoryHandle, tagged_event};
-use happenstance_testkit::{Capability, Fixture, WithholdingStore};
+use happenstance_testkit::{Capability, Fixture, Removed, WithholdingStore};
 
 /// The seeded history: three batches of the event types the suite's rules
 /// put in their append conditions.
@@ -122,18 +122,27 @@ impl Fixture for PrunedMemoryFixture {
          tests/withholding_store_instruments.rs",
     );
 
-    // Declined, though `withhold` could answer it: the instrument hides events
-    // from a store that still holds them, and `REMOVAL` promises a deletion
-    // from the store's own storage (#147). Granting it here would let the
-    // guard rule certify a removal nothing performed.
-    const REMOVAL: Capability = Capability::declined(
-        "the instrument withholds events from a MemoryEventStore that still holds \
-         them, which is hiding rather than deleting, and the inner store has no \
-         delete of its own",
-    );
+    // Granted by forwarding to `withhold` (#151). At every seam of the port, a
+    // withheld event behaves as a removed one: that is CF-27's claim, and
+    // `accuracy.rs` proves the report it rests on. So the guard and ES-40's
+    // rule judge here exactly what they judge on an adapter. ES-38's rule
+    // passes by delegation, because the inner store still holds every
+    // position, and says nothing here about any allocator.
+    const REMOVAL: Capability = Capability::SUPPORTED;
 
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // A second handle onto the same instrument: a cheap clone of two `Arc`s.
         ready(self.store.clone())
+    }
+
+    async fn remove_outside_port(&self, positions: &[SequencePosition]) -> Removed {
+        // Test code: `remove_outside_port`'s contract lets an override panic
+        // on a broken environment, and a rule names only positions the store
+        // holds, which the inner memory store always can.
+        self.store
+            .withhold(positions)
+            .await
+            .expect("a rule names only positions the inner store holds, and its reads do not fail");
+        Removed::Deleted
     }
 }

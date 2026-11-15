@@ -5404,3 +5404,8 @@ pub(crate) mod payload_budget;
 // `Fixture::REMOVAL`'s wrong implementations (#147), declared here at the end
 // for the same reasons.
 pub(crate) mod removal;
+
+// The stores whose removal is right and whose behaviour after it is not,
+// which ES-38's and ES-40's rules reject (#151, #154). At the end for the
+// same reasons again.
+pub(crate) mod removed_history;

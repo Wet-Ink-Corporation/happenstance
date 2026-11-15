@@ -1029,7 +1029,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 67] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 65] = [
     // ---- VT: value types -------------------------------------------------
     // VT-6's `restored_peer_does_not_reissue_identities` left this table at
     // #133, in the change that wrote it as the restore family's rule: a name
@@ -1283,21 +1283,21 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 67] = [
         "checkpoint_lag_is_not_a_position_difference",
         Unresolvable::Scheduled("the phase that lands checkpoint lag"),
     ),
-    (
-        "ES-38",
-        "positions_are_not_reused_after_removal",
-        Unresolvable::Scheduled("the phase that lands history removal"),
-    ),
+    // ES-38's `positions_are_not_reused_after_removal` left this table at
+    // #151, in the change that wrote it against `Fixture::REMOVAL`: a name
+    // that starts resolving fails the gate as a stale entry. Five lines, the
+    // entry's own, so the `spec_trace.rs:N` citations below this point keep
+    // their numbers, as VT-6's did.
     (
         "ES-39",
         "a_store_reports_the_history_it_does_not_hold",
         Unresolvable::Scheduled("the phase that lands history removal, with ES-38"),
     ),
-    (
-        "ES-40",
-        "condition_over_removed_history_does_not_reject",
-        Unresolvable::Scheduled("the phase that lands history removal, with ES-38"),
-    ),
+    // ES-40's `condition_over_removed_history_does_not_reject` left at #154,
+    // for the same reason and in the same way: it resolves now, and a
+    // resolving name is a stale entry. Five lines for five, so nothing below
+    // moves. ES-39's entry above stays, because its rule is still a question
+    // phase 14's experiment answers.
     // ---- PS: the projection store ----------------------------------------
     (
         // ADR-0062 took the round-trip discipline off the signature, so the
