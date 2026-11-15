@@ -50,9 +50,12 @@
 //! Each rule names a wrong implementation, and that implementation lives in
 //! this crate's `tests/wrong_peers.rs` — SY-18's in `tests/wrong_limits.rs`,
 //! over [`KvCappedFixture`], its batch rule's in `tests/wrong_peers.rs`,
-//! SY-23's in `tests/wrong_orders.rs`, and SY-28's in `tests/wrong_scopes.rs`
-//! — where the rule is shown to fail it. A rule no peer can fail is
-//! decorative.
+//! SY-23's in `tests/wrong_orders.rs`, SY-28's in `tests/wrong_scopes.rs`, and
+//! SY-31's across a reopen in `tests/wrong_reopens.rs` — where the rule is
+//! shown to fail it. A rule no peer can fail is decorative. The mount also
+//! emits `every_declined_capability_is_stated_by_this_fixture`, which fails a
+//! fixture that leaves [`REOPEN`](SyncFixture::REOPEN) at this crate's default
+//! declension ([`sync_declensions_are_stated`]).
 //!
 //! **No peer or ingest rule decodes a payload** (SY-35), and **no rule in
 //! [`rules`] holds two peers** (SY-8). [`rules`] says how the rules keep both. The model family
@@ -339,7 +342,8 @@ pub mod sync_model;
 
 pub use fixture::{
     MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, MemorySyncFixture, MemorySyncHandle,
-    Refusal, RefusalsOf, SyncFixture, batch_over_the_limit, oversized_push_refusal,
+    Refusal, RefusalsOf, SyncFixture, UNSTATED_SYNC_REOPEN, batch_over_the_limit,
+    oversized_push_refusal, sync_declensions_are_stated,
 };
 pub use kv_capped::{KV_VALUE_CAP, KvCappedFixture, KvCappedPeer, KvPeerError};
 pub use sync_suite::{
@@ -571,6 +575,16 @@ macro_rules! sync_peer_conformance {
             // test, so every rule gets its own fixture.
             async fn __conformance_fixture() -> impl $crate::__private::SyncFixture {
                 $fixture
+            }
+
+            // CF-18's machine-checked half, emitted here rather than through
+            // `$emit` so a caller's emitter cannot drop it, as the ingest
+            // family's is.
+            #[cfg_attr(not(target_arch = "wasm32"), test)]
+            #[cfg_attr(target_arch = "wasm32", ::wasm_bindgen_test::wasm_bindgen_test)]
+            fn every_declined_capability_is_stated_by_this_fixture()
+            -> ::core::result::Result<(), $crate::Violation> {
+                $crate::sync_declensions_are_stated(__conformance_fixture)
             }
 
             $crate::for_each_sync_peer_rule!($emit);

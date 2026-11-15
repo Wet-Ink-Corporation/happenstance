@@ -13,6 +13,8 @@
 //! store, through the generic [`round_trip_through_the_peer`], which names
 //! only the ports a near store implements.
 
+use std::sync::{Mutex, MutexGuard};
+
 use happenstance_core::{Event, EventStore, Query, ReadOptions, SequencedEvent, Tags, collect};
 use happenstance_sync::{
     EventGroup, IngestGroup, IngestStore, PushBatch, StoreResume, SyncPeer, Waiting,
@@ -21,6 +23,7 @@ use happenstance_sync::{
 use happenstance_sync_testkit::{
     IngestFixture, MemoryIngestFixture, RefusalsOf, SyncFixture, oversized_push_refusal,
 };
+use happenstance_testkit::{Capability, Reopened};
 use tokio::sync::OnceCell;
 
 use super::endpoint::{LiveTransport, fresh_schema};
@@ -29,33 +32,83 @@ use crate::event_store::{NeonEventStore, NeonSyncPeer};
 
 /// One fresh schema per fixture, and a peer over a new handle onto it per
 /// `connect`.
+///
+/// The schema outlives the transport: [`reopen`](SyncFixture::reopen) drops
+/// it, and the next `connect` builds another onto the same schema.
 #[derive(Debug)]
 struct NeonPeerFixture {
-    schema: OnceCell<(NeonConfig, LiveTransport)>,
+    /// The schema, minted and migrated on the first `connect`, and the same
+    /// across a reopen.
+    schema: OnceCell<NeonConfig>,
+    /// The transport every handle shares, built on the first `connect` after
+    /// construction or a reopen.
+    ///
+    /// A `Mutex` because the state really is shared and mutable (OWN-11):
+    /// `connect` fills it and `reopen` empties it, both through `&self`, and
+    /// the fixture's futures may run on a multi-threaded runtime. A
+    /// `std::sync::Mutex`: every guard is a statement long and none is held
+    /// across an `.await`.
+    transport: Mutex<Option<LiveTransport>>,
 }
 
 impl NeonPeerFixture {
     fn new() -> Self {
         Self {
             schema: OnceCell::new(),
+            transport: Mutex::new(None),
         }
+    }
+
+    /// The cell, locked for one statement.
+    fn current(&self) -> MutexGuard<'_, Option<LiveTransport>> {
+        self.transport
+            .lock()
+            .expect("no test thread panics while holding the fixture's transport")
     }
 }
 
 impl SyncFixture for NeonPeerFixture {
     type Peer = NeonSyncPeer<LiveTransport>;
 
+    /// Supported, over the endpoint. [`reopen`](SyncFixture::reopen) drops the
+    /// fixture's transport, and with it the HTTPS client and the read ledger
+    /// every handle shared, and the next `connect` builds a fresh
+    /// `LiveTransport` over the same `NeonConfig`: nothing a handle held in
+    /// this process survives, and the rows the endpoint committed do. There is
+    /// no connection to close: each request is one HTTP round trip.
+    const REOPEN: Capability = Capability::SUPPORTED;
+
     async fn connect(&self) -> Self::Peer {
-        let (config, transport) = self.schema.get_or_init(fresh_schema).await;
-        // A cheap handle onto the one client and ledger, and a copy of a few
-        // names, which the store keeps.
-        NeonSyncPeer::new(NeonEventStore::new(transport.clone(), config.clone()))
+        let config = self
+            .schema
+            .get_or_init(|| async {
+                let (config, transport) = fresh_schema().await;
+                *self.current() = Some(transport);
+                config
+            })
+            .await;
+        // A cheap handle onto the one client and ledger, which the cell keeps.
+        let transport = self
+            .current()
+            .get_or_insert_with(LiveTransport::new)
+            .clone();
+        // A copy of a few names, which the store keeps.
+        NeonSyncPeer::new(NeonEventStore::new(transport, config.clone()))
     }
 
     /// The oversized push, the refusal every peer that honours its own
     /// limits can be driven into: `Split`, before the wire.
     async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
         oversized_push_refusal(peer).await
+    }
+
+    /// Drops the transport, and with it the client's pooled HTTPS
+    /// connections. Taken out of the cell first, so the destructor runs after
+    /// the guard is released.
+    async fn reopen(&self) -> Reopened {
+        let dropped = self.current().take();
+        drop(dropped);
+        Reopened::Discarded
     }
 }
 

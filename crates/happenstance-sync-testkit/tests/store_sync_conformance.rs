@@ -470,6 +470,11 @@ struct StorePeerFixture {
 impl SyncFixture for StorePeerFixture {
     type Peer = MemoryStorePeer;
 
+    const REOPEN: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+        "the store behind this `StoreSyncPeer` is the in-memory ingest store, which has no \
+         medium outside the process a reopen could read back",
+    );
+
     async fn connect(&self) -> Self::Peer {
         StoreSyncPeer::new(self.store.connect().await, self.store.connect().await)
     }

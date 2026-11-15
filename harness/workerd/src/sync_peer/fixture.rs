@@ -25,6 +25,7 @@ use happenstance_sync_testkit::{
     IngestFixture as _, Refusal, RefusalsOf, SyncFixture, batch_over_the_limit,
     oversized_push_refusal,
 };
+use happenstance_testkit::Capability;
 
 use crate::ingest::fixture::WorkerdIngestFixture;
 
@@ -58,6 +59,18 @@ impl WorkerdSyncFixture {
 
 impl SyncFixture for WorkerdSyncFixture {
     type Peer = RemoteSyncPeer<ObjectExchange>;
+
+    /// Declined: every `connect` already builds a new client over a store
+    /// re-derived from the object's state, so the handle swap SY-31's rule
+    /// makes is all a reopen here could add, and the restart the capability
+    /// stands for is beyond a runner inside one request. The restarts this
+    /// harness does drive are phased across two requests, in `crate::restart`.
+    const REOPEN: Capability = Capability::declined(
+        "each connect builds a new client over a store re-derived from the object's state, so \
+         the handle swap SY-31's rule already makes is all a reopen here could do; restarting \
+         the object, the crash the capability stands for, is beyond a runner inside one \
+         request, and the restarts this harness drives are phased across two (crate::restart)",
+    );
 
     /// [`PeerLimits::minimum`] at both ends, as the object's own routes
     /// declare: the limits a client must be told out of band (ADR-0097).

@@ -339,6 +339,11 @@ impl RemoteFixture {
 impl SyncFixture for RemoteFixture {
     type Peer = RemoteSyncPeer<Loopback>;
 
+    const REOPEN: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+        "the far side of the loopback exchange is the in-memory ingest store, which has no \
+         medium outside the process a reopen could read back",
+    );
+
     async fn connect(&self) -> Self::Peer {
         self.client(PeerLimits::minimum()).await
     }
