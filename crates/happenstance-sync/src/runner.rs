@@ -34,9 +34,24 @@
 //!   the push, where the runner holds no batch it could halve.
 //! * [`Park`](crate::FailureClass::Park): the edge parks ([`EdgeState::Parked`]).
 //! * [`Stop`](crate::FailureClass::Stop): the edge stops ([`EdgeState::Stopped`]).
+//! * [`Reseed`](crate::FailureClass::Reseed): the edge stops with
+//!   [`StopCause::RetentionGap`], which the next section describes.
 //!
 //! A parked or stopped edge does no more I/O: every later step returns
 //! [`StepError::Parked`] or [`StepError::Stopped`] at once.
+//!
+//! # Retention gaps
+//!
+//! A far side that has forgotten history this edge's token has not reached
+//! refuses the pull with class [`Reseed`](crate::FailureClass::Reseed)
+//! (SY-32). The edge stops with [`StopCause::RetentionGap`], carrying the far
+//! side's [`retention_floor`](crate::PeerLimits::retention_floor) as it read
+//! at the refusal, and [`SyncStatus::retention_gap`] reads it back. Nothing
+//! from the refused pull lands, and [`Edge::run`] returns without waiting:
+//! a retry fails the same way for ever, and pulling from the start would
+//! converge on a strict subset in silence. The runner never compares a token
+//! with the floor itself; [`RetentionGap`]'s module says why only the peer
+//! can.
 //!
 //! # The incarnation check
 //!
@@ -130,6 +145,7 @@ mod backoff;
 mod drive;
 mod error;
 mod incarnation;
+mod retention;
 mod run;
 mod status;
 mod watermark;
@@ -141,6 +157,7 @@ pub(crate) use adjudicate::{Judged, judge};
 pub use backoff::{Backoff, BackoffError, SendSleep, Sleep};
 pub use error::{Failure, Phase, StepError, StepFailure};
 pub use incarnation::{IncarnationChanged, StopCause};
+pub use retention::RetentionGap;
 pub use status::{EdgeState, Pending, Stepped, SyncStatus};
 pub use watermark::{LoadWatermarkError, Watermark};
 
@@ -421,20 +438,27 @@ impl<R, A: Adjudicate> Edge<R, A> {
         self.offered = None;
         let outcome = self.exchange(peer, store).await;
         if let Err(error) = &outcome {
-            let changed = match error {
-                StepError::Incarnation(change) => Some(*change),
+            let failure = error.failure();
+            let cause = match error {
+                StepError::Incarnation(change) => Some(StopCause::Incarnation(*change)),
+                // The floor is read at refusal time, because it can move; the
+                // read is synchronous and on the failure path only (SY-32).
+                _ if failure.class == FailureClass::Reseed => Some(StopCause::RetentionGap(
+                    RetentionGap::new(failure.phase, peer.limits().retention_floor),
+                )),
                 _ => None,
             };
-            self.react(error.failure(), changed);
+            self.react(failure, cause);
         }
         outcome
     }
 
-    /// Records `failure` and moves the edge to the state its class calls for.
-    fn react(&mut self, failure: Failure, changed: Option<IncarnationChanged>) {
+    /// Records `failure` and moves the edge to the state its class calls for,
+    /// or to `cause` when the step already named why it stops.
+    fn react(&mut self, failure: Failure, cause: Option<StopCause>) {
         self.status.last_failure = Some(failure);
-        self.status.state = if let Some(change) = changed {
-            EdgeState::Stopped(StopCause::Incarnation(change))
+        self.status.state = if let Some(cause) = cause {
+            EdgeState::Stopped(cause)
         } else {
             match failure.class {
                 FailureClass::Transient => EdgeState::Running,
@@ -446,9 +470,12 @@ impl<R, A: Adjudicate> Edge<R, A> {
                     None => EdgeState::Parked(failure),
                 },
                 FailureClass::Park => EdgeState::Parked(failure),
-                FailureClass::Stop | FailureClass::Reseed => {
-                    EdgeState::Stopped(StopCause::Failure(failure))
-                }
+                FailureClass::Stop => EdgeState::Stopped(StopCause::Failure(failure)),
+                // `step` always names the cause for this class, with the
+                // peer's floor; kept total, without a panic, all the same.
+                FailureClass::Reseed => EdgeState::Stopped(StopCause::RetentionGap(
+                    RetentionGap::new(failure.phase, None),
+                )),
             }
         };
     }
