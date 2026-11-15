@@ -732,7 +732,7 @@ pub(crate) fn run(out: &mut impl io::Write, mode: Mode) -> Result<()> {
     //    `backticked_idents` keeps the whole qualified string.
     check_named_rules(&clauses, &resolvable, &mut problems);
     let unresolvable = reconcile_unresolvable(
-        &UNRESOLVABLE_RULE_NAMES,
+        sync_family::all_declarations(),
         &clauses,
         &resolvable,
         &root,
@@ -854,6 +854,8 @@ fn check_named_rules(
             }
             let looked_in = if rule.starts_with("wire::") {
                 WIRE_TESTS.join(" or ")
+            } else if c.id.starts_with("SY-") {
+                sync_family::suites()
             } else {
                 SUITE.to_owned()
             };
@@ -867,11 +869,10 @@ fn check_named_rules(
     }
 }
 
-/// The [`UNRESOLVABLE_RULE_NAMES`] entry covering one clause's citation of one
-/// rule, if there is one.
+/// The declaration covering one clause's citation of one rule, in either table
+/// [`sync_family::all_declarations`] chains, if there is one.
 fn declaration_for(clause: &str, rule: &str) -> Option<&'static Unresolvable> {
-    UNRESOLVABLE_RULE_NAMES
-        .iter()
+    sync_family::all_declarations()
         .find(|(c, r, _)| *c == clause && *r == rule)
         .map(|(_, _, why)| why)
 }
@@ -885,14 +886,13 @@ fn declaration_for(clause: &str, rule: &str) -> Option<&'static Unresolvable> {
 /// [`Unresolvable::Elsewhere`] path that no longer contains its identifier is the
 /// one this exists for: those twenty-six tests are real, they are the only thing
 /// standing behind twelve `[FROZEN]` clauses, and until this function nothing in
-/// the workspace would have noticed one being deleted — `collect_rules` reads
-/// four suite files and none of these is in them.
+/// the workspace would have noticed one being deleted: none is in `RULE_FILES`.
 ///
 /// Returns the per-kind census, in [`Unresolvable`]'s own order, for the summary
 /// line. Counted rather than written down, per [`UNCLAIMED_PENDING_ADR`]'s
 /// precedent: a comment stating a total is a second thing to update.
-fn reconcile_unresolvable(
-    declared: &[(&str, &str, Unresolvable)],
+fn reconcile_unresolvable<'a>(
+    declared: impl IntoIterator<Item = &'a (&'a str, &'a str, Unresolvable)>,
     clauses: &[Clause],
     resolvable: &BTreeSet<String>,
     root: &Path,
@@ -1029,7 +1029,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 63] = [
     // ---- VT: value types -------------------------------------------------
     // VT-6's `restored_peer_does_not_reissue_identities` left this table at
     // #133, in the change that wrote it as the restore family's rule: a name
@@ -1369,23 +1369,23 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
     ),
     // ---- SY: replication -------------------------------------------------
     //
-    // Check 4 does not demand this, because `SY` has no suite it reads. It is
-    // declared for the other half: SY-21 is `[FROZEN]` on it, and deleting it
-    // must fail the gate.
-    //
-    // SY-21's second rule, `convergent_projection_cannot_observe_local_position`,
-    // was declared here as `Scheduled` for phase 13 until #457 wrote it into
-    // the convergence suite. It resolves there now, through `RULE_FILES`, so
-    // `reconcile_unresolvable` would report its entry as stale, and it is gone.
-    // This comment is as long as that entry and the old comment were, on
-    // purpose: `.kb` atoms cite this file by line, and every line below keeps
-    // the number they cite.
-    (
-        "SY-21",
-        "apply_is_handed_the_origin_identity_not_the_local_position",
-        Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
-    ),
+    // Declared in `sync_family`'s table, SY-21's Elsewhere entry with them.
+    // Twenty-one entries here would move every line below, and `.kb` atoms
+    // cite this file by line; the module is the same table one file over,
+    // reconciled by the same function in the same three directions.
 ];
+
+// What check 4 knows about the replication family: the `SY` names nothing can
+// resolve, and the sync-testkit files its message sends a reader to (#458).
+//
+// Declared here rather than beside `mod portfolio` at the top of the file, on
+// purpose. A line added up there would move every `spec_trace.rs:N` citation
+// in `.kb`, and this one replaces lines of the table's own `SY` comment above,
+// so nothing below it moves either. The module's own doc says why the table
+// is there and not here. `check_named_rules` reads it through `suites`, and
+// `declaration_for` and `reconcile_unresolvable` through `all_declarations`,
+// which chains the table above in front of it.
+mod sync_family;
 
 /// Check 10 — every E2E case is claimed by at least one clause.
 ///
@@ -4485,5 +4485,99 @@ mod tests {
                 "`{prose}` switched the check off; got {problems:?}"
             );
         }
+    }
+
+    // ---- #458: check 4 reads the sync suites --------------------------------
+
+    /// The sync table against the real tree, the same sweep
+    /// `every_declaration_holds_against_the_real_tree` runs over the contract
+    /// families' table. A name that starts resolving, a clause that stops citing
+    /// one, and an `Elsewhere` test that is deleted each fail here by name.
+    #[test]
+    fn every_sync_declaration_holds_against_the_real_tree() {
+        let root = workspace_root().unwrap();
+        let spec = read(&root, SPEC).unwrap();
+        let clauses = parse_clauses(&spec);
+        let resolvable: BTreeSet<String> = all_rules(&root)
+            .unwrap()
+            .union(&wire_rules(&root).unwrap())
+            .cloned()
+            .collect();
+
+        let mut problems = Vec::new();
+        let census = reconcile_unresolvable(
+            &sync_family::SYNC_UNRESOLVABLE_RULE_NAMES,
+            &clauses,
+            &resolvable,
+            &root,
+            &mut problems,
+        );
+
+        assert!(problems.is_empty(), "{problems:#?}");
+        assert_eq!(
+            census.iter().sum::<usize>(),
+            sync_family::SYNC_UNRESOLVABLE_RULE_NAMES.len(),
+            "every entry must be live; got {census:?}"
+        );
+    }
+
+    /// Two tables are two places one pair could be declared, with two reasons
+    /// that disagree. `declaration_for` would find the first and the summary
+    /// would count both.
+    #[test]
+    fn no_pair_is_declared_twice_across_both_tables() {
+        let mut seen: BTreeSet<(&str, &str)> = BTreeSet::new();
+        for (clause, rule, _) in sync_family::all_declarations() {
+            assert!(
+                seen.insert((clause, rule)),
+                "{clause} declares `{rule}` twice"
+            );
+        }
+        assert_eq!(
+            seen.len(),
+            UNRESOLVABLE_RULE_NAMES.len() + sync_family::SYNC_UNRESOLVABLE_RULE_NAMES.len()
+        );
+    }
+
+    /// Every `SY` declaration is in the sync table, so a reader looking for why
+    /// an `SY` name is unchecked has one place to look.
+    #[test]
+    fn every_sy_declaration_is_in_the_sync_table() {
+        for (clause, rule, _) in &UNRESOLVABLE_RULE_NAMES {
+            assert!(
+                !clause.starts_with("SY-"),
+                "{clause}'s `{rule}` belongs in `sync_family::SYNC_UNRESOLVABLE_RULE_NAMES`"
+            );
+        }
+        for (clause, rule, _) in &sync_family::SYNC_UNRESOLVABLE_RULE_NAMES {
+            assert!(
+                clause.starts_with("SY-"),
+                "{clause}'s `{rule}` is not a replication clause's"
+            );
+        }
+    }
+
+    /// The message for an unresolved `SY` name names the seven sync-testkit
+    /// families it was looked for in, and not the event-store suite, which can
+    /// never define one.
+    #[test]
+    fn the_sync_suites_are_every_sync_family_and_nothing_else() {
+        let suites = sync_family::suites();
+        for family in [
+            "sync_suite.rs",
+            "sync_model.rs",
+            "ingest_suite.rs",
+            "write_group_suite.rs",
+            "convergence_suite.rs",
+            "restore_suite.rs",
+            "watermark_suite.rs",
+        ] {
+            assert!(
+                suites.contains(&format!("crates/happenstance-sync-testkit/src/{family}")),
+                "{family} is missing from {suites}"
+            );
+        }
+        assert!(!suites.contains(SUITE), "{suites}");
+        assert_eq!(suites.matches(" or ").count(), 6, "{suites}");
     }
 }
