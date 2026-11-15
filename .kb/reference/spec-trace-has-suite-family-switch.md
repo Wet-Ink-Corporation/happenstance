@@ -59,7 +59,7 @@ fn has_suite(clause_id: &str) -> bool {
 }
 ```
 
-The check's own loop (`:831-834`) skips a clause outright when `has_suite` returns `false`: "for a
+The check's own loop (`:848-850`) skips a clause outright when `has_suite` returns `false`: "for a
 `wire::`-qualified name … looked for in the wire test files rather than in a suite that could never
 define it." A family absent from `has_suite` is not partially checked — it is not checked at all,
 and check 4 reports nothing wrong, because abstaining and passing look identical in the printed
@@ -71,7 +71,7 @@ written — and `cargo xtask spec-trace` would report no problem, because `PS` s
 `has_suite` checked. The exclusion was written for a true reason: the projection suite
 (`crates/happenstance-testkit/src/projection.rs`) did not exist yet, and checking `PS` citations
 against a suite that could never define them would report every one of them as a false positive,
-"noise indistinguishable from a real typo" (`xtask/src/spec_trace.rs:2703-2705`). The suite was
+"noise indistinguishable from a real typo", as `has_suite`'s doc put it before #458 (at `b995c504`). The suite was
 then written, and the exclusion was not removed — it outlived its own justification by two slices
 before this workspace noticed.
 

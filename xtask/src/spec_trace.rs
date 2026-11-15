@@ -717,8 +717,8 @@ pub(crate) fn run(out: &mut impl io::Write, mode: Mode) -> Result<()> {
         }
     }
 
-    // 4. Every named conformance rule exists, or is declared in
-    //    [`UNRESOLVABLE_RULE_NAMES`] with why nothing can find it.
+    // 4. Every named conformance rule exists, or is declared in [`UNRESOLVABLE_RULE_NAMES`]
+    //    or `sync_family`'s table with why nothing can find it.
     //
     //    Only clauses whose rules would live in a suite that *exists*: `ES`,
     //    `VT`, `WF` and `PS` against the testkit's families, and since #458
@@ -884,8 +884,8 @@ fn declaration_for(clause: &str, rule: &str) -> Option<&'static Unresolvable> {
 /// a stale entry and the list must shrink. A declared pair whose clause no longer
 /// cites that rule is a stale entry for the other reason. And an
 /// [`Unresolvable::Elsewhere`] path that no longer contains its identifier is the
-/// one this exists for: those twenty-six tests are real, they are the only thing
-/// standing behind twelve `[FROZEN]` clauses, and until this function nothing in
+/// one this exists for: the Elsewhere tests are real, for several `[FROZEN]` clauses
+/// they are the only check standing behind them, and until this function nothing in
 /// the workspace would have noticed one being deleted: none is in `RULE_FILES`.
 ///
 /// Returns the per-kind census, in [`Unresolvable`]'s order, for the summary line,
