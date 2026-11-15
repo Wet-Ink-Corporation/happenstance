@@ -1056,9 +1056,9 @@ pub mod rules {
     /// group, and one that declares a floor and answers a stale token from
     /// it, and one that serves a pull from the start from its floor. Each
     /// converges on a strict subset in silence. Also a peer that refuses and
-    /// declares no floor, one that refuses as `Transient`, which a runner
-    /// retries for ever, and one that refuses every token once it has
-    /// compacted. `tests/wrong_retention.rs` carries all six.
+    /// declares no floor or its oldest retained event as one, one that refuses
+    /// as `Transient`, which a runner retries for ever, and one that refuses
+    /// every token once compacted. `tests/wrong_retention.rs` carries all seven.
     ///
     /// # Does not reject
     ///

@@ -28,6 +28,7 @@ use crate::classify::FailureClass;
 #[non_exhaustive]
 pub struct RetentionGap {
     /// The phase whose failure stated [`Reseed`](FailureClass::Reseed):
+    /// [`Phase::Pull`] or [`Phase::Push`], the far side's own phases, and
     /// [`Phase::Pull`] for every peer this crate ships.
     pub phase: Phase,
     /// The far side's

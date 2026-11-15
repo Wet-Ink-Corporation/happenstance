@@ -44,6 +44,9 @@ enum Defect {
     /// Serves a pull from the start from its floor: an edge that lost its
     /// token converges on the retained subset in silence.
     StartIsFine,
+    /// Refuses correctly and declares as its floor the oldest event it still
+    /// holds, not the newest it forgot.
+    FloorIsFirstRetained,
 }
 
 /// A refusal, stating the class the peer chose for it.
@@ -146,10 +149,20 @@ impl SyncPeer for CompactingPeer {
     }
 
     fn limits(&self) -> PeerLimits {
+        let log = self.log.borrow();
         let mut limits = PeerLimits::minimum();
-        if self.defect != Defect::MuteFloor {
-            limits.retention_floor = self.log.borrow().floor;
-        }
+        limits.retention_floor = match self.defect {
+            Defect::MuteFloor => None,
+            // Once it has compacted, the first event still held: one past
+            // the floor, and an event it was never asked to forget.
+            Defect::FloorIsFirstRetained => log.floor.and(
+                log.groups
+                    .first()
+                    .and_then(|group| group.events.first())
+                    .map(|event| event.id),
+            ),
+            _ => log.floor,
+        };
         limits
     }
 }
@@ -282,7 +295,15 @@ fn the_rule_fails_a_peer_that_answers_a_stale_token_from_its_floor() {
 
 #[test]
 fn the_rule_fails_a_peer_that_calls_a_gap_transient() {
-    fails(Defect::TransientGap, "Transient");
+    fails(Defect::TransientGap, "as Transient");
+}
+
+#[test]
+fn the_rule_fails_a_peer_whose_floor_is_its_oldest_retained_event() {
+    fails(
+        Defect::FloorIsFirstRetained,
+        "not an event it was asked to forget",
+    );
 }
 
 #[test]

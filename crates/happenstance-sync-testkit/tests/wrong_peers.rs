@@ -675,6 +675,10 @@ impl SendSyncPeer for PagingPeer {
                         .limits()
                         .retention_floor
                         .expect("a peer that dropped groups has a floor"),
+                    // Not the refused cursor: the reference error holds a
+                    // `MemoryResume`, and this peer's token is a
+                    // `PageCursor` it cannot carry. The class, which is all
+                    // a rule reads here, is the same.
                     from: None,
                 });
             }

@@ -34,8 +34,9 @@
 //!   the push, where the runner holds no batch it could halve.
 //! * [`Park`](crate::FailureClass::Park): the edge parks ([`EdgeState::Parked`]).
 //! * [`Stop`](crate::FailureClass::Stop): the edge stops ([`EdgeState::Stopped`]).
-//! * [`Reseed`](crate::FailureClass::Reseed): the edge stops with
-//!   [`StopCause::RetentionGap`], which the next section describes.
+//! * [`Reseed`](crate::FailureClass::Reseed): the edge stops. From a pull or
+//!   a push it stops with [`StopCause::RetentionGap`], which the next section
+//!   describes; from any other phase, with [`StopCause::Failure`].
 //!
 //! A parked or stopped edge does no more I/O: every later step returns
 //! [`StepError::Parked`] or [`StepError::Stopped`] at once.
@@ -441,11 +442,19 @@ impl<R, A: Adjudicate> Edge<R, A> {
             let failure = error.failure();
             let cause = match error {
                 StepError::Incarnation(change) => Some(StopCause::Incarnation(*change)),
-                // The floor is read at refusal time, because it can move; the
-                // read is synchronous and on the failure path only (SY-32).
-                _ if failure.class == FailureClass::Reseed => Some(StopCause::RetentionGap(
-                    RetentionGap::new(failure.phase, peer.limits().retention_floor),
-                )),
+                // Only the far side can have forgotten history, so only its
+                // refusal is a gap; a `Reseed` from any other phase stops on
+                // the failure. The floor is read at refusal time, because it
+                // can move; the read is synchronous and on the failure path
+                // only (SY-32).
+                StepError::Pull(_) | StepError::Push(_)
+                    if failure.class == FailureClass::Reseed =>
+                {
+                    Some(StopCause::RetentionGap(RetentionGap::new(
+                        failure.phase,
+                        peer.limits().retention_floor,
+                    )))
+                }
                 _ => None,
             };
             self.react(failure, cause);
@@ -470,12 +479,11 @@ impl<R, A: Adjudicate> Edge<R, A> {
                     None => EdgeState::Parked(failure),
                 },
                 FailureClass::Park => EdgeState::Parked(failure),
-                FailureClass::Stop => EdgeState::Stopped(StopCause::Failure(failure)),
-                // `step` always names the cause for this class, with the
-                // peer's floor; kept total, without a panic, all the same.
-                FailureClass::Reseed => EdgeState::Stopped(StopCause::RetentionGap(
-                    RetentionGap::new(failure.phase, None),
-                )),
+                // A far side's `Reseed` arrives with its gap as `cause`; one
+                // from the local store or the edge's rule is a plain stop.
+                FailureClass::Stop | FailureClass::Reseed => {
+                    EdgeState::Stopped(StopCause::Failure(failure))
+                }
             }
         };
     }

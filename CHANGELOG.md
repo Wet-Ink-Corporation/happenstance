@@ -104,7 +104,7 @@ not the same as what a user needed to be told.
   any skip goes red: this workspace's `workerd` harness did, and now tolerates
   this rule's skip with `UNSTATED_COMPACTION`'s reason and no other (D10)
   until its Durable Object can compact.
-  `tests/wrong_retention.rs` carries six wrong peers it rejects.
+  `tests/wrong_retention.rs` carries seven wrong peers it rejects.
 
 ### Changed
 

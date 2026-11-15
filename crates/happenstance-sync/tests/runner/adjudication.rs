@@ -312,6 +312,33 @@ async fn a_rule_that_cannot_decide_lands_nothing_and_is_reacted_to_by_its_class(
     }
 }
 
+/// A `Reseed` from the edge's own rule is not a retention gap: only the far
+/// side can have forgotten history, so the edge stops on the failure as for
+/// `Stop`, and reports no gap (SY-32, SY-36).
+///
+/// Rejects a runner that reads a gap into any `Reseed`, whichever phase
+/// stated it, and so reports the far side's floor for a failure the far side
+/// never had.
+#[tokio::test]
+async fn a_reseed_from_the_rule_stops_the_edge_as_a_failure_not_a_gap() {
+    let (hub, spoke, _) = hub_and_spoke().await;
+    let peer = StoreSyncPeer::new(spoke.clone(), spoke.clone());
+    let mut edge = Edge::new().with_adjudicator(Failing(FailureClass::Reseed));
+
+    let failed = edge.step(&peer, &hub).await;
+
+    let Err(error) = failed else {
+        panic!("a Reseed rule failure fails the step: {failed:?}");
+    };
+    assert!(matches!(error, StepError::Adjudicate(_)), "{error:?}");
+    let EdgeState::Stopped(StopCause::Failure(failure)) = edge.status().state else {
+        panic!("stopped on the failure: {:?}", edge.status().state);
+    };
+    assert_eq!(failure.phase, Phase::Adjudicate);
+    assert_eq!(failure.class, FailureClass::Reseed);
+    assert_eq!(edge.status().retention_gap(), None, "no gap is reported");
+}
+
 /// The far side's half: a store peer given a rule adjudicates what it is
 /// pushed, in the same write as the pushed claim, under its own identity.
 /// What a hub served behind `serve_sync_adjudicated` needs (SY-10).

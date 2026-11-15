@@ -87,7 +87,9 @@ impl fmt::Display for IncarnationChanged {
 #[non_exhaustive]
 pub enum StopCause {
     /// A failure of class [`Stop`](FailureClass::Stop): authorisation or
-    /// configuration.
+    /// configuration. Or of class [`Reseed`](FailureClass::Reseed) stated by
+    /// the local store or the edge's rule, which is no retention gap: only
+    /// the far side can have forgotten history.
     Failure(Failure),
     /// The far side answered as a different store incarnation.
     Incarnation(IncarnationChanged),
@@ -97,8 +99,9 @@ pub enum StopCause {
 }
 
 impl StopCause {
-    /// As a [`Failure`]: the phase, and class [`Stop`](FailureClass::Stop),
-    /// or [`Reseed`](FailureClass::Reseed) for a retention gap.
+    /// As a [`Failure`]: the phase, and the class the edge stopped on:
+    /// [`Stop`](FailureClass::Stop) for a changed incarnation,
+    /// [`Reseed`](FailureClass::Reseed) for a retention gap.
     #[must_use]
     pub const fn failure(&self) -> Failure {
         match self {
