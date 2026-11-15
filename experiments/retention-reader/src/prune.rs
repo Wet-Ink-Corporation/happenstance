@@ -23,7 +23,10 @@ use happenstance_sqlite::rusqlite::{self, Connection};
 /// it unfinished removes it too, and can only write a failure to stderr.
 #[derive(Debug)]
 pub struct TempDb {
+    /// `None` once [`finish`](Self::finish) or `Drop` has removed it.
     dir: Option<PathBuf>,
+    /// The SQLite file inside `dir`, fixed at construction.
+    file: PathBuf,
 }
 
 impl TempDb {
@@ -40,16 +43,16 @@ impl TempDb {
             fs::remove_dir_all(&dir)?;
         }
         fs::create_dir_all(&dir)?;
-        Ok(Self { dir: Some(dir) })
+        Ok(Self {
+            file: dir.join("store.sqlite"),
+            dir: Some(dir),
+        })
     }
 
     /// The SQLite file's path. It does not exist until a store opens it.
     #[must_use]
-    pub fn path(&self) -> PathBuf {
-        self.dir
-            .as_deref()
-            .unwrap_or(Path::new(""))
-            .join("store.sqlite")
+    pub fn path(&self) -> &Path {
+        &self.file
     }
 
     /// Removes the directory and everything in it.
@@ -172,17 +175,21 @@ mod tests {
                 let event = Event::new("Written", data.as_bytes())?;
                 store.append(&[event], None).await?;
             }
-            let before =
-                collect(GroupRead::new(&store).read(&Query::all(), ReadOptions::new())).await?;
+            let before = collect(
+                GroupRead::new(&store, store.store_id()).read(&Query::all(), ReadOptions::new()),
+            )
+            .await?;
             drop(store);
 
             let gone: Vec<_> = before.iter().skip(1).step_by(2).collect();
             let positions: Vec<_> = gone.iter().map(|e| e.position).collect();
-            assert_eq!(prune_outside_port(&db.path(), &positions)?, 2);
+            assert_eq!(prune_outside_port(db.path(), &positions)?, 2);
 
             let store = SqliteEventStore::open(db.path())?;
-            let after =
-                collect(GroupRead::new(&store).read(&Query::all(), ReadOptions::new())).await?;
+            let after = collect(
+                GroupRead::new(&store, store.store_id()).read(&Query::all(), ReadOptions::new()),
+            )
+            .await?;
             let kept: Vec<_> = before.iter().step_by(2).map(|e| e.id).collect();
             assert_eq!(after.iter().map(|e| e.id).collect::<Vec<_>>(), kept);
             for event in &gone {

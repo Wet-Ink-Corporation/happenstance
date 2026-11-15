@@ -3,8 +3,10 @@
 //! Claims are registered and then noted. [`Counter`] is the projection
 //! (reader R1): it counts how many times the runner handed it each
 //! [`EventId`], because counting rows would hide an event applied twice.
-//! [`ClaimFile`] is the decision model (reader R3): a note on a claim that was
-//! never registered is refused.
+//! [`ClaimFile`] is the decision model (reader R3): it folds whether a claim's
+//! history registers it, and R3 stages "register the claim unless it is
+//! registered" over it, a decision that refuses on the *presence* of history
+//! and so admits more when history is missing (ES-40).
 
 use core::fmt;
 use std::collections::BTreeMap;

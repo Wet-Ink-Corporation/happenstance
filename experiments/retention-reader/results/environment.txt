@@ -8,6 +8,6 @@ release: 1.97.1
 LLVM version: 22.1.6
 cargo 1.97.1 (c980f4866 2026-06-30)
 --- measured tree ---
-1cf9d4185584a46d9b2facb7ba0dcb90cc9d8df2
+1929c55633e98cb9ea137c4e856c4bd49b475a9d
 --- os ---
 Linux 6.18.44-fc-v470 x86_64

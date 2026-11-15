@@ -106,7 +106,7 @@ Everything below was added **after** the sections above were committed at
 `4eb3532a`; the criteria and the predictions are unchanged. Measured on
 rustc 1.97.1 against the tree at `1cf9d418` (`results/environment.txt`: no
 file under `crates/` modified). Reproduce with `bash run.sh`; the transcript of
-the run recorded here is `results/test-all.txt` (19 tests, all passing, each
+the run recorded here is `results/test-all.txt` (23 tests, all passing, each
 asserting what was observed), and `results/clippy.txt` is the lint run.
 
 - **Layout.** `src/` holds the support: `domain.rs` (the claim events, the
@@ -123,10 +123,19 @@ asserting what was observed), and `results/clippy.txt` is the lint run.
   `tokio`. Every other SQLite port method the experiment calls runs inline. So
   the projection over the SQLite spoke reads through `GroupRead`, which
   answers `read` from `WriteGroupStore::read_groups` over the same rows. It is
-  exact where every write group holds one event, which holds in every R2-dst
-  scenario (one event per append, one per hub group), and it refuses a larger
-  group rather than invent a position. The runner, the ingest and the edge are
-  the published code, unwrapped.
+  exact only where every group was **written** with one event, which holds in
+  every R2-dst scenario (one event per append, one per hub group). Holding one
+  event now is not enough: SQLite names a group by the position it was written
+  at (`coalesce(write_group, position)`), so the survivor of a cut two-event
+  group reads back under the deleted row's position. `GroupRead` refuses a
+  group of more than one event, a locally minted event whose own position is
+  not its group's name (how a cut local group shows itself;
+  `a_cut_group_of_local_events_is_refused`), names that do not strictly
+  increase, and backward reads. A cut group of *ingested* events cannot be
+  detected, because a foreign id carries its origin's position, so for those
+  the one-event-per-written-group precondition is the scenarios' to keep, not
+  the adapter's to check. The runner, the ingest and the edge are the
+  published code, unwrapped.
 - **R2-dst-1's restored edge** is built as
   `Edge::restored(Watermark::new(hub, confirmed))`: `MemorySyncPeer` never
   names its store, so `Edge::watermark()` stays `None`, and the caller who
@@ -155,7 +164,7 @@ already failed.
 | R1-2 `pruning_behind_the_checkpoint_changes_nothing` | after withholding the 6 applied events and appending 2, the run applies 2; the view equals the full log's 14, none twice | no | – | – | – | – | none needed |
 | R1-3 `pruning_ahead_of_the_checkpoint_is_never_delivered` | 4 of the 6 later events applied; the checkpoint passes the 2 withheld positions; neither ever delivered | no | – | – | – | – | none needed |
 | Floor `a_floor_misdescribes_a_scattered_purge` | the floor is the lowest survivor's position, and all 6 withheld positions sit above it | evidence for ES-39's *Rejects* line and ADR-0028 decision 4 | | | | | |
-| R1-4 `a_source_switch_resumes_against_the_wrong_store` | one projection store, checkpoint from store A resumed on store B: B's 4 own events silently skipped, 1 event already applied from A applied again | **yes**: a checkpoint skips events the store holds (PS-20, `spec/SPECIFICATION.md:6119`, resumes "strictly after the checkpoint's position", of a different store; ES-29, `:4420`) | no: the two stores' identities differ and are reachable (`IngestStore::store_id`); the checkpoint keeps no source to compare | – | no: both stores are complete, so a completeness report says nothing here | no | the typed layer's checkpoint (record the source store) |
+| R1-4 `a_source_switch_resumes_against_the_wrong_store` | one projection store, checkpoint from store A resumed on store B: B's 4 own events silently skipped, 1 event already applied from A applied again | **yes**: a checkpoint skips events the store holds (PS-20, `spec/SPECIFICATION.md:6119`, resumes "strictly after the checkpoint's position", of a different store; ES-29, `:4420`) | no, but only by the criterion's letter: `run_projection` binds `EventStore`, which has no `store_id`; the identities differ and are reachable through `IngestStore::store_id`, a value C2 lists | – | **no, and this decides it**: both stores are complete, so a completeness report has nothing to say | **no, and this decides it**: the missing fact is the checkpoint's source store | the typed layer's checkpoint (record the source store) |
 
 ### R2-src, ingest pulling from a holed hub (`tests/it/r2_ingest_source.rs`)
 
@@ -170,8 +179,9 @@ already failed.
 | Scenario (test) | Observed | C1 | C2 | C3a | C3b | C4 | Seam owning a cure |
 |---|---|---|---|---|---|---|---|
 | R2-dst-1 `a_restored_edge_resurrects_pruned_foreign_events` | after a raw `DELETE` of 2 of 4 foreign events (one the origin's highest), the spoke's origin watermark regresses; `Edge::restored` re-pulls from the start; `Ingested.appended == 2`, both at the tail above the pre-prune head; the watermark recovers; **the projection applies both a second time** | **yes**: the documented restart path's promise breaks, *"a re-read is harmless, because ingest skips what it holds (SY-11)"* (`crates/happenstance-sync/src/runner/watermark.rs:20-24`, and `runner.rs:113-114`); VT-8's uniqueness (`:937`) held only among rows still present | yes: inside ingest the row is simply absent | yes | **no**: the information missing is "which *origin identities* were once held", keyed on the origin pair, and no report about local positions identifies a re-delivery; the only store that could answer truthfully pruned through its own API | **no** | `IngestStore::ingest` in each adapter (a pruned-identity tombstone), or a persisted pull token with the edge |
-| R2-dst-2 `a_restored_edge_stops_on_a_pruned_own_event` | after a raw `DELETE` of one of the spoke's own events the hub had confirmed, the restored edge's pull brings it back; it lands, and ingest refuses the whole call: `StepError::Ingest(IngestError::UnheldOwnIdentity { id })` with the pruned id; edge `Stopped`; nothing landed, not even a foreign event in the same pull; a second step returns `StepError::Stopped` with no I/O | **yes**: SY-38 (`:7500`) refuses with the stated cause *"restored or rewound without re-minting its identity"* (`ingest/error.rs:118-121`), which is false: the store was pruned, and its remedy, re-minting, is the wrong one; the edge is wedged | yes: the edge sees only the error | yes: on `Unknown` it stops, as today | **no**: the check runs inside the adapter's ingest transaction; a generic edge consulting a report after the error is a read-then-act VT-8 already refuses to build on; the adapter's own prune record is concrete-type knowledge | **no** | the adapter's ingest (a record of pruned own positions consulted where SY-38 is checked), and SY-38's wording |
+| R2-dst-2 `a_restored_edge_stops_on_a_pruned_own_event` | after a raw `DELETE` of one of the spoke's own events the hub had confirmed, the restored edge's pull brings it back; it lands, and ingest refuses the whole call: `StepError::Ingest(IngestError::UnheldOwnIdentity { id })` with the pruned id; edge `Stopped`; nothing landed, not even a foreign event in the same pull; a second step returns `StepError::Stopped` without calling the peer (counted: one pull on the refused step, none after). The refused page, pulled directly, carried both the pruned id and the foreign event | **yes**: SY-38 (`:7500`) refuses with the stated cause *"restored or rewound without re-minting its identity"* (`ingest/error.rs:118-121`), which is false: the store was pruned, and its remedy, re-minting, is the wrong one; the edge is wedged | yes: the edge sees only the error | yes: on `Unknown` it stops, as today | **no**: the check runs inside the adapter's ingest transaction; a generic edge consulting a report after the error is a read-then-act VT-8 already refuses to build on; the adapter's own prune record is concrete-type knowledge | **no** | the adapter's ingest (a record of pruned own positions consulted where SY-38 is checked), and SY-38's wording |
 | R2-dst-3 `a_fresh_edge_pushing_into_a_pruned_hub_stops` (not predicted) | a SQLite hub prunes one of its own events a spoke holds; a spoke edge without its watermark (`Edge::new`) pushes its whole log back; the hub's ingest refuses as `StorePeerError::Ingest(IngestError::UnheldOwnIdentity { id })` and the spoke's edge stops | **yes**: as R2-dst-2, on the hub | yes | yes | no, as R2-dst-2 | no | as R2-dst-2 |
+| Control `control_a_fresh_edge_pushing_into_an_unpruned_hub_is_a_no_op` | R2-dst-3's staging with nothing pruned: the fresh edge offers its whole log back, the hub skips it all (head unchanged), `appended == 0`, the edge keeps running | no harm: the stop in R2-dst-3 is the prune's doing | | | | | |
 | Control `instrument_control_resurrection_is_masked` | the same staging over `Holed` (withheld, not deleted): the re-pull skips both, `appended == 0` | no harm visible | | | | | |
 | Control `instrument_control_false_rewind_is_masked` | the same staging over `Holed`: the re-pull skips, the edge keeps running | no harm visible | | | | | |
 
@@ -256,13 +266,17 @@ Reproductions:
   confirmed)).step(..)` returns
   `StepError::Ingest(IngestError::UnheldOwnIdentity { id })` for the pruned id;
   the state is `EdgeState::Stopped`; the head is unchanged and the foreign
-  event did not land; the next step is `StepError::Stopped`.
+  event did not land, though the page the edge pulled (read directly with
+  `hub.pull(None)`) carried it beside the pruned id; the next step is
+  `StepError::Stopped` and calls the peer not at all.
 - Hub side, `a_fresh_edge_pushing_into_a_pruned_hub_stops`: a
   `StoreSyncPeer` over a `SqliteEventStore` hub with three own events, synced
   to an in-memory spoke; drop the hub, `DELETE` its first row, reopen; a fresh
   `Edge::new()` on the spoke pushes its log back, and the step fails as
   `StepError::Push(StorePeerError::Ingest(IngestError::UnheldOwnIdentity { id }))`
-  with the edge stopped.
+  with the edge stopped. Its control,
+  `control_a_fresh_edge_pushing_into_an_unpruned_hub_is_a_no_op`, stages the
+  same push with nothing pruned: every event is skipped and the edge runs on.
 
 This is the deployment where a SQLite file acts as a pruned buffer, failing on
 its first restart. Seams that could own a cure: the adapter's ingest (a record
@@ -297,5 +311,6 @@ the source store's identity. The deployment note's candidate issue 1.
   `EventStore`. F1 and F2 may well need state somewhere, a tombstone or a
   token; this experiment says where it does not belong, not what it is.
 - **The SQLite store's own `read` path.** R2-dst's projection read the spoke
-  through `GroupRead` (see *Conditions*), exact for one-event groups; the
+  through `GroupRead` (see *Conditions*), exact where every group was written
+  with one event; the
   ingest and edge paths were the adapter's own.

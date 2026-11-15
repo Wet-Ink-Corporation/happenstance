@@ -7,6 +7,8 @@
 //! every write group here holds one event, which is where that read is
 //! faithful (see `src/group_read.rs`).
 
+use core::cell::Cell;
+
 use happenstance::{
     EventId, EventStore, MemoryProjectionStore, Query, ReadOptions, RecordedAt, SequencePosition,
     SequencedEvent, StoreId, collect,
@@ -15,7 +17,8 @@ use happenstance_sqlite::event_store::SqliteEventStore;
 use happenstance_sync::runner::{Edge, EdgeState, StepError, Watermark};
 use happenstance_sync::store_peer::StorePeerError;
 use happenstance_sync::{
-    EventGroup, IngestError, IngestStore, MemorySyncPeer, ReplicatedEvent, StoreSyncPeer,
+    Ack, EventGroup, IngestError, IngestStore, MemorySyncPeer, PeerLimits, Pulled, PushBatch,
+    ReplicatedEvent, StoreSyncPeer, SyncPeer,
 };
 use happenstance_testkit::block_on;
 use retention_reader::domain::{ClaimEvent, Counter};
@@ -56,9 +59,58 @@ fn seeded(events: &[ReplicatedEvent]) -> Result<MemorySyncPeer, Error> {
     Ok(hub)
 }
 
+/// A peer that counts the calls it forwards, so a test can show a step did
+/// no I/O.
+#[derive(Debug)]
+struct Counting<'p, P> {
+    peer: &'p P,
+    // Single-threaded under `block_on`, and only ever incremented: a `Cell`
+    // is enough.
+    calls: Cell<usize>,
+}
+
+impl<'p, P> Counting<'p, P> {
+    const fn new(peer: &'p P) -> Self {
+        Self {
+            peer,
+            calls: Cell::new(0),
+        }
+    }
+
+    fn calls(&self) -> usize {
+        self.calls.get()
+    }
+
+    fn count(&self) {
+        self.calls.set(self.calls.get().saturating_add(1));
+    }
+}
+
+impl<P: SyncPeer> SyncPeer for Counting<'_, P> {
+    type Error = P::Error;
+    type Resume = P::Resume;
+
+    async fn pull(&self, from: Option<&Self::Resume>) -> Result<Pulled<Self::Resume>, Self::Error> {
+        self.count();
+        self.peer.pull(from).await
+    }
+
+    async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
+        self.count();
+        self.peer.push(batch).await
+    }
+
+    fn limits(&self) -> PeerLimits {
+        self.peer.limits()
+    }
+}
+
 /// Every event `store` holds, read through its write groups.
 async fn held(store: &SqliteEventStore) -> Result<Vec<SequencedEvent>, Error> {
-    Ok(collect(GroupRead::new(store).read(&Query::all(), ReadOptions::new())).await?)
+    Ok(
+        collect(GroupRead::new(store, store.store_id()).read(&Query::all(), ReadOptions::new()))
+            .await?,
+    )
 }
 
 /// The local positions of the events carrying `ids`.
@@ -94,7 +146,12 @@ fn a_restored_edge_resurrects_pruned_foreign_events() -> Outcome {
         let spoke = SqliteEventStore::open(db.path())?;
         let mut edge = Edge::new();
         sync(&mut edge, &hub, &spoke).await?;
-        let first_run = project(&GroupRead::new(&spoke), &models, &mut counter).await?;
+        let first_run = project(
+            &GroupRead::new(&spoke, spoke.store_id()),
+            &models,
+            &mut counter,
+        )
+        .await?;
         let confirmed = edge.status().confirmed.ok_or("the push was acknowledged")?;
         let head_before = spoke.head().await?;
         let mark_before = spoke.watermark().await?.get(ORIGIN);
@@ -106,7 +163,7 @@ fn a_restored_edge_resurrects_pruned_foreign_events() -> Outcome {
         let pruned_at = local_positions(&spoke, &pruned_ids).await?;
         drop(spoke);
 
-        assert_eq!(prune_outside_port(&db.path(), &pruned_at)?, 2);
+        assert_eq!(prune_outside_port(db.path(), &pruned_at)?, 2);
         let spoke = SqliteEventStore::open(db.path())?;
         for &id in &pruned_ids {
             assert!(!spoke.contains_event_id(id).await?);
@@ -115,7 +172,12 @@ fn a_restored_edge_resurrects_pruned_foreign_events() -> Outcome {
 
         let mut restored = Edge::restored(Watermark::new(HUB, confirmed));
         let stepped = sync(&mut restored, &hub, &spoke).await?;
-        let second_run = project(&GroupRead::new(&spoke), &models, &mut counter).await?;
+        let second_run = project(
+            &GroupRead::new(&spoke, spoke.store_id()),
+            &models,
+            &mut counter,
+        )
+        .await?;
 
         assert_eq!(first_run.applied, 4);
         assert_eq!(mark_before, shipped.last().map(|e| e.id.position()));
@@ -156,8 +218,8 @@ fn a_restored_edge_resurrects_pruned_foreign_events() -> Outcome {
 /// event lands because its row is gone, and ingest refuses the whole call as
 /// SY-38's unheld own identity: "restored or rewound without re-minting". The
 /// store was neither. The class is stop, nothing in the pull lands (a foreign
-/// event in the same batch included), and every later step is refused with no
-/// I/O: the edge is wedged.
+/// event in the same batch included, though the refused page carried it), and
+/// every later step is refused with no call to the peer: the edge is wedged.
 #[test]
 fn a_restored_edge_stops_on_a_pruned_own_event() -> Outcome {
     let db = TempDb::new("false-rewind")?;
@@ -178,19 +240,28 @@ fn a_restored_edge_stops_on_a_pruned_own_event() -> Outcome {
         drop(spoke);
 
         assert_eq!(
-            prune_outside_port(&db.path(), own.get(..1).ok_or("three")?)?,
+            prune_outside_port(db.path(), own.get(..1).ok_or("three")?)?,
             1
         );
         let spoke = SqliteEventStore::open(db.path())?;
         let head_after_prune = spoke.head().await?;
 
+        // The page the restored edge will pull: from the start of the hub.
+        let page = hub.pull(None).await?;
+        let offered: Vec<EventId> = page.batch.events().map(|e| e.id).collect();
+        let counted = Counting::new(&hub);
         let mut restored = Edge::restored(Watermark::new(HUB, confirmed));
-        let step = restored.step(&hub, &spoke).await;
-        let again = restored.step(&hub, &spoke).await;
+        let step = restored.step(&counted, &spoke).await;
+        let calls_before = counted.calls();
+        let again = restored.step(&counted, &spoke).await;
 
         assert!(
             matches!(step, Err(StepError::Ingest(IngestError::UnheldOwnIdentity { id, .. })) if id == pruned),
             "{step:?}"
+        );
+        assert!(
+            offered.contains(&pruned) && offered.contains(&foreign_id),
+            "the refused page carried both: {offered:?}"
         );
         assert!(matches!(restored.status().state, EdgeState::Stopped(_)));
         assert_eq!(spoke.head().await?, head_after_prune, "nothing landed");
@@ -201,6 +272,12 @@ fn a_restored_edge_stops_on_a_pruned_own_event() -> Outcome {
         assert!(
             matches!(again, Err(StepError::Stopped(_))),
             "wedged: {again:?}"
+        );
+        assert_eq!(calls_before, 1, "the refused step pulled once");
+        assert_eq!(
+            counted.calls(),
+            calls_before,
+            "the next step called no peer"
         );
         drop(spoke);
         Ok::<(), Error>(())
@@ -229,7 +306,7 @@ fn a_fresh_edge_pushing_into_a_pruned_hub_stops() -> Outcome {
             own.first().copied().ok_or("three were appended")?
         };
 
-        assert_eq!(prune_outside_port(&db.path(), &[pruned])?, 1);
+        assert_eq!(prune_outside_port(db.path(), &[pruned])?, 1);
         let peer = StoreSyncPeer::new(
             SqliteEventStore::open(db.path())?,
             SqliteEventStore::open(db.path())?,
@@ -248,6 +325,37 @@ fn a_fresh_edge_pushing_into_a_pruned_hub_stops() -> Outcome {
         );
         assert!(matches!(fresh.status().state, EdgeState::Stopped(_)));
         drop(peer);
+        Ok::<(), Error>(())
+    })?;
+    db.finish()?;
+    Ok(())
+}
+
+/// Control for R2-dst-3. The same staging with nothing pruned: a fresh edge
+/// pushes the whole spoke log back, the hub skips every event it holds, and
+/// the edge keeps running. The stop in R2-dst-3 is the prune's doing.
+#[test]
+fn control_a_fresh_edge_pushing_into_an_unpruned_hub_is_a_no_op() -> Outcome {
+    let db = TempDb::new("unpruned-hub")?;
+    block_on(async {
+        let events = interleaved()?;
+        let spoke = Shared::new();
+        let hub = SqliteEventStore::open(db.path())?;
+        append_each(&hub, events.get(..3).ok_or("twelve")?).await?;
+        let head = hub.head().await?;
+        let peer = StoreSyncPeer::new(SqliteEventStore::open(db.path())?, hub);
+        sync(&mut Edge::new(), &peer, &spoke).await?;
+
+        let mut fresh = Edge::new();
+        let stepped = sync(&mut fresh, &peer, &spoke).await?;
+
+        assert_eq!(stepped.ingested.appended, 0);
+        assert!(stepped.pushed > 0, "the whole log was offered back");
+        assert_eq!(fresh.status().state, EdgeState::Running);
+        drop(peer);
+        let hub = SqliteEventStore::open(db.path())?;
+        assert_eq!(hub.head().await?, head, "the hub skipped every event");
+        drop(hub);
         Ok::<(), Error>(())
     })?;
     db.finish()?;
