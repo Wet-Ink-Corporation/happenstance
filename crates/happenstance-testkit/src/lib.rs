@@ -393,7 +393,7 @@
 //!
 //! # Stores that misbehave on purpose
 //!
-//! The suite above checks an adapter. These four check the **caller**, and
+//! The suite above checks an adapter. These five check the **caller**, and
 //! they exist because every store an application author can reach today
 //! behaves perfectly: the reference store names the conflicting event on every
 //! violation and assigns dense positions from 1, and never tells a rollback
@@ -405,17 +405,17 @@
 //! | [`FaultyStore`] / [`SendFaultyStore`] | a violated append naming **no** conflicting event, and a read that fails at its first polled item | a retry loop that branches on `conflicting_position` being `Some` |
 //! | `GappyMemoryStore` (`memory`) | positions with a caller-chosen stride | a read-model handler that computes its next position by adding one |
 //! | `RecordingProjectionStore` (`memory`) | a log that tells a rollback from a bare drop, and injected `begin` and commit failures | a projection runner that drops a write set bare, or ends it after another view commits |
+//! | [`WithholdingStore`] | a log with an arbitrary retained set, whose withheld events no port value reveals | a runner or ingest path that infers completeness from any port value (ES-39, ES-40) |
 //!
 //! The faulty wrapper comes in two flavours, two *types* rather than one, for
-//! the coherence reason [`Fixture`]'s own page records; the recording store is
-//! bare only, its page says why. All three run their port's conformance suite
-//! themselves — the faulty and recording wrappers unarmed, so a disarmed one is
-//! proved not to be lying, and the gapped store with its stride, so its gaps
-//! are proved to be the freedom the specification grants rather than a defect.
+//! the coherence reason [`Fixture`]'s own page records; the recording and
+//! withholding stores are bare only, their pages say why. All four run their
+//! port's conformance suite themselves — the faulty and recording wrappers
+//! unarmed, so a disarmed one is proved not to be lying; the gapped store with
+//! its stride, so its gaps are the freedom the specification grants; and the
+//! withholding store pruned of its whole prior history, so pruning is invisible.
 //!
-//! The two `memory` stores are named in plain text, not linked: a link to an
-//! item behind a feature resolves in only some configurations, a hard rustdoc
-//! error. Each page carries the `doc_cfg` badge that says so.
+//! The two `memory` stores are named in plain text: a link behind a feature breaks some doc builds.
 //!
 //! # Which flavour to test
 //!
@@ -837,3 +837,8 @@ mod recording;
 #[cfg(feature = "memory")]
 #[cfg_attr(docsrs, doc(cfg(feature = "memory")))]
 pub use recording::{BatchCall, RecordingBatch, RecordingProjectionStore, RecordingStoreError};
+
+// CF-27's completeness instrument (#144). Not gated on `memory`: it wraps any
+// `EventStore`, as `faulty` does. Declared at the end for `recording`'s reason.
+mod withholding;
+pub use withholding::{WithholdError, WithholdingStore};

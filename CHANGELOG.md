@@ -33,6 +33,22 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- `happenstance-testkit`: `WithholdingStore` and `WithholdError`, CF-27's
+  completeness instrument (#144). A decorator over any `EventStore` that holds
+  a suffix or a scattered retained set of the inner store's log: a withheld
+  event is never read, `head` skips it, `contains_event_id` denies it, and an
+  append condition only it would violate passes (ES-40). It reports what it
+  withholds through its own `withheld()`, never through an `EventStore` method
+  (ADR-0028). Built to reject a projection runner or ingest path that infers
+  completeness from a port value. The whole suite runs against it with its
+  prior history withheld, and the outcome of every rule is recorded in
+  `tests/completeness_instrument/pass_list.txt`, asserted by
+  `instrument_report_is_accurate_and_the_suite_cannot_tell` beside three wrong
+  instruments it rejects. Additive: no rule joins any family, so no adapter
+  goes red.
+
 ## [0.6.0] — 2026-11-09
 
 Replication runs over the network. Phase 13 built `happenstance-sync`'s
