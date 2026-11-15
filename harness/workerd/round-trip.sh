@@ -12,7 +12,7 @@
 # `wrangler dev` (local workerd) and against the deployed Worker.
 set -euo pipefail
 
-FLOOR=4
+FLOOR=6
 
 label=${1:?usage: round-trip.sh <label> <base-url> <run-prefix>}
 url=${2:?usage: round-trip.sh <label> <base-url> <run-prefix>}

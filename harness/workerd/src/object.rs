@@ -19,6 +19,7 @@ mod syncing;
 
 use core::cell::{OnceCell, RefCell};
 
+use happenstance_cloudflare::happenstance_sync::PeerLimits;
 use worker::worker_sys::DurableObjectState;
 use worker::{
     DurableObject, Env, Request, Response, Result, State, WebSocket, WebSocketIncomingMessage,
@@ -28,7 +29,7 @@ use worker::{
 use crate::dispatch::{self, Dispatched};
 use crate::idle::IdleHold;
 use crate::incarnation::Incarnation;
-use crate::probe;
+use crate::{probe, sync_mount};
 
 /// One Durable Object per rule: the runner names each object after the rule it
 /// runs, so every rule starts from empty storage.
@@ -131,7 +132,14 @@ impl DurableObject for ConformanceObject {
             (Some("sync-peer-rules"), None) => {
                 Response::ok(crate::sync_peer::rule_names().join("\n"))
             }
-            (Some("sync"), Some(_)) => self.syncing().serve(req).await,
+            (Some("sync"), Some(rest)) => {
+                self.syncing().serve(req, rest, PeerLimits::minimum()).await
+            }
+            (Some("sync-wide"), Some(rest)) => {
+                self.syncing()
+                    .serve(req, rest, sync_mount::wide_limits())
+                    .await
+            }
             (Some("sync-reset"), None) => self.syncing().reset().await,
             (
                 Some(

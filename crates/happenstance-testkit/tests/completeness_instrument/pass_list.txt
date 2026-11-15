@@ -13,6 +13,8 @@
 # survivor from before the rule would fail them for a reason that has nothing
 # to do with pruning. Holes inside a rule's own history need the rule's
 # cooperation: ES-38's and ES-40's rules (#151, #154) supply it.
+# The fixture grants `REMOVAL` by forwarding to `withhold`, so the removal
+# rules run here; ES-38's passes by delegation.
 #
 # Asserted by exact equality in
 # `instrument_report_is_accurate_and_the_suite_cannot_tell`. A rule added to
@@ -120,7 +122,9 @@ event-store ran read_result_is_stable_under_concurrent_append
 event-store ran query_items_share_one_snapshot
 event-store skipped arming_a_read_fault_makes_the_stream_yield_an_error READ_FAULT
 event-store ran nothing_below_an_observed_position_appears_later
-event-store skipped removal_outside_the_port_removes_exactly_the_named_events REMOVAL
+event-store ran removal_outside_the_port_removes_exactly_the_named_events
+event-store ran positions_are_not_reused_after_removal
+event-store ran condition_over_removed_history_does_not_reject
 concurrency ran exactly_one_of_n_contenders_commits
 concurrency ran k_disjoint_boundaries_never_conflict
 concurrency ran positions_are_unique_under_concurrent_appends

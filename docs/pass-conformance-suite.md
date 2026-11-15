@@ -165,6 +165,15 @@ The rule also reads the store back, so an override that deletes nothing, deletes
 everything from the lowest named position up, or rebuilds the log from its
 survivors fails too.
 
+Granting it also runs `positions_are_not_reused_after_removal` (ES-38), which
+removes the tail and then everything, and requires every later append to land
+above every position your store has ever assigned. An event table without
+`AUTOINCREMENT` fails it, and so does a fixture whose removal of everything
+rewinds the allocator (`TRUNCATE … RESTART IDENTITY`). It also runs
+`condition_over_removed_history_does_not_reject` (ES-40): once the only event
+a condition matches is removed, the append must be admitted, so a soft delete
+your condition query does not filter fails it.
+
 A removal leaves the store's identity and its position allocator where they were.
 A wipe does not: `TRUNCATE … RESTART IDENTITY` on Postgres, or a Durable Object
 cleared with `delete_all()`, makes a **different** store under VT-6, with its

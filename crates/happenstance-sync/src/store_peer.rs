@@ -74,7 +74,7 @@ use happenstance_core::{EventId, StoreId};
 use crate::classify::{Classify, FailureClass};
 use crate::ingest::{IngestError, IngestGroup, IngestStore};
 use crate::peer::{
-    Ack, EventGroup, PeerLimits, PullBatchLimit, Pulled, PushBatch, SyncPeer, Waiting,
+    Ack, EventGroup, LimitBreach, PeerLimits, PullBatchLimit, Pulled, PushBatch, SyncPeer, Waiting,
 };
 use crate::runner::{Accept, Adjudicate, Judged, judge};
 use crate::write_group::WriteGroupStore;
@@ -259,34 +259,22 @@ where
 {
     /// Refuses a push the declared limits do not admit, before anything is
     /// written: an event that can never land first, then the batch's count and
-    /// bytes, which a split can cure.
+    /// bytes, which a split can cure. The order is [`PeerLimits`]'s, shared
+    /// with [`RemoteSyncPeer`](crate::RemoteSyncPeer), so a client refuses
+    /// before it sends exactly what this would refuse on arrival.
     fn admit(&self, batch: &PushBatch) -> Result<(), PeerError<S, I, A>> {
-        let limits = &self.limits;
-        if let Some(event) = batch
-            .events()
-            .find(|event| event.payload_len() > limits.max_event_bytes)
-        {
-            return Err(StorePeerError::EventTooLarge {
-                id: event.id,
-                len: event.payload_len(),
-                limit: limits.max_event_bytes,
-            });
+        match self.limits.first_breach(batch) {
+            None => Ok(()),
+            Some(LimitBreach::Event { id, len, limit }) => {
+                Err(StorePeerError::EventTooLarge { id, len, limit })
+            }
+            Some(LimitBreach::Count { actual, limit }) => {
+                Err(StorePeerError::TooManyEvents { actual, limit })
+            }
+            Some(LimitBreach::Bytes { actual, limit }) => {
+                Err(StorePeerError::BatchTooLarge { actual, limit })
+            }
         }
-        let count = batch.events().count();
-        if count > limits.max_batch_events {
-            return Err(StorePeerError::TooManyEvents {
-                actual: count,
-                limit: limits.max_batch_events,
-            });
-        }
-        let bytes = batch.payload_len();
-        if bytes > limits.max_batch_bytes {
-            return Err(StorePeerError::BatchTooLarge {
-                actual: bytes,
-                limit: limits.max_batch_bytes,
-            });
-        }
-        Ok(())
     }
 
     /// The ingest half's identity, read now and never cached, so a re-mint
@@ -549,5 +537,33 @@ mod tests {
 
             assert_eq!(error.class(), class);
         }
+    }
+
+    /// A push over the count that also carries two oversized events is
+    /// refused for the first of them, the order the client half shares
+    /// (#452). Rejects an `admit` that reads the count before the events, and
+    /// one that names the last offender.
+    #[cfg(feature = "memory")]
+    #[tokio::test]
+    async fn an_oversized_event_outranks_the_count_and_the_first_is_named() {
+        use crate::peer::limit_tests::{batch, id, tight};
+        use crate::{MemoryIngestStore, StoreSyncPeer, SyncPeer};
+
+        let batch = batch(&[0, 5, 0, 6]);
+        let peer =
+            StoreSyncPeer::with_limits(MemoryIngestStore::new(), MemoryIngestStore::new(), tight());
+
+        let refused = peer
+            .push(&batch)
+            .await
+            .expect_err("four events, two of them oversized");
+
+        assert!(
+            matches!(
+                refused,
+                StorePeerError::EventTooLarge { id: named, len: 5, limit: 4 } if named == id(2)
+            ),
+            "{refused:?}"
+        );
     }
 }

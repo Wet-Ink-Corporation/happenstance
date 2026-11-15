@@ -21,8 +21,8 @@ use happenstance_testkit::{Capability, Fixture, Removed};
 use crate::correct::{Log, LogStore, dense};
 use crate::harness::Subject;
 
-/// What `REOPEN` says for every fixture here.
-const NO_DURABLE_MEDIUM: &str = "a Vec behind an Rc, with no durable medium to reopen over — this \
+/// What `REOPEN` says for every fixture here, and in `removed_history.rs`.
+pub(crate) const NO_DURABLE_MEDIUM: &str = "a Vec behind an Rc, with no durable medium to reopen over — this \
      instrument's axis is what a declared removal capability actually does";
 
 /// A fixture that declares `REMOVAL` supported and **does not override**

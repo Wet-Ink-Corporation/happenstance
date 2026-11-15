@@ -17,11 +17,12 @@ use happenstance_sync::wire::{CodecError, FORMAT_VERSION, ResumeToken, Route, Wi
 use happenstance_sync::write_group::GroupOrderError;
 use happenstance_sync::{
     Classify, EventGroup, FailureClass, IngestStore, PeerLimits, PushBatch, RemoteError,
-    RemoteSyncPeer, ReplicatedEvent, SendExchange, ServeError, StoreSyncPeer, SyncPeer, serve_sync,
+    RemoteSyncPeer, ReplicatedEvent, SendExchange, ServeError, StorePeerError, StoreSyncPeer,
+    SyncPeer, serve_sync,
 };
 use happenstance_sync_testkit::{
-    IngestFixture, MemoryIngestFixture, MemoryIngestHandle, RefusalsOf, SyncFixture,
-    oversized_push_refusal,
+    IngestFixture, MemoryIngestFixture, MemoryIngestHandle, Refusal, RefusalsOf, SyncFixture,
+    batch_over_the_limit, oversized_push_refusal,
 };
 
 type FarSide = StoreSyncPeer<MemoryIngestHandle, MemoryIngestHandle>;
@@ -253,6 +254,68 @@ async fn serve_sync_refuses_bytes_that_are_no_envelope() {
     assert_eq!(refused.class(), FailureClass::Stop);
 }
 
+/// A push the client's own limits refuse is refused by the client: the error
+/// is its own `EventTooLarge`, not the far side's carried back through the
+/// exchange, and the far store is untouched (#452).
+///
+/// **Wrong implementation it rejects:** a `RemoteSyncPeer` that sends without
+/// checking, whose refusal would arrive as `RemoteError::Exchange`.
+#[tokio::test]
+async fn an_over_limit_push_never_reaches_the_far_side() {
+    let (peer, store) = remote().await;
+    let limit = peer.limits().max_event_bytes;
+    let event = Event::new("Oversized", vec![0_u8; limit + 1]).expect("a static event type");
+    let batch = PushBatch::new(vec![EventGroup::new(
+        None,
+        vec![ReplicatedEvent::new(
+            EventId::new(StoreId::from_bytes([0x0C; 16]), SequencePosition::FIRST),
+            RecordedAt::from_millis(1_800_000_000_000),
+            event,
+        )],
+    )]);
+
+    let refused = peer
+        .push(&batch)
+        .await
+        .expect_err("an event over the limit");
+
+    assert!(
+        matches!(refused, RemoteError::EventTooLarge { len, limit: named, .. }
+            if len == limit + 1 && named == limit),
+        "{refused:?}"
+    );
+    assert_eq!(refused.class(), FailureClass::Park);
+    assert_eq!(log(&store).await, Vec::new());
+}
+
+/// The fixture's two refusals are the client's and the far side's, so SY-36's
+/// rule still sees a far-side class cross `serve_sync` now that the client
+/// refuses its own over-limit pushes.
+///
+/// **Wrong fixture it rejects:** a second refusal whose client declares the far
+/// side's limits, which would be refused locally and test the client twice.
+#[tokio::test]
+async fn the_fixture_declares_a_local_and_a_far_side_refusal() {
+    let fixture = RemoteFixture::default();
+    let peer = fixture.connect().await;
+
+    let refusals = fixture.refusals(&peer).await.expect("the batches build");
+
+    let outcomes: Vec<_> = refusals.iter().map(|refusal| &refusal.outcome).collect();
+    assert!(
+        matches!(
+            outcomes[..],
+            [
+                Err(RemoteError::BatchTooLarge { .. }),
+                Err(RemoteError::Exchange(ServeError::Peer(
+                    StorePeerError::BatchTooLarge { .. }
+                ))),
+            ]
+        ),
+        "{outcomes:?}"
+    );
+}
+
 /// One fresh in-memory store per fixture; each `connect` is a new client over
 /// a new server-side peer onto it.
 #[derive(Debug, Default)]
@@ -260,22 +323,42 @@ struct RemoteFixture {
     store: MemoryIngestFixture,
 }
 
-impl SyncFixture for RemoteFixture {
-    type Peer = RemoteSyncPeer<Loopback>;
-
-    async fn connect(&self) -> Self::Peer {
+impl RemoteFixture {
+    /// A client declaring `declared` for a far side whose own limits are
+    /// [`PeerLimits::minimum`].
+    async fn client(&self, declared: PeerLimits) -> RemoteSyncPeer<Loopback> {
         let far = StoreSyncPeer::with_limits(
             self.store.connect().await,
             self.store.connect().await,
             PeerLimits::minimum(),
         );
-        RemoteSyncPeer::new(Loopback { far }, PeerLimits::minimum())
+        RemoteSyncPeer::new(Loopback { far }, declared)
+    }
+}
+
+impl SyncFixture for RemoteFixture {
+    type Peer = RemoteSyncPeer<Loopback>;
+
+    async fn connect(&self) -> Self::Peer {
+        self.client(PeerLimits::minimum()).await
     }
 
-    /// The far side's oversized-push refusal, carried back through the
+    /// Two oversized pushes, both `Split`. The first, over the limits this
+    /// client declares, is refused here before it is sent (#452). The second
+    /// comes from a client declaring twice the far side's `max_batch_bytes`,
+    /// so it is sent, and the far side's refusal is carried back through the
     /// exchange with its class intact.
     async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
-        oversized_push_refusal(peer).await
+        let mut refusals = oversized_push_refusal(peer).await?;
+        let mut wider = PeerLimits::minimum();
+        wider.max_batch_bytes = 2 * PeerLimits::minimum().max_batch_bytes;
+        let oversized = batch_over_the_limit(&PeerLimits::minimum())?;
+        refusals.push(Refusal {
+            provoked_by: "a push the client's wider limits admit and the far side refuses",
+            declared: FailureClass::Split,
+            outcome: self.client(wider).await.push(&oversized).await.map(drop),
+        });
+        Ok(refusals)
     }
 }
 
