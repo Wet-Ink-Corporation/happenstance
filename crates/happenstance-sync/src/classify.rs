@@ -106,8 +106,10 @@ impl Classify for SyncError {
         match self {
             Self::BatchTooLarge { .. } => FailureClass::Split,
             // A gap below the floor needs a re-seed or an accepted loss, which a
-            // retry cannot supply; an unknown peer is configuration.
-            Self::BelowRetentionFloor { .. } | Self::UnknownPeer { .. } => FailureClass::Stop,
+            // retry cannot supply and configuration cannot fix (SY-32).
+            Self::BelowRetentionFloor { .. } => FailureClass::Reseed,
+            // An unknown peer is configuration.
+            Self::UnknownPeer { .. } => FailureClass::Stop,
         }
     }
 }
@@ -144,7 +146,7 @@ mod tests {
         );
         assert_eq!(
             SyncError::BelowRetentionFloor { floor }.class(),
-            FailureClass::Stop
+            FailureClass::Reseed
         );
         assert_eq!(
             SyncError::UnknownPeer {
