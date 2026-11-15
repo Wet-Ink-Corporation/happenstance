@@ -9,7 +9,8 @@ use core::cell::{Cell, RefCell};
 use core::future::Future;
 
 use happenstance_cloudflare::{CloudflareEventStore, SqlStorage, SqlValue, TableNamespace};
-use happenstance_testkit::{Capability, Fixture};
+use happenstance_core::SequencePosition;
+use happenstance_testkit::{Capability, Fixture, Removed};
 use worker::State;
 
 /// The text the armed mid-batch fault raises, so a failure names its cause.
@@ -84,11 +85,15 @@ impl<'a> WorkerdFixture<'a> {
         }
     }
 
-    /// Runs one statement, recording rather than panicking on failure.
-    fn exec(&self, sql: &SqlStorage, statement: &str, bindings: &[SqlValue]) {
-        if let Err(err) = sql.exec(statement, bindings) {
-            self.faults
-                .record(format!("arming the mid-batch fault: {statement}: {err}"));
+    /// Runs one statement on behalf of `what`, recording rather than panicking
+    /// on failure, and says whether it succeeded.
+    fn exec(&self, sql: &SqlStorage, what: &str, statement: &str, bindings: &[SqlValue]) -> bool {
+        match sql.exec(statement, bindings) {
+            Ok(_) => true,
+            Err(err) => {
+                self.faults.record(format!("{what}: {statement}: {err}"));
+                false
+            }
         }
     }
 
@@ -134,6 +139,10 @@ impl Fixture for WorkerdFixture<'_> {
     // strict deployed leg re-tests it on every run: 256 × 1,024 tag rows in
     // one request.
     const MAX_TAGS_PER_BATCH: Option<usize> = Some(256 * 1024);
+    // The shim fixture's answer, and the reason this harness grants it rather
+    // than keeping the default: here the removal reaches a real object's
+    // SQLite and its `sqlite_sequence`, which the shim only models (#147).
+    const REMOVAL: Capability = Capability::SUPPORTED;
 
     fn connect(&self) -> impl Future<Output = Self::Store> {
         let sql = self
@@ -156,19 +165,26 @@ impl Fixture for WorkerdFixture<'_> {
         if let Some(sql) = self.current_sql() {
             let ns = self.namespace.as_str();
             let counter = format!("{ns}_mid_batch_fault");
+            // Each failure is recorded as a harness fault, which the
+            // dispatcher reports beside the rule; the arming has nothing
+            // further to decide on, so the answers are not read.
+            let what = "arming the mid-batch fault";
             self.exec(
                 &sql,
+                what,
                 &format!("CREATE TABLE IF NOT EXISTS {counter} (remaining INTEGER NOT NULL)"),
                 &[],
             );
-            self.exec(&sql, &format!("DELETE FROM {counter}"), &[]);
+            self.exec(&sql, what, &format!("DELETE FROM {counter}"), &[]);
             self.exec(
                 &sql,
+                what,
                 &format!("INSERT INTO {counter} (remaining) VALUES (?)"),
                 &[SqlValue::Integer(i64::try_from(after).unwrap_or(i64::MAX))],
             );
             self.exec(
                 &sql,
+                what,
                 &format!(
                     "CREATE TRIGGER IF NOT EXISTS {ns}_mid_batch_fault_fires \
                      BEFORE INSERT ON {ns}_event BEGIN \
@@ -181,5 +197,56 @@ impl Fixture for WorkerdFixture<'_> {
             );
         }
         core::future::ready(())
+    }
+
+    fn remove_outside_port(&self, positions: &[SequencePosition]) -> impl Future<Output = Removed> {
+        // The shim fixture's removal, namespaced: per position, the tag rows
+        // and then the event row, through the object's own SQL. `store_meta`
+        // and `sqlite_sequence` are not touched, so this is a removal from the
+        // same store; `delete_all()` would be a different one (VT-6). It is
+        // the only place the guard rule, and ES-38's after it, runs against a
+        // real Durable Object's `sqlite_sequence`.
+        //
+        // `Deleted` only if every statement succeeded. Otherwise each failure
+        // is a recorded harness fault and the answer is `Nothing`, which the
+        // rule fails on and the dispatcher reports beside the fault. This crate
+        // may not panic, so nothing here does.
+        let Some(sql) = self.current_sql() else {
+            return core::future::ready(Removed::Nothing);
+        };
+        let ns = self.namespace.as_str();
+        let what = "removing outside the port";
+        let mut distinct: Vec<u64> = positions.iter().map(|position| position.get()).collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+
+        let mut removed_all = true;
+        for position in distinct {
+            let Ok(position) = i64::try_from(position) else {
+                self.faults.record(format!(
+                    "{what}: position {position} does not fit SQLite's i64"
+                ));
+                removed_all = false;
+                continue;
+            };
+            let binding = [SqlValue::Integer(position)];
+            removed_all &= self.exec(
+                &sql,
+                what,
+                &format!("DELETE FROM {ns}_event_tag WHERE position = ?"),
+                &binding,
+            );
+            removed_all &= self.exec(
+                &sql,
+                what,
+                &format!("DELETE FROM {ns}_event WHERE position = ?"),
+                &binding,
+            );
+        }
+        core::future::ready(if removed_all {
+            Removed::Deleted
+        } else {
+            Removed::Nothing
+        })
     }
 }

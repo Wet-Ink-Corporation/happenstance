@@ -8,7 +8,7 @@
 //! read-back rule that forgot to settle fails a conformant store behind a lag,
 //! and a rule here that does not settle is caught by not skipping.
 
-/// The 84 named rules that read, count or exclude an event they appended, and
+/// The 85 named rules that read, count or exclude an event they appended, and
 /// so settle the frontier before they do (CF-42).
 ///
 /// The last six are the concurrency family's. Every one of them settles once,
@@ -92,6 +92,7 @@ pub(crate) const READS_BACK_ITS_OWN_WRITES: &[&str] = &[
     "query_items_share_one_snapshot",
     "nothing_below_an_observed_position_appears_later",
     "contains_event_id_reports_a_held_row_above_the_frontier",
+    "removal_outside_the_port_removes_exactly_the_named_events",
     "exactly_one_of_n_contenders_commits",
     "k_disjoint_boundaries_never_conflict",
     "positions_are_unique_under_concurrent_appends",

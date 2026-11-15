@@ -145,6 +145,11 @@ fn declared_capabilities() -> Vec<(&'static str, &'static str, Capability)> {
             <CloudflareFixture as Fixture>::MID_BATCH_FAULT,
         ),
         (
+            "CloudflareFixture",
+            "REMOVAL",
+            <CloudflareFixture as Fixture>::REMOVAL,
+        ),
+        (
             "DecliningFixture",
             "SECOND_HANDLE",
             <DecliningFixture as Fixture>::SECOND_HANDLE,
@@ -625,7 +630,7 @@ fn the_four_ceilings_fit_the_documented_row_limit() {
 ///
 /// The macro's general arm hoists the fixture expression behind
 /// `async fn __conformance_fixture() -> impl Fixture` and hands the opaque type
-/// to every rule (`crates/happenstance-testkit/src/lib.rs:615-636`). This is
+/// to every rule (`crates/happenstance-testkit/src/lib.rs:616-637`). This is
 /// that obligation, written out: if `CloudflareFixture::new()` does not satisfy
 /// it, the slice-mate's three-line target does not compile.
 #[test]
@@ -655,7 +660,7 @@ mod on_the_object {
     use futures_core::Stream;
     use happenstance_cloudflare::host::{self, DurableObjectHost};
     use happenstance_core::{Event, EventStore, Query, ReadOptions};
-    use happenstance_testkit::{Fixture, rules};
+    use happenstance_testkit::{Fixture, Removed, rules};
     use wasm_bindgen_test::{console_log, wasm_bindgen_test};
 
     use super::support::MID_BATCH_FAULT_TEXT;
@@ -887,6 +892,80 @@ mod on_the_object {
                  reports a green atomicity result for a store nothing faulted."
             );
         }
+
+        if <CloudflareFixture as Fixture>::REMOVAL.is_supported() {
+            // A fresh object: the fault armed above keeps firing on every
+            // later insert into the one before.
+            let fixture = CloudflareFixture::new();
+            let store = fixture.connect().await;
+            store
+                .append(&[event("Kept")], None)
+                .await
+                .expect("the append lands");
+            let removed = store
+                .append(&[event("Removed")], None)
+                .await
+                .expect("the append lands");
+
+            assert_eq!(
+                fixture.remove_outside_port(&[removed]).await,
+                Removed::Deleted,
+                "`REMOVAL` is declared supported, so `remove_outside_port` must \
+                 be overridden: the provided body answers `Nothing`"
+            );
+            assert_eq!(
+                types_in(&store).await,
+                ["Kept"],
+                "and the override must delete the named event from the object's \
+                 own storage, through a handle taken before the removal"
+            );
+        }
+    }
+
+    /// The executable half of `REMOVAL`'s "same store, not a new one": after a
+    /// removal, the object keeps its `StoreId` and its `AUTOINCREMENT` counter.
+    ///
+    /// A new append carries the incarnation the survivor carries, and lands
+    /// above the removed tail. A removal that rebuilt the tables, or a wipe like
+    /// `delete_all()`, would fail one or the other: that is a different store
+    /// (VT-6), which this capability does not model.
+    #[wasm_bindgen_test]
+    async fn removal_keeps_the_objects_identity_and_counter() {
+        let fixture = CloudflareFixture::new();
+        let store = fixture.connect().await;
+        store
+            .append(&[event("Kept")], None)
+            .await
+            .expect("the append lands");
+        let tail = store
+            .append(&[event("Tail")], None)
+            .await
+            .expect("the append lands");
+
+        assert_eq!(fixture.remove_outside_port(&[tail]).await, Removed::Deleted);
+        let next = store
+            .append(&[event("Next")], None)
+            .await
+            .expect("the append after the removal lands");
+
+        let held: Vec<_> = drain(store.read(&Query::all(), ReadOptions::new()))
+            .await
+            .into_iter()
+            .map(|item| item.expect("every item of the read decodes"))
+            .collect();
+        let incarnations: Vec<_> = held.iter().map(|event| event.id.store()).collect();
+        assert!(
+            incarnations
+                .windows(2)
+                .all(|pair| pair.first() == pair.last()),
+            "the survivor and the new event carry one StoreId: a removal does \
+             not re-mint the incarnation. Saw {incarnations:?}"
+        );
+        assert!(
+            next > tail,
+            "the append after removing the tail at {tail} took {next}: the \
+             AUTOINCREMENT counter rewound"
+        );
     }
 
     /// The host's arming hook is a real seam, not a decoration.

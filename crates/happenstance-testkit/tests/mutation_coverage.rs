@@ -2179,6 +2179,71 @@ const REGISTRY: &[Declared] = &[
             "the staging: a fixture declaring `HELD_ABOVE_FRONTIER` supported",
         )],
     },
+    // --- Removal outside the port (#147) -------------------------------
+    //
+    // Four fixtures over a completely correct dense log, each declaring
+    // `REMOVAL` and getting the removal wrong one way. The honest twin is
+    // `GappedPositionStore`, which removes from its live log and its durable
+    // copy and keeps its high-water mark.
+    Declared {
+        name: "ForgottenRemovalFixture",
+        kind: Kind::Mutant,
+        fails: &["removal_outside_the_port_removes_exactly_the_named_events"],
+        provenance: "a fixture that declares `REMOVAL` supported and leaves \
+             `remove_outside_port` to the trait's provided body, which answers \
+             `Removed::Nothing`. It is the author who claims the capability first and means \
+             to write the `DELETE` later. The answer check fails it on every run, before \
+             anything is read back, with a message naming the method.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "removal_outside_the_port_removes_exactly_the_named_events",
+            "MUST override `remove_outside_port`",
+        )],
+    },
+    Declared {
+        name: "NoopRemovalFixture",
+        kind: Kind::Mutant,
+        fails: &["removal_outside_the_port_removes_exactly_the_named_events"],
+        provenance: "`NoopFaultFixture`'s author one capability over: an override that \
+             answers `Removed::Deleted` with an empty body, written while stubbing the \
+             method. The answer check passes. Without the read-back, ES-38's and ES-40's \
+             rules would then run against a store nothing was removed from, and pass.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "removal_outside_the_port_removes_exactly_the_named_events",
+            "removed nothing",
+        )],
+    },
+    Declared {
+        name: "OverRemovingFixture",
+        kind: Kind::Mutant,
+        fails: &["removal_outside_the_port_removes_exactly_the_named_events"],
+        provenance: "a removal written by copying `CloudflareEventStore::discard_from`, the \
+             workspace's one existing raw delete: `DELETE … WHERE position >= ?` from the \
+             lowest named position. It removes the named events and every survivor above \
+             the first of them. A tail-only removal could not tell it from a correct one; \
+             the rule's interior removal can.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "removal_outside_the_port_removes_exactly_the_named_events",
+            "a survivor is missing",
+        )],
+    },
+    Declared {
+        name: "RenumberingFixture",
+        kind: Kind::Mutant,
+        fails: &["removal_outside_the_port_removes_exactly_the_named_events"],
+        provenance: "the obvious removal on a store with no delete: read the whole log, drop \
+             the named events, and append the survivors into a fresh one. The survivors \
+             are all there, by content, and every one above the first hole has a new \
+             position and a new identity. That is ES-38's Rejects, a store rebuilt from \
+             its survivors, and VT-6's different store under the same name.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "removal_outside_the_port_removes_exactly_the_named_events",
+            "a survivor's position or id changed",
+        )],
+    },
     // --- Value edges ---------------------------------------------------
     //
     // Ten stores that are correct for every value the rest of this binary
@@ -2909,6 +2974,11 @@ macro_rules! for_each_mutant {
             crate::mutants::RefetchingPagedFixture,
             crate::mutants::SwallowedReadFaultFixture,
             crate::mutants::AwaitAcrossBorrowFixture,
+
+            crate::mutants::removal::ForgottenRemovalFixture,
+            crate::mutants::removal::WrongRemovalFixture<crate::mutants::removal::NoopRemoval>,
+            crate::mutants::removal::WrongRemovalFixture<crate::mutants::removal::OverRemoving>,
+            crate::mutants::removal::WrongRemovalFixture<crate::mutants::removal::Renumbering>,
         }
     };
 }
@@ -3114,9 +3184,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Sixty-two rows below are marked [`ModelOutcome::Agreed`] at this commit;
+/// Sixty-six rows below are marked [`ModelOutcome::Agreed`] at this commit;
 /// four of them are the conformant controls and *must* be, which leaves
-/// **fifty-eight misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// **sixty-two misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -3178,6 +3248,10 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 ///   and arming is a call on the *fixture*. An `Op` that armed one would be
 ///   generating a fixture call rather than a store operation, which is not what
 ///   [`Op`] is. Unarmed, this store is an ordinary correct one.
+/// * `ForgottenRemovalFixture`, `NoopRemovalFixture`, `OverRemovingFixture`,
+///   `RenumberingFixture` — the same shape as `NoTransactionStore`: each
+///   defect is in what the fixture's `remove_outside_port` does, and the model
+///   never calls it. Unremoved, each store is an ordinary correct one.
 /// * The ten value edges, from `EmptyPayloadIsNullStore` to
 ///   `ChunkLosingBatchStore` — one shape rather than ten. Every one of them is
 ///   wrong only at a boundary `fixtures::strategies::any_event` does not reach:
@@ -3306,6 +3380,12 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("NoopFaultFixture", ModelOutcome::Agreed),
     ("UnarmedFrontierFixture", ModelOutcome::Agreed),
     ("EmptyArmFrontierFixture", ModelOutcome::Agreed),
+    // The removal capability's four (#147): the model never removes, so each
+    // is its correct store as far as the model can see.
+    ("ForgottenRemovalFixture", ModelOutcome::Agreed),
+    ("NoopRemovalFixture", ModelOutcome::Agreed),
+    ("OverRemovingFixture", ModelOutcome::Agreed),
+    ("RenumberingFixture", ModelOutcome::Agreed),
     ("EmptyPayloadIsNullStore", ModelOutcome::Agreed),
     ("MetadataConflatingStore", ModelOutcome::Agreed),
     ("NarrowIdentifierColumnStore", ModelOutcome::Agreed),
@@ -4119,15 +4199,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 62,
-            "`MODEL_COVERAGE`'s heading says sixty-two rows are `Agreed` and the \
+            agreed, 66,
+            "`MODEL_COVERAGE`'s heading says sixty-six rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            58,
-            "`MODEL_COVERAGE`'s heading says fifty-eight misses and the table \
+            62,
+            "`MODEL_COVERAGE`'s heading says sixty-two misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls
@@ -5053,6 +5133,7 @@ mod mutation_coverage {
         "append_is_atomic_under_a_mid_batch_fault",
         "arming_a_mid_batch_fault_makes_the_append_fail",
         "append_reports_exceeded_store_limits",
+        "removal_outside_the_port_removes_exactly_the_named_events",
     ];
 
     /// CF-18. A capability-gated rule is still emitted, still answered, and
@@ -5134,6 +5215,7 @@ mod mutation_coverage {
                         || *reason == DecliningFixture::MID_BATCH_FAULT_REASON
                         || *reason == DecliningFixture::READ_FAULT_REASON
                         || *reason == DecliningFixture::HELD_ABOVE_FRONTIER_REASON
+                        || *reason == DecliningFixture::REMOVAL_REASON
                         // CF-40: a fixture with no ceiling reports the testkit's
                         // reason rather than its own, because the sentence is the
                         // same for every store that has none. See

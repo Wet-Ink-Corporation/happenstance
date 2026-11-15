@@ -392,6 +392,9 @@ fn capability_constants_are_answered_not_defaulted() {
     assert!(NeonFixture::READ_FAULT.is_supported());
     // A frontier store, so the default sentence (no frontier here) is false.
     assert!(NeonFixture::HELD_ABOVE_FRONTIER.is_supported());
+    // A raw `DELETE` reaches this store's own table, and the sequence survives
+    // it, so the removal capability is this store's to grant (#147).
+    assert!(NeonFixture::REMOVAL.is_supported());
 
     // Not left at the trait's provided default. Comparing against the default
     // explicitly is the only way to tell an answer from an omission, because the
@@ -419,6 +422,79 @@ fn capability_constants_are_answered_not_defaulted() {
     assert_eq!(
         NeonFixture::MAX_EVENTS_PER_BATCH,
         Some(NeonEventStore::<HyperTransport>::MAX_EVENTS_PER_BATCH)
+    );
+}
+
+/// The fixture's raw `DELETE` removes the rows, from the same store, and
+/// leaves the sequence where it was (#147).
+///
+/// `happenstance-postgres`'s smoke test, over one-shot HTTP. The guard rule in
+/// the suite checks the removal itself; this adds that the `StoreId` survives
+/// and that the next append lands above the removed tail, which is ES-38's
+/// content for this adapter, recorded as evidence for #151's rule. Every read
+/// follows a settle, because this fixture declines `READ_YOUR_OWN_WRITES`.
+#[tokio::test]
+#[ignore = "needs a live Neon endpoint; set NEON_CONNECTION and run with `-- --ignored`"]
+async fn removal_outside_the_port_deletes_the_row_and_keeps_the_allocator() {
+    use happenstance_core::collect;
+    use happenstance_testkit::fixtures::{query_tagged, tagged_event};
+    use happenstance_testkit::{Removed, Settled};
+
+    let fixture = NeonFixture::new();
+    let store = fixture.connect().await;
+    let mut appended = Vec::new();
+    for (event_type, tag) in [("Kept", "kept"), ("Middle", "middle"), ("Tail", "tail")] {
+        let position = store
+            .append(&[tagged_event(event_type, &[("removal", tag)])], None)
+            .await
+            .unwrap();
+        appended.push(position);
+    }
+    let [kept, middle, tail] = appended[..] else {
+        unreachable!("three appends returned three positions")
+    };
+
+    assert_eq!(
+        fixture.remove_outside_port(&[middle, tail]).await,
+        Removed::Deleted
+    );
+
+    assert_eq!(fixture.settle_frontier().await, Settled::Visible);
+    let held = collect(store.read(&Query::all(), ReadOptions::new()))
+        .await
+        .unwrap();
+    assert_eq!(
+        held.iter().map(|event| event.position).collect::<Vec<_>>(),
+        [kept],
+        "only the event that was not named is left"
+    );
+    let survivor = held.first().unwrap();
+    let by_tag = collect(store.read(&query_tagged(&[("removal", "tail")]), ReadOptions::new()))
+        .await
+        .unwrap();
+    assert!(
+        by_tag.is_empty(),
+        "a tag query for a removed event finds nothing"
+    );
+
+    let next = store
+        .append(&[tagged_event("Next", &[("removal", "next")])], None)
+        .await
+        .unwrap();
+    assert_eq!(fixture.settle_frontier().await, Settled::Visible);
+    let after = collect(store.read(&Query::all(), ReadOptions::new()))
+        .await
+        .unwrap();
+    let appended_next = after.iter().find(|event| event.position == next).unwrap();
+    assert_eq!(
+        appended_next.id.store(),
+        survivor.id.store(),
+        "the same incarnation: a removal does not re-mint the StoreId"
+    );
+    assert!(
+        next > tail,
+        "the next append took {next}, at or below the removed tail at {tail}: \
+         the sequence rewound"
     );
 }
 

@@ -102,7 +102,7 @@ with its own reason. The PostgreSQL and Neon fixtures do, because a read there
 only shows rows below a server-wide snapshot point. Two parts of the suite read
 this capability (`Fixture::READ_YOUR_OWN_WRITES`).
 
-The first is the 83 named rules that read back their own appends. When your
+The first is the 84 named rules that read back their own appends. When your
 fixture declines the capability, each of them calls
 `Fixture::settle_frontier` after its writes and before it reads them back
 ([CF-42](../spec/SPECIFICATION.md#63-the-fixture-contract)). Override it to
@@ -110,7 +110,7 @@ wait until a read shows every row your store holds, then return
 `Settled::Visible`. The PostgreSQL and Neon fixtures poll the read path's own
 predicate, with a deadline. A rule never waits on its own, so the waiting
 belongs in your fixture. If you keep the provided body, it returns
-`Settled::Nothing` and those 83 rules report a skip under
+`Settled::Nothing` and those 84 rules report a skip under
 `READ_YOUR_OWN_WRITES` with your reason. A fixture that supports the capability
 is never asked to settle.
 
@@ -145,6 +145,33 @@ on every run. The rule also checks that `read` does not show the row before it
 asks the probe, so an override that answers `Staged` and arms nothing fails too. The PostgreSQL fixture in
 [its support module](../crates/happenstance-postgres/tests/support/mod.rs) does it
 with a trigger that lifts the new row above any frontier.
+
+### Removing events outside the port
+
+`REMOVAL` asks whether your fixture can delete events from your store's own
+storage, the way a retention job's raw `DELETE` does. `EventStore` has no delete,
+and through 1.x it will not get one
+([ADR-0028](../.kb/decisions/0028-what-a-store-may-forget.md)), so the deletion has
+to come from your fixture's side of the storage. The rules about a store that has
+lost events, ES-38's and ES-40's, stand on it.
+
+It defaults to declined, and you may leave it: the default's reason says your
+fixture has not answered, which is true. To support it, override
+`remove_outside_port` to delete exactly the events at the positions it is given,
+from the store a handle already open can see, and return `Removed::Deleted`. The
+provided body returns `Removed::Nothing`, and
+`removal_outside_the_port_removes_exactly_the_named_events` fails on that answer.
+The rule also reads the store back, so an override that deletes nothing, deletes
+everything from the lowest named position up, or rebuilds the log from its
+survivors fails too.
+
+A removal leaves the store's identity and its position allocator where they were.
+A wipe does not: `TRUNCATE … RESTART IDENTITY` on Postgres, or a Durable Object
+cleared with `delete_all()`, makes a **different** store under VT-6, with its
+positions restarting, and is not what this capability models. The SQLite,
+PostgreSQL, Neon and Durable Object fixtures support it with a raw `DELETE`; the
+[SQLite support module](../crates/happenstance-sqlite/tests/support/mod.rs) is the
+shortest.
 
 ### The four size limits
 
@@ -181,7 +208,7 @@ use happenstance_core::{AppendCondition, AppendError, Event, EventId, Query};
 use happenstance_core::{ReadOptions, SendEventStore, SequencePosition, SequencedEvent};
 use happenstance_testkit::{Capability, Fixture, GappyMemoryStore, NO_STORE_LIMITS};
 use happenstance_testkit::{RuleOutcome, UNSTATED_HELD_ABOVE_FRONTIER};
-use happenstance_testkit::{UNSTATED_MID_BATCH_FAULT, UNSTATED_READ_FAULT};
+use happenstance_testkit::{UNSTATED_MID_BATCH_FAULT, UNSTATED_READ_FAULT, UNSTATED_REMOVAL};
 use happenstance_testkit::{block_on, rules};
 
 /// One handle onto a fixture's store.
@@ -242,6 +269,9 @@ impl Fixture for StridedFixture {
     const HELD_ABOVE_FRONTIER: Capability = Capability::declined(
         "a read shows every row from the moment its append returns, so there is no frontier",
     );
+    const REMOVAL: Capability = Capability::declined(
+        "the events live in a Vec only the store can reach, so nothing outside it can delete one",
+    );
 
     fn connect(&self) -> impl Future<Output = Self::Store> {
         core::future::ready(Handle(Arc::clone(&self.0)))
@@ -269,6 +299,7 @@ fn main() {
                 UNSTATED_HELD_ABOVE_FRONTIER,
                 UNSTATED_MID_BATCH_FAULT,
                 UNSTATED_READ_FAULT,
+                UNSTATED_REMOVAL,
             ];
             assert!(!defaults.contains(&reason), "{rule}");
             if capability == "REOPEN" {
@@ -281,6 +312,7 @@ fn main() {
         "MID_BATCH_FAULT",
         NO_STORE_LIMITS,
         "READ_FAULT",
+        "REMOVAL",
         "REOPEN",
     ];
     assert_eq!(skipped, BTreeSet::from(declined));
