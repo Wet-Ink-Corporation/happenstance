@@ -3,13 +3,18 @@
 //!
 //! # Why the rule plays the runner
 //!
-//! SY-7's reason, one clause on. A merge rule is runner configuration, and the
-//! shipped runner has no adjudication hook yet (#136 left it planned), so the
-//! rule plays a runner that holds one [`MergeRule`] per direction. What is left
-//! to the store is the part it controls: it writes what the runner hands it
-//! and nothing of its own. A store that judges on ingest carries one merge rule
+//! SY-7's reason, one clause on. A merge rule is runner configuration, and
+//! the shipped runner takes one per ingest site through its adjudication
+//! hook (#450): `Edge::with_adjudicator` for what an edge pulls, and
+//! `StoreSyncPeer::with_adjudicator` for what a far side is pushed. The rule
+//! plays a runner that mounts one [`MergeRule`] per direction through that
+//! same hook, the shipped [`Accept`] or the [`SeatRule`] beside this file, so
+//! it hands each store exactly what the shipped runner would. What is left to
+//! the store is the part it controls: it writes what the runner hands it and
+//! nothing of its own. A store that judges on ingest carries one merge rule
 //! into every direction of every edge it sits on, and the runner cannot then
-//! permit a different one.
+//! permit a different one. That the shipped runner mounts each rule only
+//! where it was given is `happenstance-sync`'s `tests/runner/wrong_runners.rs`.
 //!
 //! # Which claims travel with a guard
 //!
@@ -56,8 +61,10 @@ use happenstance_core::{
     AppendCondition, Event, EventId, EventStore, EventType, Query, QueryItem, RecordedAt,
     SequencePosition, SequencedEvent, StoreId, Tag, Tags,
 };
-use happenstance_sync::{IngestGroup, IngestStore, Ingested, ReplicatedEvent};
+use happenstance_sync::runner::{Accept, Adjudicate};
+use happenstance_sync::{EventGroup, IngestGroup, IngestStore, Ingested, ReplicatedEvent};
 
+use super::seat_rule::SeatRule;
 use super::{ensure_counts, ensure_foreign, holds, ingest, opaque, read_all};
 use crate::IngestFixture;
 use crate::violation::{Violation, ensure};
@@ -79,16 +86,16 @@ const SEAT: &str = "seat:s10";
 /// One event by type and bytes: how this module compares facts.
 type Fact = (String, Vec<u8>);
 
-/// What one direction of an edge does with a claim it carries.
+/// Which hook one direction of an edge mounts for a claim it carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum MergeRule {
-    /// Judge the claim by its fact family against what the receiving store
-    /// holds, and hand it a reversal where another claim on the seat is
-    /// already there: the hub's rule for what spokes push (SY-7).
+    /// [`SeatRule`]: judge the claim by its fact family against what the
+    /// receiving store holds, and hand it a reversal where another claim on
+    /// the seat is already there: the hub's rule for what spokes push (SY-7).
     Adjudicate,
-    /// Take the claim as sent, judged by nobody: a spoke's rule for what the
-    /// hub sends, and both directions of an edge whose family has no
-    /// adjudicator on it.
+    /// The shipped [`Accept`]: take the claim as sent, judged by nobody: a
+    /// spoke's rule for what the hub sends, and both directions of an edge
+    /// whose family has no adjudicator on it.
     Accept,
 }
 
@@ -391,13 +398,9 @@ async fn pull<S: EventStore + IngestStore>(
     Ok(())
 }
 
-/// The runner's step for one claim crossing into `to` under `rule`. The
-/// `guard` the claim travels with, if any, rides on its group (SY-30) as
-/// evidence, never an instruction (SY-6). Under [`MergeRule::Adjudicate`]
-/// the runner judges by fact family (SY-35), from what `to` holds: another
-/// claim on the seat earns a reversal. Under [`MergeRule::Accept`] it hands
-/// nothing. The store evaluates nothing (SY-1) and must count exactly what it
-/// was handed.
+/// The runner's step for one claim crossing into `to` under `rule`, mounted
+/// through the shipped hook: [`MergeRule::Adjudicate`] mounts [`SeatRule`]
+/// over `to`'s store, and [`MergeRule::Accept`] the shipped [`Accept`].
 async fn carry<S: EventStore + IngestStore>(
     rule: MergeRule,
     to: &End<S>,
@@ -405,29 +408,39 @@ async fn carry<S: EventStore + IngestStore>(
     guard: Option<&AppendCondition>,
     what: &str,
 ) -> Result<(), Violation> {
-    let contested = rule == MergeRule::Adjudicate && contested(&to.store, claim).await?;
-    let compensation = if contested {
-        slice::from_ref(&to.reversal)
-    } else {
-        &[]
-    };
-    let group = IngestGroup::new(slice::from_ref(claim), compensation).with_guard(guard);
-    let took: Ingested = ingest(&to.store, &[group], SY_10).await?;
-    ensure_counts(took, (1, 0, usize::from(contested)), what, SY_10)
+    match rule {
+        MergeRule::Adjudicate => {
+            let family = seat_family()?;
+            let seat = SeatRule::new(&to.store, &family, &to.reversal);
+            carry_under(&seat, to, claim, guard, what).await
+        }
+        MergeRule::Accept => carry_under(&Accept, to, claim, guard, what).await,
+    }
 }
 
-/// Whether `store` holds a claim on the seat other than `claim`, by type,
-/// tags and bytes, never decoded.
-async fn contested<S: EventStore>(store: &S, claim: &ReplicatedEvent) -> Result<bool, Violation> {
-    let family = seat_family()?;
-    let incoming: Fact = (
-        String::from(claim.event.event_type().as_str()),
-        claim.event.data().to_vec(),
-    );
-    Ok(read_all(store, SY_10)
-        .await?
-        .iter()
-        .any(|row| family.matches(row.event_type(), row.tags()) && fact(row) != incoming))
+/// One claim crossing into `to` as a runner mounting `rule` lands it: one
+/// group, judged with nothing before it in its batch, landing with the
+/// compensation the rule answered in the same write (SY-2). The `guard` the
+/// claim travels with, if any, rides on its group (SY-30) as evidence, never
+/// an instruction (SY-6). The store evaluates nothing (SY-1) and must count
+/// exactly what it was handed.
+async fn carry_under<S: EventStore + IngestStore, A: Adjudicate>(
+    rule: &A,
+    to: &End<S>,
+    claim: &ReplicatedEvent,
+    guard: Option<&AppendCondition>,
+    what: &str,
+) -> Result<(), Violation> {
+    // The group as it travels, owned because the hook judges a wire group;
+    // the walk keeps `claim` for the steps after this one.
+    let travelling = EventGroup::new(guard.cloned(), Vec::from([claim.clone()]));
+    let compensation = rule
+        .compensation(&travelling, &[])
+        .await
+        .map_err(|error| Violation::new(SY_10, format!("{what}: {error}")))?;
+    let group = IngestGroup::new(&travelling.events, &compensation).with_guard(guard);
+    let took: Ingested = ingest(&to.store, &[group], SY_10).await?;
+    ensure_counts(took, (1, 0, compensation.len()), what, SY_10)
 }
 
 /// `log`'s events by type and bytes, sorted, so two logs that hold the same

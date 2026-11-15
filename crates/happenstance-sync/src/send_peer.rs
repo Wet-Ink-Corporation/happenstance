@@ -15,6 +15,7 @@
 use crate::ingest::SendIngestStore;
 use crate::peer::{Ack, PeerLimits, Pulled, PushBatch, SyncPeer};
 use crate::remote::{RemoteSyncPeer, SendExchange};
+use crate::runner::SendAdjudicate;
 use crate::store_peer::{StoreResume, StoreSyncPeer};
 use crate::wire::ResumeToken;
 use crate::write_group::SendWriteGroupStore;
@@ -31,8 +32,10 @@ use crate::write_group::SendWriteGroupStore;
 ///
 /// It implements the flavour for two peers and their `Send` halves:
 ///
-/// * `SendPeer<StoreSyncPeer<S, I>>`, for `S:`
-///   [`SendWriteGroupStore`]` + Sync` and `I:` [`SendIngestStore`]` + Sync`;
+/// * `SendPeer<StoreSyncPeer<S, I, A>>`, for `S:`
+///   [`SendWriteGroupStore`]` + Sync`, `I:` [`SendIngestStore`]` + Sync` and
+///   a merge rule `A:` [`SendAdjudicate`]` + Sync`, which
+///   [`Accept`](crate::runner::Accept), the default, is;
 /// * `SendPeer<RemoteSyncPeer<X>>`, for `X:` [`SendExchange`]` + Sync`.
 ///
 /// `Sync` because a pull or a push holds `&self` across its awaits, and a
@@ -113,12 +116,13 @@ impl<P> SendPeer<P> {
     }
 }
 
-impl<S, I> crate::peer::SendSyncPeer for SendPeer<StoreSyncPeer<S, I>>
+impl<S, I, A> crate::peer::SendSyncPeer for SendPeer<StoreSyncPeer<S, I, A>>
 where
     S: SendWriteGroupStore + Sync,
     I: SendIngestStore + Sync,
+    A: SendAdjudicate + Sync,
 {
-    type Error = <StoreSyncPeer<S, I> as SyncPeer>::Error;
+    type Error = <StoreSyncPeer<S, I, A> as SyncPeer>::Error;
     type Resume = StoreResume;
 
     /// [`StoreSyncPeer`]'s pull.

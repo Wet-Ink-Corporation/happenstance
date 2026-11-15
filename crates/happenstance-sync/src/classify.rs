@@ -24,6 +24,8 @@
 //! Object's `Rc`-holding error implements it unchanged. A `Send` bound here
 //! would undo the measurement on [`SyncPeer::Error`](crate::SyncPeer::Error).
 
+use core::convert::Infallible;
+
 use crate::peer::SyncError;
 
 /// The remedy a failure calls for. One of four, and open to a fifth.
@@ -98,6 +100,16 @@ impl Classify for SyncError {
             // retry cannot supply; an unknown peer is configuration.
             Self::BelowRetentionFloor { .. } | Self::UnknownPeer { .. } => FailureClass::Stop,
         }
+    }
+}
+
+/// A failure that cannot happen has no class to state, and needs none: no
+/// value of it exists. It is here so a stage that never fails, such as the
+/// [`Accept`](crate::runner::Accept) rule, still meets a `Classify` bound, and
+/// so the errors that carry such a stage default to it.
+impl Classify for Infallible {
+    fn class(&self) -> FailureClass {
+        match *self {}
     }
 }
 

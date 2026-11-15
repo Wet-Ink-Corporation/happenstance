@@ -35,6 +35,29 @@ not the same as what a user needed to be told.
 
 ### Added
 
+- `happenstance-sync`: the runner's adjudication hook (#450). A merge rule is
+  a `runner::Adjudicate` (with `runner::SendAdjudicate` for the `Send`
+  flavour): asked once per incoming group, with the groups before it in the
+  same batch, for the compensation the group lands with. It decides and never
+  writes; the runner lands each group and its compensation in one write
+  (SY-2). `runner::Accept`, which judges nothing, is the default everywhere.
+  A rule is mounted at one of an edge's two ingest sites, and that is the
+  direction it judges (SY-10): `Edge::with_adjudicator` for what an edge
+  pulls, so a hub that drives its own edge adjudicates what it pulls, and
+  `StoreSyncPeer::with_adjudicator` for what a far side is pushed, served
+  through the new `serve_sync_adjudicated`. A rule that cannot decide fails
+  the step in the new `Phase::Adjudicate`, as `StepError::Adjudicate` or
+  `StorePeerError::Adjudicate`, with nothing written. **Additive only**: the
+  new type parameters are defaulted (`Edge<R, A = Accept>`,
+  `StoreSyncPeer<S, I, A = Accept>`, `StepError<P, R, I, A = Infallible>`,
+  `StepFailure<P, S, A = Accept>`, `StorePeerError<R, W, A = Infallible>`,
+  `ServeError<R, W, A = Infallible>`), `serve_sync` keeps its two, and code
+  naming any of them as `0.6.0` did compiles unchanged. `Infallible` now
+  implements `Classify`.
+- `happenstance-sync-testkit`: `only_the_adjudicator_compensates` (SY-7) and
+  `directional_merge_rules_compose` (SY-10) mount their merge rules through
+  the shipped `Adjudicate` hook and `Accept`, rather than a private enum of
+  their own. No rule's verdict changes against any store (#450).
 - `happenstance-testkit`: `WithholdingStore` and `WithholdError`, CF-27's
   completeness instrument (#144). A decorator over any `EventStore` that holds
   a suffix or a scattered retained set of the inner store's log: a withheld
