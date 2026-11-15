@@ -720,11 +720,11 @@ pub(crate) fn run(out: &mut impl io::Write, mode: Mode) -> Result<()> {
     // 4. Every named conformance rule exists, or is declared in
     //    [`UNRESOLVABLE_RULE_NAMES`] with why nothing can find it.
     //
-    //    Only clauses whose rules would live in a suite that *exists*. `SY`
-    //    rules belong to the replication suite and that crate has not been
-    //    written — checking those names against the event-store suite is a
-    //    category error that reports every one of them as missing, which is
-    //    noise indistinguishable from a real typo.
+    //    Only clauses whose rules would live in a suite that *exists*: `ES`,
+    //    `VT`, `WF` and `PS` against the testkit's families, and since #458
+    //    `SY` against the sync testkit's seven, with the names none of them
+    //    can define declared in `sync_family`. `CF` clauses are about the
+    //    suite rather than checked by it, and abstain.
     //
     //    Resolved against `resolvable`, so a `wire::`-qualified name is looked
     //    for in the wire test files rather than in a suite that could never
@@ -2712,25 +2712,25 @@ fn case_ids(text: &str) -> Vec<String> {
 /// Whether a clause's rules would live in a conformance suite that exists today.
 ///
 /// The event store's suite does, and so does the projection store's, as of the
-/// phase that built it. The replication port's exists since #111 with two rules,
-/// and phase 13 writes the rest — until then most `SY` rule names are scheduled
-/// work, and the honest answer is that nothing can check them rather than that
-/// they are all wrong. Checking them now would report every unwritten one as
-/// missing, which is noise indistinguishable from a real typo.
+/// phase that built it. The replication port's seven families do since phase 13,
+/// and `SY` joined at #458: abstaining had let ten `[FROZEN]` clauses name rules
+/// that existed nowhere with every gate green. The names still unwritten are
+/// declared, each with its owner, in `sync_family`'s table, so the check reports
+/// a new one rather than the known ones. `CF` abstains: it constrains the suite.
 ///
-/// `PS-` was excluded for exactly that reason and the exclusion outlived it. The
-/// projection family's rules live in
-/// `crates/happenstance-testkit/src/projection.rs`, which [`RULE_FILES`] has
-/// named since the file was created; what was missing was any clause-side check
-/// that a `PS` citation resolves to one of them. Until this line changed, a `PS`
-/// clause could cite a rule that had never existed and every gate in the
-/// repository stayed green — the seventeen `†` marks §7.2 printed against the
-/// family were an accurate statement rather than a checked one.
+/// `PS-` was excluded until its suite existed, and the exclusion outlived it. Its
+/// rules live in `crates/happenstance-testkit/src/projection.rs`, which
+/// [`RULE_FILES`] has named since the file was created; what was missing was any
+/// clause-side check that a `PS` citation resolves to one of them. Until this line
+/// changed, a `PS` clause could cite a rule that had never existed and every gate
+/// stayed green — the seventeen `†` marks §7.2 printed against the family were an
+/// accurate statement rather than a checked one.
 fn has_suite(clause_id: &str) -> bool {
     clause_id.starts_with("ES-")
         || clause_id.starts_with("VT-")
         || clause_id.starts_with("WF-")
         || clause_id.starts_with("PS-")
+        || clause_id.starts_with("SY-")
 }
 
 /// Every rule defined anywhere in [`RULE_FILES`].
@@ -3668,27 +3668,27 @@ mod tests {
 
     // ---- AC-003: existence, never eligibility -------------------------------
 
-    /// Applying [`has_suite`] here would silently dangle every `PS-` and `SY-`
-    /// citation, so the test asserts both halves: the id resolves, *and* the
-    /// filter that must not be on the path would have excluded it.
+    /// Applying [`has_suite`] here would silently dangle every `CF-` citation,
+    /// so the test asserts both halves: the id resolves, *and* the filter that
+    /// must not be on the path would have excluded it. (`CF`, since #458 let `SY`.)
     #[test]
     fn a_deferred_clause_without_a_suite_still_resolves() {
         let document = "\
-#### SY-7 — ingest re-checks the append condition against the receiving store
+#### CF-99 — a clause about the suite, which no suite checks
 
-[DEFERRED — settled by the first peer adapter]
+[DEFERRED — settled by the first adapter that needs it]
 
-**Rule:** none. No `SyncPeer` conformance suite exists yet.
+**Rule:** none. `CF` clauses are about the suite, not checked by it.
 ";
 
         let ids = collect_clause_ids(document).unwrap();
 
         assert!(
-            ids.contains("SY-7"),
+            ids.contains("CF-99"),
             "a deferred clause is declared, so its id resolves; got {ids:?}"
         );
         assert!(
-            !has_suite("SY-7"),
+            !has_suite("CF-99"),
             "if this ever becomes true the test above stops rejecting a maturity filter"
         );
     }
@@ -3799,12 +3799,12 @@ mod tests {
 
     /// The other half of the same constant, and the reason this test is not
     /// merely `assert!(has_suite(..))` four times: the families that already had
-    /// a suite must keep one, and the family that still has none must keep
-    /// abstaining. Widening the prefix set to everything would make check 4
-    /// report every unwritten replication rule as a typo — noise indistinguishable
-    /// from the real thing, which is the defect the exclusion was written to avoid.
+    /// a suite must keep one, the replication family is checked since #458, and
+    /// `CF`, which no suite checks, must keep abstaining. Widening the prefix set
+    /// to everything would make check 4 resolve `CF` citations against suites
+    /// that could never define them — noise indistinguishable from a real typo.
     #[test]
-    fn the_replication_family_still_abstains_and_the_rest_do_not() {
+    fn the_replication_family_is_checked_and_cf_still_abstains() {
         for existing in ["ES-1", "VT-3", "WF-8"] {
             assert!(
                 has_suite(existing),
@@ -3812,9 +3812,9 @@ mod tests {
             );
         }
         assert!(
-            !has_suite("SY-1"),
-            "`happenstance-sync-testkit` carries two of the family's rules; checking every \
-             `SY` rule name would report the unwritten rest as missing"
+            has_suite("SY-1"),
+            "check 4 resolves `SY` names against the sync-testkit families, and \
+             `sync_family`'s table declares the ones it cannot (#458)"
         );
         assert!(
             !has_suite("CF-1"),
