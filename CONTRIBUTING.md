@@ -361,6 +361,133 @@ advisory against a dependency nobody has touched is the only failure that arrive
 without a commit to trigger it, so it gets a schedule; licences and bans change
 only when a manifest does, and the gate already covers those on every push.
 
+## Design principles
+
+These are the reasons behind the contract's shape. They used to open the README,
+and they moved here when the README started leading with what the library is
+for.
+
+**Illegal states are unrepresentable.** `Query` is an enum, not a vector,
+because the specification allows "at least one item" or "match everything" and
+nothing else — an empty query cannot be constructed. `SequencePosition` wraps a
+`NonZeroU64`, so position zero does not exist and `Option<SequencePosition>`
+costs no more than a bare one. `Tags` is canonically sorted at construction, so
+it can never be observed out of order and set equality is just `==`.
+
+**Payloads are opaque.** `Event` holds `Bytes`, and `happenstance-core` has no
+`serde` dependency by default — the optional feature covers the envelope types
+only, for replication. Adapters need no domain knowledge, and replication can
+forward events byte-for-byte without deserialising them. Encoding belongs to the
+layer above, which is what `happenstance` itself is for.
+
+**The concurrency signal is in the type system.** `append` returns
+`AppendError`, which separates `ConditionViolated` — routine under contention,
+and a cue to retry — from adapter-specific failures. No caller has to match on a
+string to tell "retry" from "something broke".
+
+**Two flavours of each port.** `EventStore` carries no `Send` bound, so it can
+be implemented on `wasm32` where futures are `!Send` — which is what makes a
+Cloudflare Durable Object adapter possible at all. `SendEventStore` is derived
+from it for native use, and implementing it gives you both. Generic code binds
+the weaker one and accepts either. CI builds `happenstance-core` for
+`wasm32-unknown-unknown` on every commit so this stays true.
+
+**Adapters are separate crates, not feature flags.** `rusqlite` bundles a C
+library; LadybugDB's `lbug`, the retired graph adapter's driver, compiled C++ through `cmake`; Postgres needs a
+network and a container to test against. Nobody who wants one should pay for the
+other, and a third-party adapter is a first-class citizen rather than a fork.
+
+**The adapter portfolio is deliberately unlike itself.** Adapters are not only
+targets to support — they are the instrument that keeps the contract honest, and
+that only works if they disagree. A store that serialises its writers under a
+lock, one that assigns positions outside the transaction, and one reached over
+one-shot HTTP with no interactive transaction at all will each refuse a different
+part of a badly-shaped port, and a portfolio where all three behave alike proves
+nothing. So Postgres is here for what it *breaks* — it is the only target on the
+roadmap that can violate the position-visibility invariant, which is what makes
+that invariant testable rather than decorative. It is not a flagship, and if you
+want DCB on Postgres today, [`disintegrate`](https://github.com/disintegrate-es/disintegrate) is the mature choice.
+
+## Performance claims
+
+**Every performance figure the README or the site quotes comes from one measured
+record, and nothing is quoted that the record does not hold.** An earlier README
+opened with the words "fast, efficient" while nothing in the repository
+supported them — three of the fourteen reviews say so — and the numbers came out
+until there was something to cite.
+
+The record is kept where it can be checked:
+
+* [`benchmarks/results/GRADES.md`](benchmarks/results/GRADES.md) — what the
+  abstraction costs over raw SQL, throughput, the DCB guard, the typed layer,
+  the projection runner, and exact allocation counts. Every figure is written by
+  hand from `benchmarks/results/raw/`, which is committed beside it.
+* [`benchmarks/README.md`](benchmarks/README.md) — the conditions each figure was
+  taken under, and a **What none of this shows** section that is the first thing
+  to read if you are about to quote one.
+
+Two of its own rules are worth repeating here, because they are what make the
+rest usable. Read the figures as **orders of magnitude and as ratios between arms
+of one run**; nothing there should be quoted to a third significant figure. And
+prefer the allocation counts to the timings — they are reproducible to the digit
+where the wall clock is not.
+
+`benchmarks/` is not a workspace member, appears in no `cargo xtask ci` step, and
+contains no threshold on any budget. CF-34 forbids a benchmark result gating a
+merge: an adapter that is slow is conformant. To re-derive the whole record from
+a clean checkout, `cd benchmarks && ./run.sh`.
+
+## Why the MSRV is where it is
+
+**1.97.1**, and it is a promise from `0.2.0` rather than a preference: raising it
+is a breaking change and needs a decision record, not a commit message. The
+floor moved to 1.97.1 at phase 2 for a dependency's build script rather than for
+anything in this workspace — five of the five database crates here declare no
+`rust-version` at all, so neither `cargo hack --rust-version` nor `resolver = "3"`
+can protect a floor against them, and only running the compiler finds it.
+
+After `1.0.0` a rise ships only in a minor release, only to a Rust stable at
+least six months old, and always with a `CHANGELOG.md` entry
+([ADR-0067](.kb/decisions/0067-msrv-after-1-0-rises-are-bounded.md)). Each
+published crate's README states its own floor and the same rule, and
+`cargo xtask lints` holds them to the manifests.
+
+## Why the README's examples are `xtask` doctests
+
+The two Rust blocks in `README.md` are compiled by CI, so neither can drift
+from the API the way a README example normally does. They are doctests of
+`xtask`, not of a published crate: `include_str!` resolves against the file tree,
+and a path reaching outside the package does not exist inside a packaged
+`.crate` — so attaching `README.md` to `happenstance` would make `cargo test` fail
+for anyone who ran it. `xtask` is never published. Each crate's own `README.md`
+is compiled by that crate, where the relative path stays inside the package.
+
+## The name
+
+The everyday sense of the word is chance, which is the wrong idea for a durable
+event store and worth displacing early. The sense meant here is the older half of
+the compound: a happenstance is what *happened to be the case*, as against what was
+arranged in advance. That distinction is the one DCB draws. A classical aggregate
+fixes the consistency boundary when the schema is written, before anyone knows
+which decisions will be made against it. A DCB boundary is deliberate but not
+pre-declared — the handler chooses its query, and the boundary is then whatever
+that query happened to match.
+
+The project was called **eventum** until 2026-08-05. It was renamed because the
+bare `eventum` name on crates.io belongs to an unrelated crate, dormant since
+2020, which forced an awkward layout — prefixed crates only, and a `-core` suffix
+that existed for no reason but the collision. `happenstance` was free. Nothing had
+been published, so no release was affected; see
+[ADR-0005](.kb/decisions/0005-rename-to-happenstance.md).
+
+The bare name went to the contract crate for four hours, and then to the typed
+layer where it belongs: `-core` is what an adapter author pins, and the bare name
+is what an application installs — the allocation `serde_core`/`serde`,
+`futures-core`/`futures` and `tracing-core`/`tracing` each arrived at
+independently. See
+[ADR-0006](.kb/decisions/0006-bare-name-to-the-typed-layer.md), which supersedes
+the second half of ADR-0005 and explains why that half was wrong.
+
 ## Licensing of contributions
 
 Unless you state otherwise, any contribution you intentionally submit for

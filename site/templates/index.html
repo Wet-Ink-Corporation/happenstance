@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}happenstance — event sourcing for Rust, with the boundary drawn per decision{% endblock title %}
+{% block title %}happenstance — your data stays true, everywhere it lives{% endblock title %}
 
 {% block content %}
 {%- set facts = load_data(path="data/facts.json") -%}
@@ -10,11 +10,12 @@
 <section class="hs-hero" aria-labelledby="hero-title">
   <div class="hs-hero__inner">
     <div class="hs-hero__copy">
-      <p class="hs-kicker hs-kicker--inverse">Event sourcing for Rust</p>
-      <h1 class="hs-hero__title" id="hero-title">Keep your rules true when requests collide.</h1>
-      <p class="hs-hero__lede">happenstance records what your application does as a log of events. When a request makes a decision, such as taking the last seat on a course, it reads just the events that decision depends on. If a new event matching what it read has been added by the time it writes, the write is refused and the decision is made again, so two requests can never both take the last seat. The same code runs on SQLite, PostgreSQL, Neon and Cloudflare Durable Objects.</p>
+      <p class="hs-kicker hs-kicker--inverse">Event sourcing for distributed Rust apps</p>
+      <h1 class="hs-hero__title" id="hero-title">Your data stays true, everywhere it lives.</h1>
+      <p class="hs-hero__lede">happenstance is the data layer for Rust apps that run on devices, at the edge and in the cloud. Every change is kept, every business rule is checked, and every answer can be explained, whether the data sits in SQLite on a laptop that is offline, in a Cloudflare Durable Object near your users, or in Postgres and Neon.</p>
+      <p class="hs-hero__lede"><strong>Nothing lost. Nothing wrong. Nothing unexplained.</strong></p>
       <div class="hs-hero__actions">
-        <a class="hs-btn hs-btn--sun hs-btn--size-lg" href="{{ get_url(path='@/guide/first-encounter.md') }}">Watch a write get refused {{ <icon name="arrow-right" /> }}</a>
+        <a class="hs-btn hs-btn--sun hs-btn--size-lg" href="{{ get_url(path='@/guide/first-encounter.md') }}">Get started {{ <icon name="arrow-right" /> }}</a>
         {{ <install command={config.extra.install} /> }}
       </div>
     </div>
@@ -28,30 +29,79 @@
 
   <section class="outcomes" aria-labelledby="outcomes-title">
     <p class="hs-kicker">What you get</p>
-    <h2 class="display" id="outcomes-title">Rules that hold, on the storage you already run</h2>
+    <h2 class="display" id="outcomes-title">Data you can trust, on every device and every database</h2>
     <div class="grid grid--4">
       <div class="hs-card hs-feature">
-        <div class="hs-feature__title">Rules that span several things just hold</div>
-        <p class="hs-feature__body">A seat limit on a course and a course limit on a student are checked by one read and guarded by one write. No locks, no background clean-up, no overbooking.</p>
+        <div class="hs-feature__title">True offline</div>
+        <p class="hs-feature__body">Every device keeps its own log and keeps working without a network. When it reconnects, every change syncs, and nothing is lost or overwritten, because a change is a fact rather than a row to fight over.</p>
       </div>
       <div class="hs-card hs-feature">
-        <div class="hs-feature__title">Only real conflicts collide</div>
-        <p class="hs-feature__body">Each decision guards exactly the events it read, so two requests about different things never refuse each other.</p>
+        <div class="hs-feature__title">True to your rules</div>
+        <p class="hs-feature__body">Seat limits, balances, quotas and unique names are checked at the moment of the write, across every record the rule touches, with no locks and no sagas. When two places act at once, you are told, with an event, never left with a silent mistake.</p>
       </div>
       <div class="hs-card hs-feature">
-        <div class="hs-feature__title">The whole history, kept</div>
-        <p class="hs-feature__body">Every change is an event you can read back. Build a new view over years of data, or rebuild a broken one, without touching the log.</p>
+        <div class="hs-feature__title">True to its history</div>
+        <p class="hs-feature__body">The log is the source of truth. See why any record looks the way it does, rebuild a view that went wrong, add a new one over years of data, and change your event format without a migration.</p>
       </div>
       <div class="hs-card hs-feature">
-        <div class="hs-feature__title">One codebase, four places to run it</div>
-        <p class="hs-feature__body">SQLite, PostgreSQL, Neon over HTTP, and Cloudflare Durable Objects at the edge. Your code binds one trait, and every store passes the same conformance suite.</p>
+        <div class="hs-feature__title">True wherever it lives</div>
+        <p class="hs-feature__body">SQLite on the device, Durable Objects at the edge, Postgres or Neon in the middle. The same Rust code runs on each, every store passes the same published test suite, and there is no sync service in the middle.</p>
       </div>
     </div>
     <p>New to event sourcing? <a href="{{ get_url(path='@/guide/event-driven-systems.md') }}">Start with the background</a>: four short pages, from what an event is to why the boundary can be drawn per decision.</p>
   </section>
 
+  <section class="topologies" id="topologies" aria-labelledby="topologies-title">
+    <p class="hs-kicker">What you can build</p>
+    <h2 class="display" id="topologies-title">Design your data topology, not your sync code</h2>
+    <p>Pick the pieces your app needs: where each log lives, which logs sync, where each view lives and where each decision is made. Every arrangement keeps the same guarantees.</p>
+    <div class="grid grid--4">
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Works today</span>
+        <div class="hs-feature__title">Works offline, syncs when back</div>
+        <p class="hs-feature__body">Each device keeps a SQLite log and syncs it with Neon or Postgres when the network returns.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Works today</span>
+        <div class="hs-feature__title">Many clients, one source of truth</div>
+        <p class="hs-feature__body">Every device syncs to a central store, and a conflict arrives as an event you can see and act on. Automatic adjudication lands in 0.7.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Works today</span>
+        <div class="hs-feature__title">Each client holds only its workspace</div>
+        <p class="hs-feature__body">One store per workspace, case or tenant, and each client syncs just the ones it holds.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Works today</span>
+        <div class="hs-feature__title">Huge views stay on the server</div>
+        <p class="hs-feature__body">A million records in a server-side read model, queried over HTTP, with read-your-writes answered honestly while the view catches up.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Works today</span>
+        <div class="hs-feature__title">A local view of just my cases</div>
+        <p class="hs-feature__body">A projection reads the central log and keeps a small read model in local SQLite, rebuildable at any time.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Works today</span>
+        <div class="hs-feature__title">Thin clients for the big decisions</div>
+        <p class="hs-feature__body">Some commands go straight to the server, where the full history lives, and the rest stay local.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Coming in 0.7</span>
+        <div class="hs-feature__title">A lean device, a complete cloud</div>
+        <p class="hs-feature__body">The device prunes history the hub has confirmed, while Neon keeps everything.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">On the roadmap</span>
+        <div class="hs-feature__title">Edge hubs close to your users</div>
+        <p class="hs-feature__body">A Durable Object per tenant syncs the devices nearby and forwards to Neon.</p>
+      </div>
+    </div>
+    <p><a href="{{ get_url(path='@/guide/choose-a-store.md') }}">Choosing a store</a> walks through where each piece can run.</p>
+  </section>
+
   <section class="story" aria-labelledby="story-title">
-    <p class="hs-kicker">One rule, three answers</p>
+    <p class="hs-kicker">How your rules stay true</p>
     <h2 class="display" id="story-title">A decision that spans two things</h2>
 
     <div class="story__beats">
@@ -125,27 +175,47 @@
     <h2 class="display" id="roadmap-title">On the road to 1.0</h2>
     <div class="grid grid--4">
       <div class="hs-card hs-feature">
-        <span class="hs-label">In progress</span>
-        <div class="hs-feature__title">Sync between stores</div>
-        <p class="hs-feature__body">Replicate a log between happenstance stores, hub-and-spoke or peer-to-peer: an edge or offline store that syncs with a central one, with conflicts settled by ordinary events rather than lost. The replication port and its conformance suites ship from <code class="hs-inline-code">0.4.4</code>; the runner and network peers ship from <code class="hs-inline-code">0.6.0</code>.</p>
-      </div>
-      <div class="hs-card hs-feature">
         <span class="hs-label">Shipped</span>
-        <div class="hs-feature__title">A stable projection runner</div>
-        <p class="hs-feature__body">The typed runner that keeps read models up to date needs no feature from <code class="hs-inline-code">0.5.0</code> and is covered by semver, with projections that can write straight into their database.</p>
+        <div class="hs-feature__title">Sync between stores</div>
+        <p class="hs-feature__body">Replicate a log between SQLite, Postgres, Neon and Durable Objects, one edge at a time, with conflicts recorded as ordinary events rather than lost. The runner and network peers ship from <code class="hs-inline-code">0.6.0</code>.</p>
       </div>
       <div class="hs-card hs-feature">
-        <span class="hs-label">Planned</span>
-        <div class="hs-feature__title">Forgetting, on purpose</div>
-        <p class="hs-feature__body">A supported way to remove events a log must not keep, such as personal data under a deletion request.</p>
+        <span class="hs-label">In progress · 0.7</span>
+        <div class="hs-feature__title">Keeping less, on purpose</div>
+        <p class="hs-feature__body">Devices that keep less history than the hub, a report when a peer has been away longer than the hub remembers, and automatic conflict adjudication.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <span class="hs-label">Planned · 1.0</span>
+        <div class="hs-feature__title">Sync across many edges</div>
+        <p class="hs-feature__body">A runner that links several edges, so a device, an edge hub and a central database form one system, and a stable promise for every surface.</p>
       </div>
       <div class="hs-card hs-feature">
         <span class="hs-label">Exploring</span>
         <div class="hs-feature__title">SQLite in the browser</div>
-        <p class="hs-feature__body">The SQLite store on <code class="hs-inline-code">wasm32</code>, a candidate for the offline end of sync.</p>
+        <p class="hs-feature__body">The SQLite store on <code class="hs-inline-code">wasm32</code>, as the offline end of sync.</p>
       </div>
     </div>
     <p>The plan, phase by phase, is <a href="{{ config.extra.blob }}/runbook/README.md">in the runbook</a>.</p>
+  </section>
+
+  <section class="compare" aria-labelledby="compare-title">
+    <p class="hs-kicker">How it compares</p>
+    <h2 class="display" id="compare-title">Both halves, in one library</h2>
+    <div class="grid grid--3">
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">Sync engines</div>
+        <p class="hs-feature__body">Fast and offline, but conflicts are merged away or the last write wins, and most keep no history. Your business rules live in backend code you write yourself.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">Event-sourcing frameworks</div>
+        <p class="hs-feature__body">History, audit and rebuildable views, but on one server, usually behind aggregates and sagas, and sometimes a vendor's server too.</p>
+      </div>
+      <div class="hs-card hs-feature">
+        <div class="hs-feature__title">happenstance</div>
+        <p class="hs-feature__body">Offline devices, edge and central databases syncing one history, with every rule checked where its history is complete and every view rebuildable. A library over your own databases.</p>
+      </div>
+    </div>
+    <p>Looking for collaborative text editing, or a reactive local database for a JavaScript web app? A CRDT library or a JavaScript sync engine will suit you better.</p>
   </section>
 
   <section class="paths" aria-labelledby="paths-title">
@@ -163,7 +233,7 @@
         <span class="hs-feature__body">What is claimed, the instrument that checks each claim, and which surfaces are frozen and which are still moving.</span>
       </a>
       <a class="hs-card hs-feature hs-feature--link" href="{{ get_url(path='@/reference.md') }}#where-it-runs">
-        <span class="hs-label">Edge developer</span>
+        <span class="hs-label">Edge or offline</span>
         <span class="hs-feature__title">My runtime is not <code class="hs-inline-code">Send</code></span>
         <span class="hs-feature__body">A Durable Object on <code class="hs-inline-code">wasm32</code>, and Postgres over one-shot HTTP with no connection to hold — both running the same conformance suite.</span>
       </a>
@@ -176,7 +246,7 @@
   </section>
 
   <section class="proof" aria-labelledby="proof-title">
-    <p class="hs-kicker">Checked, not claimed</p>
+    <p class="hs-kicker">How we know it works</p>
     <h2 class="display" id="proof-title">Every claim names what would falsify it</h2>
     <div class="grid grid--3">
       <div class="hs-card hs-feature">
