@@ -48,7 +48,8 @@ use crate::spec_trace::workspace_root;
 /// write safely, then how to rebuild what was derived from it, then which store
 /// to deploy it on, which is where the edge developer joins, then how to
 /// arrange several stores, sync edges and views into one app, then how to run
-/// the store inside a Durable Object, then the adapter author's entry point and
+/// the store inside a Durable Object, then how to sync a device's store with a
+/// central one, then the adapter author's entry point and
 /// how that author passes the conformance suite, and
 /// last the upgrade guides, oldest first, which only a reader on an older release
 /// needs. It is written here rather than derived because an order is a
@@ -69,6 +70,7 @@ const READING_ORDER: &[&str] = &[
     "choose-a-store.md",
     "choose-a-topology.md",
     "run-on-a-durable-object.md",
+    "sync-a-device.md",
     "adapter-reading-order.md",
     "pass-conformance-suite.md",
     "upgrading-to-0-4.md",

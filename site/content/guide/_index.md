@@ -22,7 +22,7 @@ page_template = "page.html"
 
 | You want your data to stay… | Read |
 | --- | --- |
-| **True offline** | [Choose a topology](@/guide/choose-a-topology.md), then the [`happenstance-sync` API](https://docs.rs/happenstance-sync) |
+| **True offline** | [Choose a topology](@/guide/choose-a-topology.md), then [Sync a device to a central store](@/guide/sync-a-device.md) |
 | **True to your rules** | [Appending under a condition](@/guide/append-conditions.md), [carrying your rule into your domain](@/guide/carry-your-invariant.md), [retrying a command safely](@/guide/retry-a-command.md) |
 | **True to its history** | [Rebuilding a read model](@/guide/rebuild-a-read-model.md), [the worked example](@/guide/read-the-worked-example.md) |
 | **True wherever it lives** | [Choose a store](@/guide/choose-a-store.md), [run on a Durable Object](@/guide/run-on-a-durable-object.md), [bring your own store](@/guide/adapter-reading-order.md) |

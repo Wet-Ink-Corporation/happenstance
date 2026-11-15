@@ -65,6 +65,9 @@ everyone else's syncs down.
 
 **Status:** works today, one edge per device, with your code driving the sync
 loop.
+[Sync a device to a central store](sync-a-device.md) walks through it, and
+the [`two-devices-one-seat`](../examples/two-devices-one-seat) example runs it
+end to end, including two devices selling the last seat offline.
 
 ### Many clients, one source of truth
 

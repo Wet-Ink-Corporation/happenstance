@@ -33,6 +33,23 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- **`examples/two-devices-one-seat`: two devices, one seat, three files that
+  agree.** A central store and two devices, each a `SqliteEventStore` on its
+  own file, synced through `happenstance-sync`'s runner over `RemoteSyncPeer`,
+  an in-process `Exchange` and `serve_sync`. Both devices sell the last seat
+  offline, each through `commit`; central ingests both (SY-1), keeps its rule
+  with one ordinary conditional append that refunds the sale that reached it
+  last (SY-2), and every place converges on the same log and the same read
+  model, read back after every handle is dropped. Central adjudicates by the
+  application's convention because the runner's adjudication hook is not built
+  yet (#450). Registered in `xtask/src/proof.rs`, so the gate runs it.
+- **A how-to page, [Sync a device to a central store](docs/sync-a-device.md).**
+  One edge per device, a `StoreSyncPeer` behind `serve_sync` on the far side,
+  what a failed step keeps, where the watermark is kept, and what happens when
+  both sides wrote.
+
 ## [0.6.0] — 2026-11-09
 
 Replication runs over the network. Phase 13 built `happenstance-sync`'s
