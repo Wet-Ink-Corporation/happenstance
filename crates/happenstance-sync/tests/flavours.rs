@@ -48,8 +48,8 @@ use happenstance_sync::write_group::{GroupOrderError, GroupPageBuilder};
 use happenstance_sync::{
     Classify, EventGroup, FailureClass, GroupPage, IngestError, IngestGroup, IngestStore, Ingested,
     MemoryIngestStore, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled,
-    PushBatch, RemoteSyncPeer, ReplicatedEvent, SendPeer, ServeError, StoreSyncPeer, SyncPeer,
-    Waiting, Watermark, WriteGroupStore, serve_sync,
+    PushBatch, RemoteError, RemoteSyncPeer, ReplicatedEvent, SendPeer, ServeError, StoreSyncPeer,
+    SyncPeer, Waiting, Watermark, WriteGroupStore, serve_sync,
 };
 
 /// The failure [`exchange`] reports: any of the three ports' own errors.
@@ -1034,6 +1034,43 @@ async fn a_spawned_edge_steps_a_remote_peer_from_generic_code() {
     let (_, confirmed) = stepped.expect("an in-memory step does not fail");
     assert_eq!(confirmed, head, "the step confirmed the device's head");
     assert_eq!(sides.both_crossed().await, (true, true));
+}
+
+/// [`SendPeer`] refuses what the [`RemoteSyncPeer`] inside it refuses: a push
+/// carrying an event over the declared `max_event_bytes` comes back
+/// [`EventTooLarge`](RemoteError::EventTooLarge) and the far log stays empty.
+///
+/// Rejects a `SendPeer` that bypasses the client's check and sends through the
+/// exchange itself (#452).
+#[tokio::test]
+async fn the_send_flavour_refuses_an_oversized_event_before_sending() {
+    let far_store = Arc::new(MemoryIngestStore::new());
+    let handle = Shared(Arc::clone(&far_store));
+    // Two handles onto one store: the clone is an `Arc` bump.
+    let far = StoreSyncPeer::new(handle.clone(), handle);
+    let limits = far.limits();
+    let max = limits.max_event_bytes;
+    let peer = SendPeer::new(RemoteSyncPeer::new(Loopback { far }, limits));
+    let mut event = replicated(StoreId::from_bytes([3; 16]), 1);
+    event.event =
+        Event::new("CourseCapacityChanged", vec![0_u8; max + 1]).expect("a valid event type");
+    let batch = PushBatch::new(vec![EventGroup::new(None, vec![event])]);
+
+    let refused = SyncPeer::push(&peer, &batch)
+        .await
+        .expect_err("one byte over max_event_bytes");
+
+    assert!(
+        matches!(refused, RemoteError::EventTooLarge { len, limit, .. }
+            if len == max + 1 && limit == max),
+        "{refused:?}"
+    );
+    assert_eq!(refused.class(), FailureClass::Park);
+    assert_eq!(
+        far_store.snapshot(),
+        Vec::new(),
+        "nothing reached the far log"
+    );
 }
 
 /// A [`RemoteSyncPeer`] run by [`edge_runs_from_generic`], the loop's

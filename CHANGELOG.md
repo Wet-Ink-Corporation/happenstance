@@ -135,6 +135,19 @@ not the same as what a user needed to be told.
   holds can roll it back. The walk now runs in the shipped `Edge::step`'s
   order, pull then push, and SY-34's refusal is held by `happenstance-sync`'s
   runner tests. No rule's verdict changes against any store (#441).
+- `happenstance-sync`: `RemoteSyncPeer::push` (and so `SendPeer`'s over it)
+  refuses a batch its declared `PeerLimits` do not admit **before** it encodes
+  or sends anything (#452). It used to send it and let the far side refuse
+  it. The refusal is one of three new `RemoteError` variants, mirroring
+  `StorePeerError`'s and checked in the same order: `EventTooLarge` (`Park`),
+  then `TooManyEvents` and `BatchTooLarge` (`Split`). **Additive**:
+  `RemoteError` is `#[non_exhaustive]`, and the classes a runner acts on are
+  the ones the far side's refusal already carried. A client that declares
+  wider limits than its far side still sends, and still reads the far side's
+  refusal through `RemoteError::Exchange`. `StoreSyncPeer`'s refusals are
+  unchanged: both halves now share one check. The workspace's own remote
+  fixture declares that far-side refusal beside the local one, so SY-36's
+  rule still sees a far side's class cross `serve_sync`.
 
 ## [0.6.0] — 2026-11-09
 
