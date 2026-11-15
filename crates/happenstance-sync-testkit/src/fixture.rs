@@ -106,6 +106,7 @@ pub trait SyncFixture {
             ),
         )))
     }
+
     /// Whether this fixture can close and reopen its backing peer, discarding
     /// every handle's process-level state.
     ///
@@ -170,8 +171,16 @@ pub const UNSTATED_SYNC_REOPEN: &str = "this fixture has not said whether its pe
      no medium outside the process has nothing a reopen could read back, and this \
      is that answer given by default rather than by its author";
 
-/// CF-18's machine-checked half for the sync-peer family: no capability `F`
-/// declines carries the reason it would inherit by saying nothing.
+/// CF-18's machine-checked half for the sync-peer family, for
+/// [`SyncFixture::REOPEN`] only: `F` must not decline it with the reason it
+/// would inherit by saying nothing.
+///
+/// [`SyncFixture::COMPACTION`] is not checked. Its inherited
+/// [`UNSTATED_COMPACTION`] is accepted for now because every adapter fixture
+/// in this workspace (Postgres, Neon, Cloudflare and the workerd harness)
+/// inherits it today, so checking it here would turn every mounted sync suite
+/// red in the change that added the capability. Requiring a stated reason for
+/// it is follow-up issue #480.
 ///
 /// [`ingest_declensions_are_stated`](crate::ingest_declensions_are_stated)'s
 /// twin. Emitted once per mounted suite by
@@ -184,7 +193,7 @@ pub const UNSTATED_SYNC_REOPEN: &str = "this fixture has not said whether its pe
 ///
 /// # Errors
 ///
-/// A [`Violation`] of CF-18 naming each capability `F` declines with the
+/// A [`Violation`] of CF-18 if `F` declines [`SyncFixture::REOPEN`] with the
 /// inherited reason.
 pub fn sync_declensions_are_stated<F: SyncFixture>(
     _opener: impl AsyncFn() -> F,
@@ -207,7 +216,9 @@ pub fn sync_declensions_are_stated<F: SyncFixture>(
 
 /// What [`SyncFixture::COMPACTION`] says when a fixture says nothing.
 ///
-/// `pub` so an adapter author can read what their silence says.
+/// `pub` so an adapter author can read what their silence says. Unlike
+/// [`UNSTATED_SYNC_REOPEN`], it is not checked: [`sync_declensions_are_stated`]
+/// accepts a fixture that inherits it, until #480.
 pub const UNSTATED_COMPACTION: &str = "this fixture cannot make its peer forget a prefix of its log; nothing \
      in the port compacts, so compaction has to come from the adapter and this one has none to \
      offer";
