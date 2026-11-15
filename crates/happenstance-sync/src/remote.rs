@@ -2,14 +2,18 @@
 //!
 //! [`Exchange`] is the transport: one request's bytes out on a [`Route`], one
 //! reply's bytes back. [`RemoteSyncPeer`] is the [`SyncPeer`] over it, encoding
-//! and decoding the envelopes [`serve_sync`](crate::serve_sync) answers. Nothing
+//! and decoding the envelopes [`serve_sync`](crate::serve_sync) answers, and
+//! refusing a push over the far side's declared limits before it is sent, in
+//! the order [`StoreSyncPeer`](crate::StoreSyncPeer) refuses one. Nothing
 //! here names HTTP: an HTTP client, a Durable Object stub, a socket, or a
 //! function call into `serve_sync` in the same process are all an `Exchange`.
 
 use alloc::vec::Vec;
 
+use happenstance_core::EventId;
+
 use crate::classify::{Classify, FailureClass};
-use crate::peer::{Ack, PeerLimits, Pulled, PushBatch, SyncPeer};
+use crate::peer::{Ack, LimitBreach, PeerLimits, Pulled, PushBatch, SyncPeer};
 use crate::wire::{CodecError, PullRequest, ResumeToken, Route, decode, encode};
 
 /// Sends one request on a route and returns the reply: one round trip.
@@ -85,9 +89,10 @@ impl<X> RemoteSyncPeer<X> {
     /// shared by both ends, or a request of its own at connect time, before
     /// this is built — the far side's are its
     /// [`StoreSyncPeer`](crate::StoreSyncPeer)'s
-    /// [`limits`](SyncPeer::limits). Declaring more than the far side accepts
-    /// moves its refusal from before the push to after it; declaring less only
-    /// costs smaller batches.
+    /// [`limits`](SyncPeer::limits). This peer refuses a push over `limits`
+    /// before sending it, so declaring more than the far side accepts moves
+    /// the refusal from here, before the push, to the far side, after it;
+    /// declaring less only costs smaller batches.
     #[must_use]
     pub const fn new(exchange: X, limits: PeerLimits) -> Self {
         Self { exchange, limits }
@@ -133,14 +138,21 @@ impl<X: Exchange> SyncPeer for RemoteSyncPeer<X> {
         Ok(decode(Route::Pull, &reply)?)
     }
 
-    /// One [`Route::Push`] exchange.
+    /// One [`Route::Push`] exchange, or none when the declared limits refuse
+    /// the batch.
     ///
     /// # Errors
     ///
+    /// [`RemoteError::EventTooLarge`], [`TooManyEvents`](RemoteError::TooManyEvents)
+    /// or [`BatchTooLarge`](RemoteError::BatchTooLarge) for a push the declared
+    /// limits do not admit, checked in that order and before anything is sent;
     /// [`RemoteError::Exchange`] if the transport fails, including a refusal
     /// the far side reported through it; [`RemoteError::Codec`] if the reply
     /// is not an ack this build reads.
     async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
+        if let Some(breach) = self.limits.first_breach(batch) {
+            return Err(refused(breach));
+        }
         let request = encode(Route::Push, batch)?;
         let reply = self
             .exchange
@@ -155,8 +167,10 @@ impl<X: Exchange> SyncPeer for RemoteSyncPeer<X> {
     }
 }
 
-/// How a [`RemoteSyncPeer`] fails: its transport `E`, or bytes it could not
-/// write or read.
+/// How a [`RemoteSyncPeer`] fails: its transport `E`, bytes it could not
+/// write or read, or a push over the limits it declared, which it refuses
+/// without sending. The limit arms mirror
+/// [`StorePeerError`](crate::StorePeerError)'s, so a runner reads one shape.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum RemoteError<E> {
@@ -169,13 +183,282 @@ pub enum RemoteError<E> {
     /// [`Stop`](FailureClass::Stop).
     #[error(transparent)]
     Codec(#[from] CodecError),
+
+    /// One event is larger than the
+    /// [`max_event_bytes`](PeerLimits::max_event_bytes) this client declared
+    /// for its far side, so no split can carry it:
+    /// [`Park`](FailureClass::Park). Refused before anything was sent.
+    #[error(
+        "event {id} carries {len} payload bytes, over the max_event_bytes of {limit} declared \
+         for the far side; not sent"
+    )]
+    #[non_exhaustive]
+    EventTooLarge {
+        /// The first such event in the push.
+        id: EventId,
+        /// Its payload bytes.
+        len: usize,
+        /// What was declared for the far side.
+        limit: usize,
+    },
+
+    /// The push carries more events than the
+    /// [`max_batch_events`](PeerLimits::max_batch_events) this client declared
+    /// for its far side: [`Split`](FailureClass::Split). Refused before
+    /// anything was sent.
+    #[error(
+        "push of {actual} events exceeds the max_batch_events of {limit} declared for the far \
+         side; not sent"
+    )]
+    #[non_exhaustive]
+    TooManyEvents {
+        /// What was offered.
+        actual: usize,
+        /// What was declared for the far side.
+        limit: usize,
+    },
+
+    /// The push carries more payload bytes than the
+    /// [`max_batch_bytes`](PeerLimits::max_batch_bytes) this client declared
+    /// for its far side: [`Split`](FailureClass::Split). Refused before
+    /// anything was sent.
+    #[error(
+        "push of {actual} payload bytes exceeds the max_batch_bytes of {limit} declared for the \
+         far side; not sent"
+    )]
+    #[non_exhaustive]
+    BatchTooLarge {
+        /// What was offered.
+        actual: usize,
+        /// What was declared for the far side.
+        limit: usize,
+    },
 }
 
+/// The refusal a push breaking `breach` is reported as. A function rather
+/// than a `From` impl, because a public `From` from a crate-private type would
+/// leak it.
+const fn refused<E>(breach: LimitBreach) -> RemoteError<E> {
+    match breach {
+        LimitBreach::Event { id, len, limit } => RemoteError::EventTooLarge { id, len, limit },
+        LimitBreach::Count { actual, limit } => RemoteError::TooManyEvents { actual, limit },
+        LimitBreach::Bytes { actual, limit } => RemoteError::BatchTooLarge { actual, limit },
+    }
+}
+
+/// The transport's and the codec's arms ask their errors; the limit arms are
+/// fixed by the arm, as [`StorePeerError`](crate::StorePeerError)'s are (SY-36).
 impl<E: Classify> Classify for RemoteError<E> {
     fn class(&self) -> FailureClass {
         match self {
             Self::Exchange(error) => error.class(),
             Self::Codec(error) => error.class(),
+            Self::EventTooLarge { .. } => FailureClass::Park,
+            Self::TooManyEvents { .. } | Self::BatchTooLarge { .. } => FailureClass::Split,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::vec::Vec;
+    use core::cell::Cell;
+
+    use super::{Exchange, RemoteError, RemoteSyncPeer};
+    use crate::classify::{Classify, FailureClass};
+    use crate::peer::SyncPeer;
+    use crate::peer::limit_tests::{batch, id, tight};
+    use crate::wire::Route;
+
+    /// What every call to [`Counting`] answers.
+    #[derive(Debug, PartialEq, Eq, thiserror::Error)]
+    #[error("the test transport reaches nothing")]
+    struct Unreachable;
+
+    impl Classify for Unreachable {
+        fn class(&self) -> FailureClass {
+            FailureClass::Transient
+        }
+    }
+
+    /// A transport that counts its calls and answers each with
+    /// [`Unreachable`], so "reached the exchange" is a count of one and a
+    /// [`RemoteError::Exchange`], with no reply bytes to build.
+    #[derive(Debug, Default)]
+    struct Counting {
+        calls: Cell<usize>,
+    }
+
+    impl Exchange for Counting {
+        type Error = Unreachable;
+
+        async fn exchange(&self, _route: Route, _request: Vec<u8>) -> Result<Vec<u8>, Unreachable> {
+            self.calls.set(self.calls.get().saturating_add(1));
+            Err(Unreachable)
+        }
+    }
+
+    fn peer() -> RemoteSyncPeer<Counting> {
+        RemoteSyncPeer::new(Counting::default(), tight())
+    }
+
+    /// The control the refusals are measured against: a push the limits admit
+    /// is sent, once.
+    #[tokio::test]
+    async fn a_push_inside_the_limits_reaches_the_exchange_once() {
+        let peer = peer();
+
+        let outcome = peer.push(&batch(&[1])).await;
+
+        assert!(
+            matches!(outcome, Err(RemoteError::Exchange(Unreachable))),
+            "{outcome:?}"
+        );
+        assert_eq!(peer.exchange().calls.get(), 1);
+    }
+
+    /// One event no split can carry is refused as `Park`, naming it, and
+    /// nothing is sent. Rejects a peer that sends without checking, and one
+    /// that classes the lone event `Split`, which a runner would split forever.
+    #[tokio::test]
+    async fn an_event_over_max_event_bytes_is_park_and_never_sent() {
+        let peer = peer();
+
+        let refused = peer
+            .push(&batch(&[5]))
+            .await
+            .expect_err("five bytes in an event over a four-byte limit");
+
+        assert!(
+            matches!(
+                refused,
+                RemoteError::EventTooLarge { id: named, len: 5, limit: 4 } if named == id(1)
+            ),
+            "{refused:?}"
+        );
+        assert_eq!(refused.class(), FailureClass::Park);
+        assert_eq!(peer.exchange().calls.get(), 0);
+    }
+
+    /// One event more than `max_batch_events`, each of them empty, is `Split`
+    /// and never sent. Rejects a peer that checks only the bytes.
+    #[tokio::test]
+    async fn a_push_over_max_batch_events_is_split_and_never_sent() {
+        let peer = peer();
+
+        let refused = peer
+            .push(&batch(&[0, 0, 0, 0]))
+            .await
+            .expect_err("four events over a three-event limit");
+
+        assert!(
+            matches!(
+                refused,
+                RemoteError::TooManyEvents {
+                    actual: 4,
+                    limit: 3
+                }
+            ),
+            "{refused:?}"
+        );
+        assert_eq!(refused.class(), FailureClass::Split);
+        assert_eq!(peer.exchange().calls.get(), 0);
+    }
+
+    /// One payload byte over `max_batch_bytes`, from events each inside
+    /// `max_event_bytes` and fewer than `max_batch_events`, is `Split` and
+    /// never sent. Rejects a peer that checks only each event and the count.
+    #[tokio::test]
+    async fn a_push_over_max_batch_bytes_is_split_and_never_sent() {
+        let peer = peer();
+
+        let refused = peer
+            .push(&batch(&[4, 4, 3]))
+            .await
+            .expect_err("eleven bytes over a ten-byte limit");
+
+        assert!(
+            matches!(
+                refused,
+                RemoteError::BatchTooLarge {
+                    actual: 11,
+                    limit: 10
+                }
+            ),
+            "{refused:?}"
+        );
+        assert_eq!(refused.class(), FailureClass::Split);
+        assert_eq!(peer.exchange().calls.get(), 0);
+    }
+
+    /// Each limit is a ceiling the push may reach: an event of exactly
+    /// `max_event_bytes`, exactly `max_batch_events` events, and exactly
+    /// `max_batch_bytes` bytes are all sent. Rejects a `>=` in any of the
+    /// three comparisons.
+    #[tokio::test]
+    async fn a_push_at_each_limit_is_sent() {
+        for lens in [&[4][..], &[0, 0, 0], &[4, 4, 2]] {
+            let peer = peer();
+
+            let outcome = peer.push(&batch(lens)).await;
+
+            assert!(
+                matches!(outcome, Err(RemoteError::Exchange(Unreachable))),
+                "{lens:?}: {outcome:?}"
+            );
+            assert_eq!(peer.exchange().calls.get(), 1, "{lens:?}");
+        }
+    }
+
+    /// A push over the count that also carries two oversized events is
+    /// refused for the first of them. Rejects a check that reads the count
+    /// before the events, and one that names the last offender.
+    #[tokio::test]
+    async fn an_oversized_event_outranks_the_count_and_the_first_is_named() {
+        let peer = peer();
+
+        let refused = peer
+            .push(&batch(&[0, 5, 0, 6]))
+            .await
+            .expect_err("four events, two of them oversized");
+
+        assert!(
+            matches!(
+                refused,
+                RemoteError::EventTooLarge { id: named, len: 5, limit: 4 } if named == id(2)
+            ),
+            "{refused:?}"
+        );
+        assert_eq!(peer.exchange().calls.get(), 0);
+    }
+
+    /// The text says the limit was this client's declaration and that nothing
+    /// was sent, so a log line tells a local refusal from the far side's.
+    #[tokio::test]
+    async fn each_refusal_says_it_was_declared_for_the_far_side_and_not_sent() {
+        let peer = peer();
+        let mut texts = Vec::new();
+
+        for lens in [&[5][..], &[0, 0, 0, 0], &[4, 4, 3]] {
+            let refused = peer.push(&batch(lens)).await.expect_err("over a limit");
+            texts.push(refused.to_string());
+        }
+
+        assert_eq!(
+            texts,
+            [
+                alloc::format!(
+                    "event {} carries 5 payload bytes, over the max_event_bytes of 4 declared \
+                     for the far side; not sent",
+                    id(1)
+                ),
+                "push of 4 events exceeds the max_batch_events of 3 declared for the far side; \
+                 not sent"
+                    .into(),
+                "push of 11 payload bytes exceeds the max_batch_bytes of 10 declared for the far \
+                 side; not sent"
+                    .into(),
+            ]
+        );
     }
 }

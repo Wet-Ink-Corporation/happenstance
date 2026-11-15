@@ -659,6 +659,73 @@ impl<'de> serde::Deserialize<'de> for Ack {
     }
 }
 
+// Below the rest of the module, so the lines above keep the numbers the
+// specification cites; above the tests, where clippy wants every item.
+
+/// The first limit a push breaks, in the order a runner must act on them: an
+/// event that can never land, then the count, then the bytes.
+///
+/// Shared by both halves of a network peer, so the client refuses before it
+/// sends exactly what the server would refuse on arrival (#452).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum LimitBreach {
+    /// The first event whose payload is over `max_event_bytes`.
+    Event {
+        /// The event.
+        id: EventId,
+        /// Its payload bytes.
+        len: usize,
+        /// The declared `max_event_bytes`.
+        limit: usize,
+    },
+    /// More events than `max_batch_events`.
+    Count {
+        /// The events in the push.
+        actual: usize,
+        /// The declared `max_batch_events`.
+        limit: usize,
+    },
+    /// More payload bytes than `max_batch_bytes`.
+    Bytes {
+        /// The payload bytes in the push.
+        actual: usize,
+        /// The declared `max_batch_bytes`.
+        limit: usize,
+    },
+}
+
+impl PeerLimits {
+    /// The first limit `batch` breaks; `None` exactly when
+    /// [`admits`](Self::admits) is `true`.
+    pub(crate) fn first_breach(&self, batch: &PushBatch) -> Option<LimitBreach> {
+        if let Some(event) = batch
+            .events()
+            .find(|event| event.payload_len() > self.max_event_bytes)
+        {
+            return Some(LimitBreach::Event {
+                id: event.id,
+                len: event.payload_len(),
+                limit: self.max_event_bytes,
+            });
+        }
+        let count = batch.events().count();
+        if count > self.max_batch_events {
+            return Some(LimitBreach::Count {
+                actual: count,
+                limit: self.max_batch_events,
+            });
+        }
+        let bytes = batch.payload_len();
+        if bytes > self.max_batch_bytes {
+            return Some(LimitBreach::Bytes {
+                actual: bytes,
+                limit: self.max_batch_bytes,
+            });
+        }
+        None
+    }
+}
+
 #[cfg(test)]
 mod waiting_tests {
     use core::num::NonZeroU64;
@@ -739,5 +806,104 @@ mod waiting_tests {
                 ..ack
             }
         );
+    }
+}
+
+/// The limit checks' tests, and the batches they are measured against. The
+/// helpers are `pub(crate)` so the client's (`remote`) and the server's
+/// (`store_peer`) tests of the same limits share one fixture (#452).
+#[cfg(test)]
+pub(crate) mod limit_tests {
+    use happenstance_core::{Event, EventId, RecordedAt, SequencePosition, StoreId};
+
+    use super::{EventGroup, LimitBreach, PeerLimits, PushBatch};
+    use crate::identity::ReplicatedEvent;
+
+    /// Limits with three different numbers, so a refusal names which one it
+    /// read: 4 bytes an event, 10 bytes a push, 3 events a push.
+    pub(crate) const fn tight() -> PeerLimits {
+        PeerLimits {
+            max_event_bytes: 4,
+            max_batch_bytes: 10,
+            max_batch_events: 3,
+            retention_floor: None,
+        }
+    }
+
+    /// The id of the event at `position` in a [`batch`].
+    pub(crate) fn id(position: u64) -> EventId {
+        EventId::new(
+            StoreId::from_bytes([0x50; 16]),
+            SequencePosition::new(position).expect("test positions start at 1"),
+        )
+    }
+
+    /// One group of events, one per entry of `lens`, each carrying that many
+    /// payload bytes, numbered from position 1.
+    pub(crate) fn batch(lens: &[usize]) -> PushBatch {
+        let events = (1_u64..)
+            .zip(lens)
+            .map(|(position, &len)| {
+                let event = Event::new("Sized", alloc::vec![0_u8; len])
+                    .expect("a static event type is valid");
+                ReplicatedEvent::new(id(position), RecordedAt::from_millis(0), event)
+            })
+            .collect();
+        PushBatch::new(alloc::vec![EventGroup::new(None, events)])
+    }
+
+    /// `first_breach` names what breaks, in order, and finds nothing exactly
+    /// when `admits` says the batch fits. Rejects a `first_breach` that drifts
+    /// from `admits`, which would have the client and the server disagree.
+    #[test]
+    fn first_breach_is_none_exactly_when_admits() {
+        let limits = tight();
+        let cases: [(&[usize], Option<LimitBreach>); 8] = [
+            (&[], None),
+            (&[4], None),
+            (&[0, 0, 0], None),
+            (&[4, 4, 2], None),
+            (
+                &[5],
+                Some(LimitBreach::Event {
+                    id: id(1),
+                    len: 5,
+                    limit: 4,
+                }),
+            ),
+            (
+                &[0, 0, 0, 0],
+                Some(LimitBreach::Count {
+                    actual: 4,
+                    limit: 3,
+                }),
+            ),
+            (
+                &[4, 4, 3],
+                Some(LimitBreach::Bytes {
+                    actual: 11,
+                    limit: 10,
+                }),
+            ),
+            (
+                &[0, 5, 0, 6],
+                Some(LimitBreach::Event {
+                    id: id(2),
+                    len: 5,
+                    limit: 4,
+                }),
+            ),
+        ];
+
+        for (lens, expected) in cases {
+            let batch = batch(lens);
+
+            assert_eq!(limits.first_breach(&batch), expected, "{lens:?}");
+            assert_eq!(
+                limits.first_breach(&batch).is_none(),
+                limits.admits(&batch),
+                "{lens:?}"
+            );
+        }
     }
 }

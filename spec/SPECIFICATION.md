@@ -4937,10 +4937,10 @@ passes **vacuously**. That is what actually happened in E2E-47: three engineer
 notes landed on a claim with no registration, no policy, no reserve and no
 closure, and the desktop projection materialised a row for it in four seconds.
 
-- **Rule:** `condition_over_removed_history_does_not_reject` **(new)**, against
-  ES-38's completeness fixture — an asserted-and-documented outcome rather than a
-  desired one, so that an adapter author reads the vacuous pass as specified
-  behaviour and an ingest author reads it as a hazard.
+- **Rule:** `condition_over_removed_history_does_not_reject` (#154), against
+  CF-27's instrument and every fixture granting `REMOVAL` — an asserted-and-documented
+  outcome rather than a desired one, so that an adapter author reads the vacuous pass
+  as specified behaviour and an ingest author reads it as a hazard.
 - **Cases:** E2E-47, E2E-56, E2E-44.
 - **Rejects:** an ingest path that re-evaluates an origin condition against a
   pruned slice and concludes "no match" — which, given the unconditional-ingest
@@ -5111,11 +5111,11 @@ that is itself the finding: this group held only rules the instrument was
 missing, and it emptied when the instrument landed rather than when anybody
 found more effort.
 
-**~~Blocked on the completeness instrument (CF-27)~~, unwritten since #144 built it:**
-`positions_are_not_reused_after_removal` (ES-38) and
-`condition_over_removed_history_does_not_reject` (ES-40). Both are written against
-a store that holds only a scattered subset of its own log; `WithholdingStore` is that
-store, and the two rules are owed by #151 (ES-38) and #154 (ES-40), not blocked.
+**~~Blocked on the completeness instrument (CF-27)~~, written at phase 14:**
+~~`positions_are_not_reused_after_removal`~~ (ES-38, #151) and
+~~`condition_over_removed_history_does_not_reject`~~ (ES-40, #154). Both run against
+`WithholdingStore` and against every fixture granting `REMOVAL`, so this group has
+emptied too: the instrument and the capability were all it was missing.
 
 **Blocked on a hostile fixture in the testkit's own `tests/`:**
 ~~`query_items_share_one_snapshot`~~. It ships with the store that can fail it or
@@ -7218,18 +7218,18 @@ from each other, each ingesting the same conflicting pair; assert the two logs
 converge after they meet. Renewed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md), with SY-10: `only_the_adjudicator_compensates` holds the store half and the falsification test ran with its divergence recorded (#136), but no runner authors a compensation, so the MUST that a non-adjudicator writes none cannot fail yet. The named experiment is the runner's adjudication hook, a follow-up to #244, mounting the rule; the marker moves then.]`
 Rule: `only_the_adjudicator_compensates` (`happenstance-sync-testkit`, #136), in the
 ingest family: two stores take one conflicting pair in opposite orders, the rule plays
-the runner and holds a one-adjudicator assignment, and the adjudicator's log must hold
-one reversal, filed under its own identity, and the other store's none. It fails the
-wrong store `FilesCompensationUnderAPlaceholder`, which mints a compensation under an
-incarnation it never read. Every peer adjudicating is a runner configuration, and no
-runner in `happenstance-sync` authors a compensation yet, so the rule cannot be handed
-one; the falsification test runs it beside the rule instead, on `MemoryIngestStore`
-with two adjudicator configurations, and records the divergence: after the two stores
-meet they hold the same events, and under two adjudicators that is two reversals with
-two identities, reversing opposite claims, so no claim to the seat stands. The
-rule's teeth are the store half (a compensation is minted under the identity the store
-holds); the runner half, that a non-adjudicator writes none, binds the adjudication hook
-when it is built, and the marker stays provisional until that hook mounts the rule.
+the runner through the shipped hook (`runner::Adjudicate`, #450), mounting a seat rule on
+the adjudicator and `Accept` on the other, and the adjudicator's log must hold one
+reversal, filed under its own identity, and the other store's none. It fails the wrong
+store `FilesCompensationUnderAPlaceholder`, which mints a compensation under an
+incarnation it never read. The falsification test runs beside the rule, on
+`MemoryIngestStore` with two adjudicator configurations, and records the divergence:
+after the two stores meet they hold the same events, and under two adjudicators that is
+two reversals with two identities, reversing opposite claims, so no claim to the seat
+stands. The runner half, that a non-adjudicator writes none, is held by
+`happenstance-sync`'s `tests/runner/wrong_runners.rs`: the shipped `Edge` against a
+`MiniEdge` that adjudicates under `Accept` (#450). The marker stays provisional until
+its own change moves it, with SY-10's.
 Cases: E2E-39, E2E-42, E2E-45.
 
 *Rejects:* every-peer-adjudicates, which is the reading SY-1 through SY-3 invite
@@ -7313,7 +7313,7 @@ permit a different merge rule in each direction of one edge.**
 merge rule in a deployment where the hub holds every log and the spoke holds
 one. Falsification test: implement the hub's rule on a spoke and show the spoke's
 projections stay correct. Renewed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md), with SY-7: `directional_merge_rules_compose` (#137) fails `AdjudicatesOnIngest`, but `runner::Edge`'s pull always accepts, so a hub that drives its own edge toward a spoke cannot adjudicate what it pulls. The named experiment is the adjudication hook mounting the rule, after #441's decorative refused-push check is settled.]`
-Rule: `directional_merge_rules_compose` (`happenstance-sync-testkit`, #137, ingest family).
+Rule: `directional_merge_rules_compose` (`happenstance-sync-testkit`, #137, ingest family), its merge rules mounted through the shipped hook (#450); the runner half, a rule judging only the ingest site it is mounted on, is `happenstance-sync`'s `tests/runner/wrong_runners.rs`.
 Cases: E2E-42, E2E-44, E2E-45.
 
 *Rejects:* treating hub-and-spoke as peer-to-peer with one side declining to
@@ -9876,9 +9876,9 @@ written refusal, so the report shape is instrument-local and not a port surface.
 [ADR-0028](../.kb/decisions/0028-what-a-store-may-forget.md) widens the instrument
 from a suffix to an arbitrary retained set, because a suffix-only instrument
 cannot falsify the floor that ES-39 rejects. It also names a `Fixture`
-capability for phase 14 to add, defaulted to declined on `MID_BATCH_FAULT`'s
-precedent, through which a fixture removes events outside the port (a raw
-`DELETE`). That lets ES-38's rule run against the real adapters as well as the
+capability for phase 14 to add, and #147 added it: `Fixture::REMOVAL`, declined by default on `MID_BATCH_FAULT`'s
+precedent, with `Fixture::remove_outside_port`, through which a fixture removes events outside the port (a raw
+`DELETE`; the SQLite, Postgres, Neon and Durable Object fixtures grant it, and a Durable Object wiped by `delete_all()` is a different store under VT-6, not a removal). That lets ES-38's rule run against the real adapters as well as the
 decorator.
 Rule: `instrument_report_is_accurate_and_the_suite_cannot_tell`, a meta-test in crates/happenstance-testkit/tests/completeness_instrument.rs built at #144 over `WithholdingStore`, with the recorded pass list in
 crates/happenstance-testkit/tests/completeness_instrument/pass_list.txt (it was suffix_store_is_distinguishable_from_a_young_store until ADR-0028 chose the
@@ -9887,9 +9887,9 @@ refusal it asserts two things: the full suite passes against the instrument, so
 that indistinguishability at the port is the specified outcome with the recorded
 pass list as the evidence; and the instrument's own report is accurate. This is
 the instrument, not a primitive. ES-39 keeps the question of a port surface, and
-ES-38's `positions_are_not_reused_after_removal` and ES-40's
-`condition_over_removed_history_does_not_reject` are the two rules that already
-have assertions and are waiting only on this instrument to be written against.
+ES-38's `positions_are_not_reused_after_removal` and ES-40's `condition_over_removed_history_does_not_reject` are the two rules
+written against it and against every fixture granting `REMOVAL` (#151, #154). The capability's guard (#147) is
+`removal_outside_the_port_removes_exactly_the_named_events`, which fails a fixture that declares `REMOVAL` and removes nothing, too much, or rebuilds the log from its survivors.
 Cases: E2E-46, E2E-47, E2E-56, E2E-33.
 Rejects: an instrument whose inherent report misstates what it withholds — one
 that reports a range as withheld while `read` still yields events from it, or
@@ -10596,9 +10596,9 @@ between them because its *shape* does not wait on a transport but its
 | ES-35 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` | E2E-46 |
 | ES-36 | FROZEN | `interleaved_appends_on_one_handle_elect_one_winner`, `a_live_read_stream_does… | E2E-09 |
 | ES-37 | FROZEN | *(none — see clause)* | E2E-48, E2E-49, E2E-46 |
-| ES-38 | FROZEN | `positions_are_not_reused_after_removal` † | E2E-46, E2E-10 |
+| ES-38 | FROZEN | `positions_are_not_reused_after_removal` | E2E-46, E2E-10 |
 | ES-39 | DEFERRED | `a_store_reports_the_history_it_does_not_hold` † | E2E-46, E2E-47, E2E-56 |
-| ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` † | E2E-47, E2E-56, E2E-44 |
+| ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` | E2E-47, E2E-56, E2E-44 |
 | ES-41 | FROZEN | `contains_event_id_reports_membership`, `contains_event_id_reports_a_held_row_… | E2E-32, E2E-34, E2E-36 |
 | ES-42 | FROZEN | compile-level — the erasure wrapper of ADR-0011's E11 compiles and round-trips… | *(none — see clause)* |
 | ES-43 | FROZEN | `a_busy_append_left_nothing_behind`, `positions_are_unique_under_concurrent_ap… | E2E-08, E2E-07 |

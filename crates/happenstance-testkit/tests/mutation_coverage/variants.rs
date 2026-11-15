@@ -46,7 +46,7 @@ use happenstance_core::{
     ReadOptions, SequencePosition, SequencedEvent, StoreLimit,
 };
 use happenstance_testkit::fixtures::{MemoryProjectionFixture, MemoryProjectionHandle};
-use happenstance_testkit::{Armed, Capability, Fixture, ProjectionFixture};
+use happenstance_testkit::{Armed, Capability, Fixture, ProjectionFixture, Removed};
 
 use crate::correct::{Log, LogError, LogStore, Snapshot, dense};
 use crate::harness::{ProjectionSubject, Subject};
@@ -96,31 +96,31 @@ fn gapped(previous: Option<SequencePosition>) -> SequencePosition {
 ///
 /// Two things are separated here that a naive fixture conflates. `live` is the
 /// process state a reopen throws away; `committed` is the durable medium a
-/// reopen replays. Because [`gapped`] is a pure function of the previous
-/// position, replaying the committed events reproduces the *positions* and not
-/// merely the payloads — which is the half
-/// `acknowledged_writes_survive_a_reopen`'s second assertion checks, and the
-/// reason this variant can support `REOPEN` honestly where `MemoryFixture`
-/// cannot.
+/// reopen restores. The durable side is a whole [`Log`] that every append is
+/// decided against and every removal reaches, and each append's new rows are
+/// mirrored into the appending handle's live view, so a reopen reproduces
+/// the *positions*, identities and recorded times and not merely the payloads —
+/// which is what `acknowledged_writes_survive_a_reopen`'s second assertion
+/// checks, and the reason this variant can support `REOPEN` honestly where
+/// `MemoryFixture` cannot.
 ///
-/// # What replaying does *not* reproduce, and why it is invisible here
+/// # Why it restores rather than replays
 ///
-/// Positions are a pure function of the previous position; a `RecordedAt` is
-/// not. A durable side of `Event` can only be reopened by replaying, and a
-/// replay **restamps** — which is exactly the shape
-/// `recorded_time_survives_a_reopen` exists to reject, and which
-/// `tests/fixture_instruments.rs`'s `DurableFixture` avoids by carrying
-/// `SequencedEvent` on its own durable side and restoring rather than
-/// replaying.
+/// It replayed `Event`s until it granted `REMOVAL` (#147). A replay
+/// re-allocates, so after an interior removal it would renumber every survivor
+/// above the hole, which is the store ES-38 rejects, and it re-stamps, which is
+/// the shape `recorded_time_survives_a_reopen` rejects (invisible here only
+/// because `correct::stamp` spends a constant). The durable side now carries
+/// `SequencedEvent`s, as `tests/fixture_instruments.rs`'s `DurableFixture`
+/// does, and the high-water mark with them.
 ///
-/// This variant passes that rule anyway, and only because `correct::stamp`
-/// spends a **constant** — `TEST_RECORDED_AT`, fixed rather than read from a
-/// clock because CF-33 forbids one. So the restamp lands on the same value it
-/// replaced and nothing can see it. That is a property of the instrument, not
-/// of the store: the day this binary's stamp varies, this variant starts
-/// failing `recorded_time_survives_a_reopen`, and the answer will be to give
-/// the durable side `SequencedEvent`s rather than to weaken the rule. Recorded
-/// here so that the failure arrives with its cause attached.
+/// # Removal
+///
+/// It grants `REMOVAL`, which keeps it the one fixture in the binary that
+/// supports every capability but `HELD_ABOVE_FRONTIER`. The removal comes out
+/// of both the live log and the durable copy, and [`Log::remove`] records the
+/// highest position assigned first, so the next append lands above a removed
+/// tail. That makes it the honest twin of the store ES-38's rule will reject.
 ///
 /// It carries the **fault-injection** capability too, and that is a second axis
 /// on one instrument rather than an accident. `capability_skips_are_reported`'s
@@ -134,7 +134,7 @@ fn gapped(previous: Option<SequencePosition>) -> SequencePosition {
 #[derive(Debug, Clone)]
 pub(crate) struct GappedPositionStore {
     live: Rc<RefCell<Log>>,
-    committed: Rc<RefCell<Vec<Event>>>,
+    committed: Rc<RefCell<Log>>,
     fault: Fault,
     /// The read path's arming, kept apart from `fault` above on purpose: a
     /// single cell would make arming a write fault arm a read one, and this
@@ -182,7 +182,7 @@ impl EventStore for GappedPositionStore {
         // require every store to document a limit and to refuse beyond it
         // distinguishably.
         //
-        // It precedes the write and returns before `self.committed` is extended,
+        // It precedes the write and returns before `self.committed` is touched,
         // so a refused append moves neither the live log nor the durable record
         // and `acknowledged_writes_survive_a_reopen` is untouched. The comparisons
         // are `>`, so the three guaranteed-minimum rules — which write exactly the
@@ -222,23 +222,25 @@ impl EventStore for GappedPositionStore {
             });
         }
 
-        let position = {
-            let mut log = self
-                .live
-                .try_borrow_mut()
-                .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
-            log.append(events, condition)?
-        };
-
-        // Recorded only on success, and only after the live store has accepted
-        // the batch. Acknowledging before this line is `LosingFixture`'s defect
-        // in `tests/fixture_instruments.rs`; this store is the correct sibling.
-        self.committed
+        // Decided and allocated against the durable side, which is the store,
+        // and only then mirrored into this handle's live view. Both borrows are
+        // taken before either log moves, so a refused borrow leaves both as
+        // they were. A handle taken before a reopen therefore still writes to
+        // the one store: its rows land beside the newer handles' at fresh
+        // positions, rather than its stale view replacing the durable copy
+        // (`a_handle_from_before_a_reopen_keeps_the_newer_handles_writes`).
+        // Acknowledging before the durable side holds the rows is
+        // `LosingFixture`'s defect in `tests/fixture_instruments.rs`; this
+        // store is the correct sibling.
+        let mut durable = self
+            .committed
             .try_borrow_mut()
-            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?
-            .extend(events.iter().cloned());
-
-        Ok(position)
+            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
+        let mut live = self
+            .live
+            .try_borrow_mut()
+            .map_err(|_| AppendError::Store(LogError::AlreadyBorrowed))?;
+        durable.append_mirrored(&mut live, events, condition)
     }
 
     // Both forwarded to the correct store over the same log rather than written
@@ -248,8 +250,8 @@ impl EventStore for GappedPositionStore {
     // Note what forwarding buys here specifically: `head_of` answers with the
     // last position *assigned*, which under [`gapped`] is 4096 + 7n and never a
     // count of events. `live` and not `committed`, because head and identity are
-    // properties of what this handle can read back, and a reopen is what replays
-    // one into the other.
+    // properties of what this handle can read back, and a reopen is what
+    // restores one into the other.
     async fn head(&self) -> Result<Option<SequencePosition>, Self::Error> {
         LogStore::over(&self.live).head().await
     }
@@ -263,7 +265,7 @@ impl EventStore for GappedPositionStore {
 /// it.
 #[derive(Debug)]
 pub(crate) struct GappedPositionFixture {
-    committed: Rc<RefCell<Vec<Event>>>,
+    committed: Rc<RefCell<Log>>,
     /// Replaced wholesale by `reopen`, which is why it is a `RefCell` around the
     /// `Rc` rather than the other way round: a handle taken before the call
     /// keeps the old log, exactly as a real connection would keep talking to a
@@ -283,6 +285,9 @@ impl Fixture for GappedPositionFixture {
     // and `capability_skips_are_reported` asserts it skips nothing — so a
     // capability it declined would be a rule that never ran against a control.
     const READ_FAULT: Capability = Capability::SUPPORTED;
+    // For the same reason, and because the removal reaches this store's own
+    // storage: both the live log and the durable copy (#147).
+    const REMOVAL: Capability = Capability::SUPPORTED;
 
     // CF-40. Stated at the floors rather than above them, so that this variant is
     // simultaneously the tightest legal store and a passing one: VT-21 – VT-24
@@ -330,23 +335,32 @@ impl Fixture for GappedPositionFixture {
     }
 
     async fn reopen(&self) {
-        let committed = self.committed.borrow().clone();
+        // Restored rather than replayed: see the store's "Why it restores
+        // rather than replays". The copy is the new live log, and the durable
+        // side keeps its own.
+        let restored = self.committed.borrow().clone();
+        *self.live.borrow_mut() = Rc::new(RefCell::new(restored));
+    }
 
-        let mut log = Log::new(gapped);
-        if !committed.is_empty() {
-            // One batch rather than one per original append: `gapped` allocates
-            // from the previous position alone, so batching cannot change the
-            // positions. A store whose allocator depended on batch boundaries
-            // would need the boundaries recorded too — worth knowing before
-            // phase 8 copies this shape.
-            let replayed = log.append(&committed, None);
-            assert!(
-                replayed.is_ok(),
-                "replaying the committed log must not be rejected: {replayed:?}"
-            );
-        }
+    // From both sides at once: the live log a held handle reads, and the
+    // durable copy a reopen restores. Removing from the live side alone would
+    // bring the events back at the next reopen.
+    async fn remove_outside_port(&self, positions: &[SequencePosition]) -> Removed {
+        let mut distinct = positions.to_vec();
+        distinct.sort_unstable();
+        distinct.dedup();
 
-        *self.live.borrow_mut() = Rc::new(RefCell::new(log));
+        let live = Rc::clone(&self.live.borrow());
+        let from_live = live.borrow_mut().remove(&distinct);
+        let from_durable = self.committed.borrow_mut().remove(&distinct);
+        assert!(
+            from_live == distinct.len() && from_durable == distinct.len(),
+            "the removal names only positions this store holds, so it removes \
+             {} from each side; it removed {from_live} live and {from_durable} \
+             durable, so the test environment is broken",
+            distinct.len()
+        );
+        Removed::Deleted
     }
 }
 
@@ -355,12 +369,65 @@ impl Subject for GappedPositionFixture {
 
     fn open() -> Self {
         Self {
-            committed: Rc::new(RefCell::new(Vec::new())),
+            committed: Rc::new(RefCell::new(Log::new(gapped))),
             live: RefCell::new(Rc::new(RefCell::new(Log::new(gapped)))),
             fault: Rc::new(Cell::new(None)),
             read_fault: Rc::new(Cell::new(None)),
         }
     }
+}
+
+/// Every position a handle reads back, in order.
+fn read_positions(store: &GappedPositionStore) -> Vec<SequencePosition> {
+    let query = Query::all();
+    let mut stream = core::pin::pin!(store.read(&query, ReadOptions::new()));
+    let mut positions = Vec::new();
+    while let Some(item) =
+        happenstance_testkit::block_on(core::future::poll_fn(|cx| stream.as_mut().poll_next(cx)))
+    {
+        positions.push(item.expect("an unarmed read yields no error").position);
+    }
+    positions
+}
+
+/// A handle taken before a reopen still writes to the one store.
+///
+/// The durable side is the store, so an append through a handle that predates
+/// a reopen lands beside the writes of the handles taken after it: distinct
+/// positions, both surviving the next reopen. Replacing the durable copy with
+/// the appending handle's own view of the log would hand the stale handle a
+/// position already taken and discard the newer handle's write.
+#[test]
+fn a_handle_from_before_a_reopen_keeps_the_newer_handles_writes() {
+    happenstance_testkit::block_on(async {
+        let fixture = GappedPositionFixture::open();
+        let stale = fixture.connect().await;
+        fixture.reopen().await;
+        let current = fixture.connect().await;
+
+        let newer = current
+            .append(&[happenstance_testkit::fixtures::event("Newer")], None)
+            .await
+            .expect("an unconditional append lands");
+        let older = stale
+            .append(&[happenstance_testkit::fixtures::event("Older")], None)
+            .await
+            .expect("an unconditional append lands");
+        assert_ne!(
+            newer, older,
+            "two acknowledged appends to one store were both given {newer}"
+        );
+
+        fixture.reopen().await;
+        let mut expected = vec![newer, older];
+        expected.sort_unstable();
+        assert_eq!(
+            read_positions(&fixture.connect().await),
+            expected,
+            "after the reopen, the write through the newer handle and the one \
+             through the stale handle are both there"
+        );
+    });
 }
 
 // =====================================================================
@@ -834,6 +901,13 @@ impl DecliningFixture {
     pub(crate) const HELD_ABOVE_FRONTIER_REASON: &'static str = "this instrument declines everything, and its store shows a row from the \
          moment it commits it, so it has no frontier to hold a row above in any case";
 
+    /// The reason this fixture gives for declining `REMOVAL`.
+    ///
+    /// Stated rather than inherited, for
+    /// [`MID_BATCH_FAULT_REASON`](Self::MID_BATCH_FAULT_REASON)'s reason.
+    pub(crate) const REMOVAL_REASON: &'static str = "this instrument declines everything, and its store is a Vec behind an Rc \
+         with no storage of its own to delete from in any case";
+
     /// A fresh instrument over a completely correct, densely-allocating store.
     pub(crate) fn new() -> Self {
         Self {
@@ -851,6 +925,7 @@ impl Fixture for DecliningFixture {
     const MID_BATCH_FAULT: Capability = Capability::declined(Self::MID_BATCH_FAULT_REASON);
     const READ_FAULT: Capability = Capability::declined(Self::READ_FAULT_REASON);
     const HELD_ABOVE_FRONTIER: Capability = Capability::declined(Self::HELD_ABOVE_FRONTIER_REASON);
+    const REMOVAL: Capability = Capability::declined(Self::REMOVAL_REASON);
 
     async fn connect(&self) -> Self::Store {
         let taken = self.connects.get() + 1;

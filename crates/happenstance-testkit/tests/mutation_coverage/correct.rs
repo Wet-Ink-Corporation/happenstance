@@ -442,6 +442,30 @@ pub(crate) fn commit_with(
     probe: Probe,
     sequence: Sequencer,
 ) -> Result<SequencePosition, AppendError<LogError>> {
+    commit_from(stored, events, condition, allocate, probe, sequence, None)
+}
+
+/// [`commit_with`], allocating above `floor` as well as above what `stored`
+/// holds.
+///
+/// `floor` is the highest position this log has ever assigned, which outlives
+/// the events at it once they are removed. A log that allocated from its last
+/// surviving event alone would hand a removed tail's position out again, and
+/// that is ES-38's named wrong implementation. Every caller but [`Log::append`]
+/// passes `None` through [`commit_with`], so no mutant's allocation moves.
+///
+/// # Errors
+///
+/// As [`commit_with`].
+pub(crate) fn commit_from(
+    stored: &mut Vec<SequencedEvent>,
+    events: &[Event],
+    condition: Option<&AppendCondition>,
+    allocate: Allocate,
+    probe: Probe,
+    sequence: Sequencer,
+    floor: Option<SequencePosition>,
+) -> Result<SequencePosition, AppendError<LogError>> {
     // Emptiness before the condition (ES-20). This order was the other way round
     // until phase 3, faithfully copying `MemoryEventStore`'s own D8 defect:
     // `append(&[], Some(&c))` answered `NoEvents` or `ConditionViolated`
@@ -459,7 +483,7 @@ pub(crate) fn commit_with(
         )));
     }
 
-    let head = stored.last().map(|event| event.position);
+    let head = stored.last().map(|event| event.position).max(floor);
     let sequenced = sequence(events, head, allocate);
     // Cannot be empty: `events` was checked above and `sequence` is
     // length-preserving. The `ok_or` rather than an index is what keeps this
@@ -483,10 +507,18 @@ pub(crate) fn commit_with(
 /// Holding the allocator *in the log* rather than in the store is what lets one
 /// correct core serve both a dense store and a gapped one without either of them
 /// reimplementing `commit`.
-#[derive(Debug)]
+///
+/// `Clone` so that a fixture can keep a durable copy and **restore** it on a
+/// reopen rather than replaying it: a replay re-allocates, so it would renumber
+/// the survivors of a removal, which is what ES-38 forbids.
+#[derive(Debug, Clone)]
 pub(crate) struct Log {
     events: Vec<SequencedEvent>,
     allocate: Allocate,
+    /// The highest position this log had assigned when it last removed
+    /// anything, or `None` before any removal. [`append`](Self::append)
+    /// allocates above it, so a removed position is never handed out again.
+    high_water: Option<SequencePosition>,
 }
 
 impl Log {
@@ -495,7 +527,57 @@ impl Log {
         Self {
             events: Vec::new(),
             allocate,
+            high_water: None,
         }
+    }
+
+    /// Removes every event at one of `positions`, and returns how many it
+    /// removed.
+    ///
+    /// The highest position assigned so far is recorded first, so the next
+    /// [`append`](Self::append) lands above a removed tail rather than on it:
+    /// a removal from the same store, not a rebuilt one.
+    pub(crate) fn remove(&mut self, positions: &[SequencePosition]) -> usize {
+        self.remember_high_water();
+        self.discard(positions)
+    }
+
+    /// The first half of [`remove`](Self::remove): records the highest
+    /// position assigned so far as the floor the next append allocates above.
+    pub(crate) fn remember_high_water(&mut self) {
+        let assigned = self.events.last().map(|event| event.position);
+        self.high_water = self.high_water.max(assigned);
+    }
+
+    /// The second half of [`remove`](Self::remove): drops every event at one
+    /// of `positions`, and returns how many it dropped.
+    ///
+    /// Alone, this is the step a store with no high-water mark stops at, a
+    /// rowid table without `AUTOINCREMENT`: the next append allocates from
+    /// the last survivor, so a removed tail's position is handed out again.
+    /// `removed_history::RowidReuse` is that store.
+    pub(crate) fn discard(&mut self, positions: &[SequencePosition]) -> usize {
+        let held = self.events.len();
+        self.events
+            .retain(|event| !positions.contains(&event.position));
+        held.saturating_sub(self.events.len())
+    }
+
+    /// The correct `head` over this log: its last held position.
+    pub(crate) fn head(&self) -> Option<SequencePosition> {
+        head_of(&self.events)
+    }
+
+    /// The correct membership probe over this log.
+    pub(crate) fn contains(&self, id: EventId) -> bool {
+        contains(&self.events, id)
+    }
+
+    /// The highest position this log had assigned when it last removed
+    /// anything, or `None` before any removal. What a head read from the
+    /// allocator rather than from the rows would report.
+    pub(crate) fn high_water(&self) -> Option<SequencePosition> {
+        self.high_water
     }
 
     /// A log seeded with what some durable medium already held.
@@ -512,7 +594,11 @@ impl Log {
     /// point rather than the risk: `LosingFixture` is the first shape and
     /// `RestampingFixture` is the second.
     pub(crate) fn replayed(allocate: Allocate, events: Vec<SequencedEvent>) -> Self {
-        Self { events, allocate }
+        Self {
+            events,
+            allocate,
+            high_water: None,
+        }
     }
 
     /// The correct read path over this log.
@@ -530,7 +616,47 @@ impl Log {
         events: &[Event],
         condition: Option<&AppendCondition>,
     ) -> Result<SequencePosition, AppendError<LogError>> {
-        commit(&mut self.events, events, condition, self.allocate)
+        commit_from(
+            &mut self.events,
+            events,
+            condition,
+            self.allocate,
+            violation,
+            sequence,
+            self.high_water,
+        )
+    }
+
+    /// The correct append path over this log, with the rows it sequenced
+    /// copied to `mirror` as well.
+    ///
+    /// For a fixture whose durable medium is the store and whose live log is
+    /// one handle's view of it: the append is decided and allocated here, and
+    /// only the new rows reach `mirror`, so the cost is the batch rather than
+    /// the log.
+    ///
+    /// `mirror` is a read view and is never appended to itself, so its
+    /// `high_water` is not maintained: nothing allocates from it. A removal
+    /// that must survive in both logs calls [`remove`](Self::remove) on each.
+    ///
+    /// # Errors
+    ///
+    /// As [`commit`]. On an error neither log moves.
+    pub(crate) fn append_mirrored(
+        &mut self,
+        mirror: &mut Self,
+        events: &[Event],
+        condition: Option<&AppendCondition>,
+    ) -> Result<SequencePosition, AppendError<LogError>> {
+        let held = self.events.len();
+        let position = self.append(events, condition)?;
+        // `held` was read under the same `&mut self`, and a successful `append`
+        // only extends `self.events` (by one row or more, since it refuses an
+        // empty batch), so the rows after `held` are exactly the ones it
+        // sequenced. Cloned because the rows really are held twice: once in the
+        // durable medium and once in the handle's view a read is served from.
+        mirror.events.extend(self.events.iter().skip(held).cloned());
+        Ok(position)
     }
 }
 
@@ -714,4 +840,67 @@ pub(crate) fn head_of(events: &[SequencedEvent]) -> Option<SequencePosition> {
 /// Whether a log holds an event with this identity.
 pub(crate) fn contains(events: &[SequencedEvent], id: EventId) -> bool {
     events.iter().any(|event| event.id == id)
+}
+
+/// The correct core's removal leaves its allocator where it was: after the
+/// tail is removed, the next append lands above it.
+///
+/// `GappedPositionFixture` grants `REMOVAL` on this, and it is the honest twin
+/// of the store ES-38's rule will reject, which allocates from its last
+/// surviving event.
+#[test]
+fn a_removed_tail_is_not_handed_out_again() {
+    let mut log = Log::new(dense);
+    let kept = log
+        .append(&[happenstance_testkit::fixtures::event("Kept")], None)
+        .expect("an unconditional append lands");
+    let tail = log
+        .append(&[happenstance_testkit::fixtures::event("Tail")], None)
+        .expect("an unconditional append lands");
+
+    assert_eq!(log.remove(&[tail]), 1, "the tail is removed");
+    let next = log
+        .append(&[happenstance_testkit::fixtures::event("Next")], None)
+        .expect("an unconditional append lands");
+
+    assert!(
+        next > tail,
+        "the append after removing the tail at {tail} took {next}, at or below \
+         it: the allocator went back to the survivor at {kept}"
+    );
+    assert_eq!(
+        log.select(&Query::all(), ReadOptions::new())
+            .iter()
+            .map(|event| event.position)
+            .collect::<Vec<_>>(),
+        [kept, next],
+        "the survivor keeps its position and the new event follows it"
+    );
+}
+
+/// [`Log::discard`] without [`Log::remember_high_water`] is the rowid table
+/// without `AUTOINCREMENT`: the next append takes the removed tail's position.
+///
+/// The step `removed_history::RowidReuse` stops at. If this ever stops
+/// reusing, that mutant stops being ES-38's named wrong implementation and its
+/// declared failure becomes a pass for the wrong reason.
+#[test]
+fn a_discarded_tail_is_handed_out_again() {
+    let mut log = Log::new(dense);
+    log.append(&[happenstance_testkit::fixtures::event("Kept")], None)
+        .expect("an unconditional append lands");
+    let tail = log
+        .append(&[happenstance_testkit::fixtures::event("Tail")], None)
+        .expect("an unconditional append lands");
+
+    assert_eq!(log.discard(&[tail]), 1, "the tail is discarded");
+    let next = log
+        .append(&[happenstance_testkit::fixtures::event("Next")], None)
+        .expect("an unconditional append lands");
+
+    assert_eq!(
+        next, tail,
+        "with no high-water mark the allocator goes back to the survivor, so \
+         the next append lands on the discarded tail's position"
+    );
 }

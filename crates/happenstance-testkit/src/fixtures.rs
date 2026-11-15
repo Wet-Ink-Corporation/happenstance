@@ -325,6 +325,21 @@ impl Fixture for MemoryFixture {
          returns, so there is no frontier for a committed row to sit above",
     );
 
+    // Stated for the same reason as the one above, and the reason is the
+    // store's own. A removal reached from outside this store would make it
+    // reuse positions, because it allocates from its log's length: that is
+    // ES-38's named wrong implementation, not a store that lost events. CF-27's
+    // decorator is where removal is staged in memory, and it hides events from
+    // a store that still holds them.
+    const REMOVAL: Capability = Capability::declined(
+        "MemoryEventStore offers no way to delete an event, and it allocates the \
+         next position from its log's length, so any removal reached from outside \
+         it would hand a removed position out again: that is ES-38's named wrong \
+         implementation, not a removal. Removal in memory is staged by CF-27's \
+         completeness instrument, a decorator that hides events from a store that \
+         still holds them",
+    );
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // Ready rather than `async move`: acquiring this handle is a refcount
         // bump, and pretending otherwise would hide that a real fixture's
@@ -514,7 +529,7 @@ impl ProjectionFixture for MemoryProjectionFixture {
     // is not the only one; `RESET_REFUSAL` above and `REOPEN` below are declined
     // too, so a reference run prints three. The set is pinned by equality, in enumeration order and
     // with each stated reason, at `assert_reference_projection_declensions`
-    // (`crates/happenstance-testkit/tests/mutation_coverage.rs:5456`) — read that
+    // (`crates/happenstance-testkit/tests/mutation_coverage.rs:5717`) — read that
     // assertion for how many and which, rather than a count written here that
     // nothing in the gate reads.
     const COMMIT_FAULT: Capability = Capability::declined(

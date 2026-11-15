@@ -50,9 +50,12 @@
 //! Each rule names a wrong implementation, and that implementation lives in
 //! this crate's `tests/wrong_peers.rs` — SY-18's in `tests/wrong_limits.rs`,
 //! over [`KvCappedFixture`], its batch rule's in `tests/wrong_peers.rs`,
-//! SY-23's in `tests/wrong_orders.rs`, and SY-28's in `tests/wrong_scopes.rs`
-//! — where the rule is shown to fail it. A rule no peer can fail is
-//! decorative.
+//! SY-23's in `tests/wrong_orders.rs`, SY-28's in `tests/wrong_scopes.rs`, and
+//! SY-31's across a reopen in `tests/wrong_reopens.rs` — where the rule is
+//! shown to fail it. A rule no peer can fail is decorative. The mount also
+//! emits `every_declined_capability_is_stated_by_this_fixture`, which fails a
+//! fixture that leaves [`REOPEN`](SyncFixture::REOPEN) at this crate's default
+//! declension ([`sync_declensions_are_stated`]).
 //!
 //! **No peer or ingest rule decodes a payload** (SY-35), and **no rule in
 //! [`rules`] holds two peers** (SY-8). [`rules`] says how the rules keep both. The model family
@@ -120,7 +123,7 @@
 //! | [`ingest_validates_every_event_not_the_head`](ingest_rules::ingest_validates_every_event_not_the_head) | SY-18 | per-event ceilings checked on each group's head only, a compensation never checked, and a ceiling off by one |
 //! | [`ingest_holds_the_call_to_its_tags_per_batch_ceiling`](ingest_rules::ingest_holds_the_call_to_its_tags_per_batch_ceiling) | VT-36, SY-18 | a tags-per-batch ceiling held to each group apart, a compensation left out of the total, a ceiling off by one, and a total refused as per-event, `Park` rather than `Split` |
 //! | [`only_the_adjudicator_compensates`](ingest_rules::only_the_adjudicator_compensates) | SY-7 | a compensation minted under an incarnation the store never read, so its log names an author nobody assigned |
-//! | [`directional_merge_rules_compose`](ingest_rules::directional_merge_rules_compose) | SY-10 | a store with the merge rule built in, which answers a group whose travelling guard its log breaks with a reversal of its own, and so judges, as a spoke, what the hub sends |
+//! | [`directional_merge_rules_compose`](ingest_rules::directional_merge_rules_compose) | SY-10 | a store with the merge rule built in, which answers a group whose travelling guard its log breaks with a reversal of its own, and so judges, as a spoke, what the hub sends; and one that re-mints its own claim when a peer's claim on the seat arrives |
 //! | [`bulk_ingest_is_idempotent_in_bounded_round_trips`](ingest_rules::bulk_ingest_is_idempotent_in_bounded_round_trips) | SY-14, VT-24 | a store that consults what it holds for the first 64 events of a call only and writes a held event past them again, and one that refuses a call of VT-24's 128 events as over its batch limit |
 //!
 //! Each wrong store lives in `tests/wrong_ingest_stores.rs`, where a test runs
@@ -128,22 +131,24 @@
 //!
 //! SY-7's rule opens **two** stores, so a fixture must give each store it
 //! opens a fresh incarnation, and the rule fails one that does not. It plays
-//! the runner above them and holds the adjudicator assignment itself, because
-//! no runner in `happenstance-sync` authors a compensation yet; what it holds
-//! the store to is the identity a compensation is filed under. Every peer
-//! adjudicating, the configuration SY-7 forbids, is run by the clause's
-//! falsification test in this crate's own unit tests, which records the two
-//! compensations it leaves for one conflict.
+//! the runner above them and holds the adjudicator assignment itself,
+//! mounting `happenstance-sync`'s shipped `runner::Adjudicate` hook: a seat
+//! rule on the adjudicator and `runner::Accept` on the other (#450). What it
+//! holds the store to is the identity a compensation is filed under; that the
+//! shipped runner writes none under `Accept` is `happenstance-sync`'s own
+//! tests'. Every peer adjudicating, the configuration SY-7 forbids, is run by
+//! the clause's falsification test in this crate's own unit tests, which
+//! records the two compensations it leaves for one conflict.
 //!
 //! SY-10's rule opens two stores for each of its two walks, hub and spoke and
-//! peer to peer, under the same requirement. It plays a runner that holds one
-//! merge rule per direction of the edge: the hub adjudicates what the spoke
-//! pushes, and the spoke takes what the hub sends unjudged, after the hub has
-//! refused its push once. What it holds the store to is writing what each
-//! direction hands it and nothing of its own. The hub's rule run on the spoke
-//! as well is the clause's falsification test, in this crate's unit tests,
-//! and the shipped `runner::Edge` is held to its half in `happenstance-sync`'s
-//! own tests. SY-33's
+//! peer to peer, under the same requirement. It plays a runner that mounts one
+//! merge rule per direction of the edge through the same hook: the hub
+//! adjudicates what the spoke pushes, and the spoke takes what the hub sends
+//! unjudged. What it holds the store to is writing what each direction hands
+//! it and nothing of its own. The hub's rule run on the spoke as well is the
+//! clause's falsification test, in this crate's unit tests, and the shipped
+//! `runner::Edge` is held to its half in `happenstance-sync`'s own tests,
+//! against wrong runners that each mount a rule where they should not. SY-33's
 //! rule, which must exempt SY-38's refusal (ADR-0098), is not written yet; the
 //! exemption is carried forward to it.
 //!
@@ -203,13 +208,16 @@
 //! convergent, by implementing
 //! [`ConvergentProjection`](happenstance::ConvergentProjection), is run under
 //! two interleavings of one set of events from two origins, and its read
-//! models must be byte-identical. The rule is called directly over a
+//! models must be byte-identical; and run over one arrival order numbered
+//! twice, densely and offset with gaps, and its read models must again be
+//! byte-identical. The rules are called directly over a
 //! [`ConvergenceFixture`]; there is no mounting macro, because there is no
-//! adapter to mount it beside and no capability to decline.
+//! adapter to mount them beside and no capability to decline.
 //!
 //! | Rule | Clause | What it rejects |
 //! |---|---|---|
 //! | [`convergent_projection_is_interleaving_independent`](convergence_rules::convergent_projection_is_interleaving_independent) | SY-20 | `unit-ledger`, and any declared fold whose answer depends on arrival order |
+//! | [`convergent_projection_cannot_observe_local_position`](convergence_rules::convergent_projection_cannot_observe_local_position) | SY-21 | a declared fold that writes its checkpoint, a local position, into its read model |
 //! | [`non_convergent_projections_are_excluded_not_failed`](convergence_rules::non_convergent_projections_are_excluded_not_failed) | SY-22 | a check with no exclusion, which fails FIFO cost layers, and a check that does not really reorder |
 //!
 //! A payload is decoded here, and only by the projection under test: a fold
@@ -337,7 +345,8 @@ pub mod sync_model;
 
 pub use fixture::{
     MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, MemorySyncFixture, MemorySyncHandle,
-    Refusal, RefusalsOf, SyncFixture, batch_over_the_limit, oversized_push_refusal,
+    Refusal, RefusalsOf, SyncFixture, UNSTATED_SYNC_REOPEN, batch_over_the_limit,
+    oversized_push_refusal, sync_declensions_are_stated,
 };
 pub use kv_capped::{KV_VALUE_CAP, KvCappedFixture, KvCappedPeer, KvPeerError};
 pub use sync_suite::{
@@ -569,6 +578,16 @@ macro_rules! sync_peer_conformance {
             // test, so every rule gets its own fixture.
             async fn __conformance_fixture() -> impl $crate::__private::SyncFixture {
                 $fixture
+            }
+
+            // CF-18's machine-checked half, emitted here rather than through
+            // `$emit` so a caller's emitter cannot drop it, as the ingest
+            // family's is.
+            #[cfg_attr(not(target_arch = "wasm32"), test)]
+            #[cfg_attr(target_arch = "wasm32", ::wasm_bindgen_test::wasm_bindgen_test)]
+            fn every_declined_capability_is_stated_by_this_fixture()
+            -> ::core::result::Result<(), $crate::Violation> {
+                $crate::sync_declensions_are_stated(__conformance_fixture)
             }
 
             $crate::for_each_sync_peer_rule!($emit);

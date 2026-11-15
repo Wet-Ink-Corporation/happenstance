@@ -33,18 +33,18 @@ use crate::query::Query;
 /// only where that store holds **every** event the condition's query ranges
 /// over, and the contract promises nothing beyond that.
 ///
-/// Where matching history has been removed — pruned, archived, truncated, or
-/// never replicated here in the first place — the store MAY admit an append it
-/// would otherwise have rejected. The condition does not fail and does not
-/// report uncertainty: it passes **vacuously**, because the information is
-/// missing from the store rather than merely from the API. A pruned store and a
-/// young store are the same value at every seam this port exposes, so nothing
-/// here can tell a caller which of the two it is holding.
+/// Where matching history has been removed (pruned, archived, truncated, or
+/// never replicated here) the store MAY admit an append it would otherwise have
+/// rejected. That MAY is the caller's reading: a caller must not rely on a
+/// refusal. A conformant store admits: the condition passes **vacuously**,
+/// because the information is missing from the store, not merely from the API,
+/// and a pruned store and a young one are the same value at every seam of this
+/// port. The testkit's `condition_over_removed_history_does_not_reject` (ES-40)
+/// checks it, requiring the append once the condition's only match is removed.
 ///
-/// The sharp consequence is for replication. Re-evaluating an origin's
-/// condition against a partial local log answers "nothing matched" for history
-/// that exists elsewhere, so a decision taken on the strength of that answer is
-/// taken over a log that may be missing the very events the condition names.
+/// The sharp consequence is for replication: re-evaluating an origin's condition
+/// against a partial local log answers "nothing matched" for history that exists
+/// elsewhere, and a decision taken on that answer may miss the events it names.
 ///
 /// # The usual shape
 ///

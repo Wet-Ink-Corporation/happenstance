@@ -967,3 +967,68 @@ async fn an_append_stamps_its_rows_with_one_write_group() {
         "a local append stored a guard"
     );
 }
+
+/// The shape ES-38 names, measured on real SQLite: a rowid table without
+/// `AUTOINCREMENT` hands a deleted tail's id out again, and restarts once it
+/// is empty; the same table with `AUTOINCREMENT` does neither.
+///
+/// The evidence that `RowidReuseFixture` and `TruncatingWhenEmptyFixture` in
+/// the testkit's mutation coverage model real SQLite rather than a guess, and
+/// that `assert_event_table`'s `AUTOINCREMENT` check is what ES-38's rule
+/// (`positions_are_not_reused_after_removal`) stands on for this adapter. At
+/// the end of the file so that no cited line above it moves. Only ids
+/// `last_insert_rowid()` returned are compared.
+#[test]
+fn a_rowid_table_without_autoincrement_hands_out_the_deleted_tails_position() {
+    let connection = Connection::open_in_memory().expect("an in-memory database opens");
+    connection
+        .execute_batch(
+            "CREATE TABLE bare (id INTEGER PRIMARY KEY, v TEXT);
+             CREATE TABLE counted (id INTEGER PRIMARY KEY AUTOINCREMENT, v TEXT);",
+        )
+        .expect("both tables are created");
+    let insert = |table: &str| -> i64 {
+        connection
+            .execute(&format!("INSERT INTO {table} (v) VALUES ('x')"), [])
+            .expect("an insert lands");
+        connection.last_insert_rowid()
+    };
+    let delete = |table: &str, id: i64| {
+        connection
+            .execute(&format!("DELETE FROM {table} WHERE id >= ?1"), [id])
+            .expect("a delete runs");
+    };
+
+    for table in ["bare", "counted"] {
+        let first = insert(table);
+        insert(table);
+        let tail = insert(table);
+        delete(table, tail);
+        let next = insert(table);
+        if table == "bare" {
+            assert_eq!(
+                next, tail,
+                "without AUTOINCREMENT the deleted tail's id is reused"
+            );
+        } else {
+            assert!(
+                next > tail,
+                "AUTOINCREMENT never reuses: {next} after {tail}"
+            );
+        }
+
+        delete(table, first);
+        let restarted = insert(table);
+        if table == "bare" {
+            assert_eq!(
+                restarted, first,
+                "an emptied rowid table restarts at its first id"
+            );
+        } else {
+            assert!(
+                restarted > next,
+                "an emptied AUTOINCREMENT table does not restart: {restarted} after {next}"
+            );
+        }
+    }
+}

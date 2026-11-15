@@ -195,7 +195,7 @@ pub mod remote;
 pub mod serve;
 pub mod store_peer;
 pub use remote::{Exchange, RemoteError, RemoteSyncPeer, SendExchange};
-pub use serve::{ServeError, serve_sync};
+pub use serve::{ServeError, serve_sync, serve_sync_adjudicated};
 pub use store_peer::{ForeignToken, StorePeerError, StoreResume, StoreSyncPeer};
 
 // The runner above the port (#244). Last, for the reason `classify` is after

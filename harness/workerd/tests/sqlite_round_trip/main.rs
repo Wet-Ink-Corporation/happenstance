@@ -21,12 +21,17 @@
 //! Each test empties its object first and last (`/sync-reset`), so a deployed
 //! object holds nothing once the test has answered.
 //!
-//! The two tests at the bottom are not live: they pin what the client does
-//! when no answer comes, and run in the gate.
+//! The tests at the bottom are not live: they pin what the client does when
+//! no answer comes, and run in the gate.
+//!
+//! [`tags_split`] holds VT-36's observation, the runner splitting a push on
+//! the object's tags-per-call ceiling through the object's wide mount, with
+//! the offline tests that size it and pin its retry.
 
 #![cfg(not(target_arch = "wasm32"))]
 
 mod http;
+mod tags_split;
 
 use core::num::NonZeroUsize;
 use core::time::Duration;
@@ -44,6 +49,7 @@ use happenstance_core::{
     SequencePosition, SequencedEvent, StoreId, Tag, Tags, collect,
 };
 use happenstance_sqlite::event_store::SqliteEventStore;
+use happenstance_workerd_harness::sync_mount::{WIDE_SYNC_PREFIX, wide_limits};
 use hyper::Method;
 
 use crate::http::{HttpError, HttpExchange, RETRY_ATTEMPTS, bounded, refusal, retrying};
@@ -106,6 +112,22 @@ impl Harness {
         let exchange =
             HttpExchange::new(&self.url, &format!("{}-{name}", self.run), token, &limits)
                 .expect("the platform's CA store reads");
+        RemoteSyncPeer::new(exchange, limits)
+    }
+
+    /// The object called `<run>-<name>`, reached through its wide mount
+    /// (`/sync-wide/`) and declaring that mount's limits, the one definition
+    /// the object serves it under.
+    fn peer_wide(&self, name: &str) -> RemoteSyncPeer<HttpExchange> {
+        let limits = wide_limits();
+        let exchange = HttpExchange::new(
+            &self.url,
+            &format!("{}-{name}", self.run),
+            &self.token,
+            &limits,
+        )
+        .expect("the platform's CA store reads")
+        .at_prefix(WIDE_SYNC_PREFIX);
         RemoteSyncPeer::new(exchange, limits)
     }
 }
