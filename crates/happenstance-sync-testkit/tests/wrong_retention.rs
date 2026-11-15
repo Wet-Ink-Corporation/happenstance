@@ -41,6 +41,9 @@ enum Defect {
     TransientGap,
     /// Refuses every token once it has compacted, resumable or not.
     OverRefusal,
+    /// Serves a pull from the start from its floor: an edge that lost its
+    /// token converges on the retained subset in silence.
+    StartIsFine,
 }
 
 /// A refusal, stating the class the peer chose for it.
@@ -86,6 +89,7 @@ impl CompactingPeer {
         match (from, self.defect) {
             // No offset: the token is read as an index into what is left.
             (from, Defect::ShiftingCompaction) => Ok(from.unwrap_or(0) + log.dropped),
+            (None, Defect::StartIsFine) => Ok(log.dropped),
             (None, _) if compacted => Err(Refused(FailureClass::Reseed)),
             (None, _) => Ok(0),
             (Some(token), Defect::ClampToFloor) => Ok(token.max(log.dropped)),
@@ -284,4 +288,12 @@ fn the_rule_fails_a_peer_that_calls_a_gap_transient() {
 #[test]
 fn the_rule_fails_a_peer_that_refuses_a_token_above_its_floor() {
     fails(Defect::OverRefusal, "above the floor");
+}
+
+#[test]
+fn the_rule_fails_a_peer_that_serves_the_start_from_its_floor() {
+    fails(
+        Defect::StartIsFine,
+        "a pull from the start, below its floor",
+    );
 }

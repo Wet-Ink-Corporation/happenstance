@@ -261,3 +261,58 @@ async fn a_vessel_away_past_the_window_is_told_and_one_inside_it_converges() {
         "everything up to day 70, then the tail it missed"
     );
 }
+
+/// I-6: a caller that answers the gap by dropping the token and starting a
+/// fresh edge is refused again, and the vessel's log is still untouched.
+/// Rejects the reset-on-mismatch runner #244 audited: pulling from the start
+/// of a compacted log would converge on the retained subset in silence.
+#[tokio::test]
+async fn a_fresh_edge_after_a_gap_is_refused_again() {
+    let Voyage {
+        hub,
+        away_120: (vessel, mut edge),
+        ..
+    } = voyage().await;
+    let before = vessel.snapshot();
+    sync(&mut edge, &hub, &vessel)
+        .await
+        .expect_err("the stale token is refused");
+
+    let mut reset = Edge::new();
+    let again = sync(&mut reset, &hub, &vessel).await;
+
+    again.expect_err("the start of a compacted log is refused too");
+    assert_eq!(
+        reset.status().retention_gap(),
+        Some(RetentionGap::new(Phase::Pull, Some(shore_id(3))))
+    );
+    assert_eq!(vessel.snapshot(), before, "nothing landed");
+}
+
+/// Accepting the gap is explicit and the operator's: an edge resumed from
+/// the hub's floor token converges on the retained tail, and nothing below
+/// the floor appears.
+#[tokio::test]
+async fn an_edge_resumed_from_the_floor_token_accepts_the_gap() {
+    let Voyage {
+        hub,
+        away_120: (vessel, edge),
+        ..
+    } = voyage().await;
+    let mut accepted = Edge::resuming(
+        edge.status().confirmed,
+        Some(hub.floor_token().expect("an unpoisoned hub")),
+    );
+
+    sync(&mut accepted, &hub, &vessel)
+        .await
+        .expect("an accepted gap converges");
+
+    assert!(accepted.status().is_synced(), "{:?}", accepted.status());
+    assert_eq!(
+        ids(&vessel.snapshot()),
+        [1, 2, 4, 5, 6, 7].map(shore_id).to_vec(),
+        "days 0 and 10 from before, then everything past the floor: day 20 is the gap \
+         the operator accepted"
+    );
+}

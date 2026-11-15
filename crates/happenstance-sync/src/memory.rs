@@ -278,9 +278,11 @@ impl SendSyncPeer for MemorySyncPeer {
     async fn pull(&self, from: Option<&Self::Resume>) -> Result<Pulled<Self::Resume>, Self::Error> {
         let state = self.state.lock().map_err(|_| MemoryPeerError::Poisoned)?;
         // A token counts groups from the start of the log as it was ever
-        // written; `next` counts them in what compaction left (SY-32).
+        // written; `next` counts them in what compaction left (SY-32). A pull
+        // from the start of a compacted log is refused like a stale token:
+        // `floor_token` is the explicit way to accept the gap.
         let dropped = Compaction::dropped(state.compaction);
-        let wanted = from.map_or(dropped, |from| from.next_group);
+        let wanted = from.map_or(0, |from| from.next_group);
         let mut next = Compaction::locate(state.compaction, wanted).map_err(|floor| {
             MemoryPeerError::BelowRetentionFloor {
                 floor,

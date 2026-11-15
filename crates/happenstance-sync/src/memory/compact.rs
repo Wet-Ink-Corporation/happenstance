@@ -6,7 +6,7 @@ use core::num::NonZeroUsize;
 
 use happenstance_core::{EventId, RecordedAt};
 
-use super::{MemoryPeerError, MemorySyncPeer, PeerState};
+use super::{MemoryPeerError, MemoryResume, MemorySyncPeer, PeerState};
 
 /// What compaction has dropped from the front of a [`MemorySyncPeer`]'s log.
 ///
@@ -115,6 +115,25 @@ impl MemorySyncPeer {
             }
         }
         Ok(Some(floor))
+    }
+
+    /// A token that resumes just past this peer's floor, which accepts the
+    /// gap below it: the explicit, operator-side answer to a
+    /// [`Reseed`](crate::FailureClass::Reseed) refusal (SY-32).
+    ///
+    /// A pull from the start of a compacted log is refused, as a stale token
+    /// is, so an edge that lost its token cannot converge on what is retained
+    /// in silence; this is how a caller says the gap is accepted.
+    /// [`MemoryResume::start`] while nothing has been compacted.
+    ///
+    /// # Errors
+    ///
+    /// [`MemoryPeerError::Poisoned`] if the log lock was poisoned.
+    pub fn floor_token(&self) -> Result<MemoryResume, MemoryPeerError> {
+        let state = self.state.lock().map_err(|_| MemoryPeerError::Poisoned)?;
+        Ok(MemoryResume {
+            next_group: Compaction::dropped(state.compaction),
+        })
     }
 }
 
@@ -243,6 +262,51 @@ mod tests {
             ),
             "{error:?}"
         );
+    }
+
+    /// The start of the log is not a back door (D3): an edge that lost its
+    /// token, or a runner that drops it on a stop, would otherwise converge
+    /// on the retained subset in silence.
+    #[tokio::test]
+    async fn a_pull_from_the_start_of_a_compacted_log_is_refused() {
+        let peer = hub(&[&[0], &[50]]);
+        let before = peer.pull(None).await.expect("nothing is forgotten yet");
+        peer.compact_recorded_before(day(40)).expect("compacts");
+
+        let refused = peer.pull(None).await;
+
+        assert_eq!(ids_of(&before), vec![id(1), id(2)]);
+        assert!(
+            matches!(
+                refused,
+                Err(MemoryPeerError::BelowRetentionFloor { floor, from: None }) if floor == id(1)
+            ),
+            "{refused:?}"
+        );
+    }
+
+    /// Accepting the gap is explicit: the floor token resumes just past what
+    /// was forgotten, and after a total compaction it resumes at the end.
+    #[tokio::test]
+    async fn the_floor_token_accepts_the_gap() {
+        let peer = hub(&[&[0], &[10], &[50]]);
+        let fresh = peer.floor_token().expect("unpoisoned");
+        peer.compact_recorded_before(day(40)).expect("compacts");
+
+        let accepted = peer
+            .pull(Some(&peer.floor_token().expect("unpoisoned")))
+            .await
+            .expect("the floor token resumes");
+        peer.compact_recorded_before(day(500)).expect("compacts");
+        let at_the_end = peer
+            .pull(Some(&peer.floor_token().expect("unpoisoned")))
+            .await
+            .expect("the floor token resumes");
+
+        assert_eq!(fresh, MemoryResume::start());
+        assert_eq!(ids_of(&accepted), vec![id(3)]);
+        assert_eq!(ids_of(&at_the_end), Vec::<EventId>::new());
+        assert_eq!(at_the_end.waiting, Waiting::Nothing);
     }
 
     /// Rejects a floor that refuses resumable tokens: a token at or past the

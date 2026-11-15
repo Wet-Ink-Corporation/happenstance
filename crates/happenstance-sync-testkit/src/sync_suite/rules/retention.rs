@@ -143,7 +143,10 @@ pub(super) async fn reported_not_silent<F: SyncFixture>(
     fixture.compact_recorded_before(peer, cutoff).await?;
 
     reported(peer, [&stage_a, &stage_b], cutoff)?;
-    not_silent(peer, &stale, "the stale token").await?;
+    not_silent(peer, Some(&stale), "the stale token").await?;
+    // c. The start is not a back door: an edge that lost its token, or a
+    // runner that drops it on a stop, would converge on the retained subset.
+    not_silent(peer, None, "a pull from the start").await?;
     resumable(peer, recent, &stage_c).await
 }
 
@@ -175,9 +178,14 @@ fn reported<P: SyncPeer>(
     })
 }
 
-/// b. A token below the floor is refused, with class `Reseed`.
-async fn not_silent<P: SyncPeer>(peer: &P, token: &P::Resume, what: &str) -> Result<(), Violation> {
-    match peer.pull(Some(token)).await {
+/// b and c. A pull from below the floor, `from` a stale token or from the
+/// start, is refused with class `Reseed`.
+async fn not_silent<P: SyncPeer>(
+    peer: &P,
+    from: Option<&P::Resume>,
+    what: &str,
+) -> Result<(), Violation> {
+    match peer.pull(from).await {
         Ok(pulled) => Err(Violation::new(
             SY_32,
             format!(

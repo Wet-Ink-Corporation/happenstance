@@ -245,7 +245,9 @@ struct WrongPeer {
 /// Everything `peer` holds, from the start of its log.
 async fn held_by(peer: &MemorySyncPeer) -> Result<Vec<EventGroup>, MemoryPeerError> {
     let mut groups = Vec::new();
-    let mut resume = None;
+    // From the floor, not the start: a compacted reference peer refuses the
+    // start (SY-32), and what it retains is all there is to hold.
+    let mut resume = Some(peer.floor_token()?);
     loop {
         let pulled = peer.pull(resume.as_ref()).await?;
         if pulled.batch.groups.is_empty() {

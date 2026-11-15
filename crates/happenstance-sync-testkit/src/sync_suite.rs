@@ -1040,6 +1040,9 @@ pub mod rules {
     /// * the peer's [`retention_floor`](happenstance_sync::PeerLimits::retention_floor)
     ///   names one of the events it was asked to forget;
     /// * a pull from the day-10 token is refused with class `Reseed`;
+    /// * so is a pull from the start: a peer that has compacted cannot hand a
+    ///   strict subset to an edge that lost its token, or to a runner that
+    ///   drops its token on a stop;
     /// * a pull from the day-70 token hands back exactly the events of days 100
     ///   and 125, compared whole (SY-35), each once.
     ///
@@ -1051,10 +1054,11 @@ pub mod rules {
     /// A peer that compacts and answers the stale token anyway: one that
     /// drains its log without an offset, so the old index lands on a later
     /// group, and one that declares a floor and answers a stale token from
-    /// it. Both converge on a strict subset in silence. Also a peer that
-    /// refuses and declares no floor, one that refuses as `Transient`, which
-    /// a runner retries for ever, and one that refuses every token once it has
-    /// compacted. `tests/wrong_retention.rs` carries all five.
+    /// it, and one that serves a pull from the start from its floor. Each
+    /// converges on a strict subset in silence. Also a peer that refuses and
+    /// declares no floor, one that refuses as `Transient`, which a runner
+    /// retries for ever, and one that refuses every token once it has
+    /// compacted. `tests/wrong_retention.rs` carries all six.
     ///
     /// # Does not reject
     ///
@@ -1066,7 +1070,8 @@ pub mod rules {
     ///
     /// A [`Violation`] of SY-32 if the peer refuses a push or a resumable
     /// pull, declares no floor or a floor it was not asked to forget, answers
-    /// the stale token, refuses it with a class other than `Reseed`, or hands
+    /// the stale token or a pull from the start, refuses either with a class
+    /// other than `Reseed`, or hands
     /// back anything but the events written after the recent token.
     pub async fn retention_gap_is_reported_not_silent<F: SyncFixture>(
         open: impl AsyncFn() -> F,
