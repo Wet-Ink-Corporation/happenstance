@@ -10,16 +10,26 @@
 use core::num::NonZeroU32;
 use core::time::Duration;
 
-use happenstance_core::EventId;
+use happenstance_core::{EventId, RecordedAt, StoreId};
 use happenstance_sync::runner::{
     Backoff, Edge, EdgeState, Failure, Phase, RetentionGap, StepError, StopCause,
 };
 use happenstance_sync::{
-    Classify, EventGroup, FailureClass, MemoryIngestStore, MemorySyncPeer, PeerLimits,
+    Classify, EventGroup, FailureClass, MemoryIngestStore, MemorySyncPeer, PeerLimits, PushBatch,
+    ReplicatedEvent, SyncPeer,
 };
 
 use super::probe::{ProbePeer, ProbeStore, Recorded};
-use super::{FAR, LOCAL, ORIGIN, foreign, position};
+use super::{FAR, LOCAL, ORIGIN, event, foreign, ids, position};
+
+/// The shore station whose log the hub relays.
+const SHORE: StoreId = StoreId::from_bytes([0x5A; 16]);
+const VESSEL_AWAY_120: StoreId = StoreId::from_bytes([0x78; 16]);
+const VESSEL_AWAY_60: StoreId = StoreId::from_bytes([0x3C; 16]);
+const T0: i64 = 1_800_000_000_000;
+const DAY_MS: i64 = 86_400_000;
+/// The hub keeps 90 days.
+const WINDOW_DAYS: i64 = 90;
 
 fn backoff(attempts: u32) -> Backoff {
     Backoff::new(Duration::from_millis(100), Duration::from_secs(30), 0x5EED)
@@ -150,4 +160,104 @@ fn a_gap_is_a_reseed_failure_and_names_its_floor() {
     assert!(text.contains("re-seed"), "{text}");
     let unnamed = RetentionGap::new(Phase::Pull, None).to_string();
     assert!(unnamed.contains("named no floor"), "{unnamed}");
+}
+
+fn day(day: i64) -> RecordedAt {
+    RecordedAt::from_millis(T0 + day * DAY_MS)
+}
+
+/// The shore's event at `at`, recorded on `on`.
+fn shore(at: u64, on: i64) -> ReplicatedEvent {
+    ReplicatedEvent::new(EventId::new(SHORE, position(at)), day(on), event(b"shore"))
+}
+
+/// The shore pushes one group per day through the hub, positions `first..`.
+async fn shore_writes(hub: &MemorySyncPeer, first: u64, days: &[i64]) {
+    for (at, &on) in (first..).zip(days) {
+        let group = EventGroup::new(None, vec![shore(at, on)]);
+        hub.push(&PushBatch::new(vec![group]))
+            .await
+            .expect("an in-memory push");
+    }
+}
+
+/// Runs `edge` between `vessel` and `hub` to the end.
+async fn sync(
+    edge: &mut Edge<happenstance_sync::MemoryResume>,
+    hub: &MemorySyncPeer,
+    vessel: &MemoryIngestStore,
+) -> Result<(), String> {
+    edge.run(hub, vessel, &mut backoff(3), &Recorded::new())
+        .await
+        .map_err(|error| error.to_string())
+}
+
+/// The hub on day 130, compacted on its 90-day window, and the two vessels:
+/// one last synced on day 10 (away 120 days), one on day 70 (away 60).
+struct Voyage {
+    hub: MemorySyncPeer,
+    away_120: (MemoryIngestStore, Edge<happenstance_sync::MemoryResume>),
+    away_60: (MemoryIngestStore, Edge<happenstance_sync::MemoryResume>),
+}
+
+async fn voyage() -> Voyage {
+    let hub = MemorySyncPeer::new(FAR);
+    let away_120 = MemoryIngestStore::with_store_id(VESSEL_AWAY_120);
+    let away_60 = MemoryIngestStore::with_store_id(VESSEL_AWAY_60);
+    let mut edge_120 = Edge::new();
+    let mut edge_60 = Edge::new();
+
+    shore_writes(&hub, 1, &[0, 10]).await;
+    sync(&mut edge_120, &hub, &away_120).await.expect("day 10");
+    sync(&mut edge_60, &hub, &away_60).await.expect("day 10");
+    shore_writes(&hub, 3, &[20, 50, 70]).await;
+    sync(&mut edge_60, &hub, &away_60).await.expect("day 70");
+    shore_writes(&hub, 6, &[100, 125]).await;
+    let floor = hub
+        .compact_recorded_before(day(130 - WINDOW_DAYS))
+        .expect("an unpoisoned hub");
+    assert_eq!(floor, Some(shore_id(3)), "days 0, 10 and 20 are forgotten");
+
+    Voyage {
+        hub,
+        away_120: (away_120, edge_120),
+        away_60: (away_60, edge_60),
+    }
+}
+
+fn shore_id(at: u64) -> EventId {
+    EventId::new(SHORE, position(at))
+}
+
+/// E2E-44: either it converges, or it is told it cannot. The vessel away
+/// 120 days against a 90-day window is stopped with the gap and its log is
+/// untouched; the vessel away 60 days converges on the tail. Rejects a
+/// runner that ingests the retained subset from a stale token, and one that
+/// retries a gap.
+#[tokio::test]
+async fn a_vessel_away_past_the_window_is_told_and_one_inside_it_converges() {
+    let Voyage {
+        hub,
+        away_120: (vessel_120, mut edge_120),
+        away_60: (vessel_60, mut edge_60),
+    } = voyage().await;
+    let before = vessel_120.snapshot();
+
+    let refused = sync(&mut edge_120, &hub, &vessel_120).await;
+    let converged = sync(&mut edge_60, &hub, &vessel_60).await;
+
+    refused.expect_err("the vessel away 120 days is told it cannot converge");
+    assert_eq!(
+        edge_120.status().retention_gap(),
+        Some(RetentionGap::new(Phase::Pull, Some(shore_id(3))))
+    );
+    assert_eq!(vessel_120.snapshot(), before, "nothing landed");
+
+    converged.expect("the vessel inside the window converges");
+    assert!(edge_60.status().is_synced(), "{:?}", edge_60.status());
+    assert_eq!(
+        ids(&vessel_60.snapshot()),
+        (1..=7).map(shore_id).collect::<Vec<_>>(),
+        "everything up to day 70, then the tail it missed"
+    );
 }
