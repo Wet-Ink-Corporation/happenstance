@@ -228,6 +228,7 @@ macro_rules! for_each_event_store_rule {
 
             // --- Removal outside the port (CF-27) ---------------------------
             removal_outside_the_port_removes_exactly_the_named_events,
+            positions_are_not_reused_after_removal,
         }
     };
 }

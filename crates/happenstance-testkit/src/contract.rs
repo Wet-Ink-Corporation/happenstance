@@ -752,12 +752,12 @@ pub trait Fixture {
     ///
     /// # Why it is not the decorator
     ///
-    /// CF-27's completeness instrument, the `WithholdingStore` decorator,
-    /// **hides** events from a store that still holds them. Positions are not
-    /// reused there by delegation: the store underneath still holds every one.
-    /// Only a deletion from the adapter's own storage can show that its
-    /// allocator survives one, which is the `INTEGER PRIMARY KEY` without
-    /// `AUTOINCREMENT` shape ADR-0028 names.
+    /// CF-27's instrument, the `WithholdingStore` decorator, **hides** events
+    /// from a store that still holds them, so only a deletion from an adapter's
+    /// own storage can show its allocator surviving one (the `INTEGER PRIMARY
+    /// KEY` without `AUTOINCREMENT` shape ADR-0028 names). A fixture over it may
+    /// still grant this by forwarding to `withhold`, as CF-27's own does: the
+    /// guard and ES-40's rule judge it fully, and ES-38's passes by delegation.
     ///
     /// # What declaring it commits the fixture to
     ///
@@ -767,10 +767,10 @@ pub trait Fixture {
     /// it already held to read back exactly the other two, unchanged, and the
     /// membership probe to answer `false` for the removed identities.
     ///
-    /// CF-39's shape, one capability over: a fixture whose removal cannot reach
-    /// the store's own storage MUST decline this capability, rather than
-    /// declare it and contribute a green result about a store nothing was
-    /// removed from.
+    /// CF-39's shape, one capability over: a fixture whose removal misses a
+    /// seam of the port (`read`, `head`, `contains_event_id`, or the condition
+    /// `append` evaluates) MUST decline this capability, rather than contribute
+    /// a green result about a store nothing was removed from.
     ///
     /// # Same store, not a new one
     ///

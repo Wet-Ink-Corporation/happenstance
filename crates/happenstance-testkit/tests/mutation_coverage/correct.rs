@@ -538,12 +538,46 @@ impl Log {
     /// [`append`](Self::append) lands above a removed tail rather than on it:
     /// a removal from the same store, not a rebuilt one.
     pub(crate) fn remove(&mut self, positions: &[SequencePosition]) -> usize {
+        self.remember_high_water();
+        self.discard(positions)
+    }
+
+    /// The first half of [`remove`](Self::remove): records the highest
+    /// position assigned so far as the floor the next append allocates above.
+    pub(crate) fn remember_high_water(&mut self) {
         let assigned = self.events.last().map(|event| event.position);
         self.high_water = self.high_water.max(assigned);
+    }
+
+    /// The second half of [`remove`](Self::remove): drops every event at one
+    /// of `positions`, and returns how many it dropped.
+    ///
+    /// Alone, this is the step a store with no high-water mark stops at, a
+    /// rowid table without `AUTOINCREMENT`: the next append allocates from
+    /// the last survivor, so a removed tail's position is handed out again.
+    /// `removed_history::RowidReuse` is that store.
+    pub(crate) fn discard(&mut self, positions: &[SequencePosition]) -> usize {
         let held = self.events.len();
         self.events
             .retain(|event| !positions.contains(&event.position));
         held.saturating_sub(self.events.len())
+    }
+
+    /// The correct `head` over this log: its last held position.
+    pub(crate) fn head(&self) -> Option<SequencePosition> {
+        head_of(&self.events)
+    }
+
+    /// The correct membership probe over this log.
+    pub(crate) fn contains(&self, id: EventId) -> bool {
+        contains(&self.events, id)
+    }
+
+    /// The highest position this log had assigned when it last removed
+    /// anything, or `None` before any removal. What a head read from the
+    /// allocator rather than from the rows would report.
+    pub(crate) fn high_water(&self) -> Option<SequencePosition> {
+        self.high_water
     }
 
     /// A log seeded with what some durable medium already held.
@@ -601,6 +635,10 @@ impl Log {
     /// only the new rows reach `mirror`, so the cost is the batch rather than
     /// the log.
     ///
+    /// `mirror` is a read view and is never appended to itself, so its
+    /// `high_water` is not maintained: nothing allocates from it. A removal
+    /// that must survive in both logs calls [`remove`](Self::remove) on each.
+    ///
     /// # Errors
     ///
     /// As [`commit`]. On an error neither log moves.
@@ -612,11 +650,14 @@ impl Log {
     ) -> Result<SequencePosition, AppendError<LogError>> {
         let held = self.events.len();
         let position = self.append(events, condition)?;
-        // Cloned because the rows really are held twice: once in the durable
-        // medium and once in the handle's view a read is served from.
-        mirror
-            .events
-            .extend(self.events.get(held..).unwrap_or_default().iter().cloned());
+        // No empty case to hide: `held` was read under the same `&mut self`,
+        // and a successful `append` only extends `self.events` (by one row or
+        // more, since it refuses an empty batch), so the rows after `held` are
+        // exactly the ones it sequenced. `get(held..)` with a default had a
+        // `None` arm that could only have meant a bug, silently mirrored as
+        // nothing. Cloned because the rows really are held twice: once in the
+        // durable medium and once in the handle's view a read is served from.
+        mirror.events.extend(self.events.iter().skip(held).cloned());
         Ok(position)
     }
 }
@@ -836,5 +877,32 @@ fn a_removed_tail_is_not_handed_out_again() {
             .collect::<Vec<_>>(),
         [kept, next],
         "the survivor keeps its position and the new event follows it"
+    );
+}
+
+/// [`Log::discard`] without [`Log::remember_high_water`] is the rowid table
+/// without `AUTOINCREMENT`: the next append takes the removed tail's position.
+///
+/// The step `removed_history::RowidReuse` stops at. If this ever stops
+/// reusing, that mutant stops being ES-38's named wrong implementation and its
+/// declared failure becomes a pass for the wrong reason.
+#[test]
+fn a_discarded_tail_is_handed_out_again() {
+    let mut log = Log::new(dense);
+    log.append(&[happenstance_testkit::fixtures::event("Kept")], None)
+        .expect("an unconditional append lands");
+    let tail = log
+        .append(&[happenstance_testkit::fixtures::event("Tail")], None)
+        .expect("an unconditional append lands");
+
+    assert_eq!(log.discard(&[tail]), 1, "the tail is discarded");
+    let next = log
+        .append(&[happenstance_testkit::fixtures::event("Next")], None)
+        .expect("an unconditional append lands");
+
+    assert_eq!(
+        next, tail,
+        "with no high-water mark the allocator goes back to the survivor, so \
+         the next append lands on the discarded tail's position"
     );
 }

@@ -825,7 +825,7 @@ const PROJECTION_WASM_RULES: &[&str] = &[
 /// atomicity pair's argument one capability over (#147). This fixture grants
 /// `REMOVAL` with raw SQL against the object's own SQLite, and a regression
 /// turning the constant back to a decline would leave the guard green as a
-/// skip, along with ES-38's rule that stands on it.
+/// skip, along with ES-38's rule that stands on the same grant (#151).
 const CLOUDFLARE_WASM_RULES: &[&str] = &[
     "two_fixture_instances_observe_none_of_each_others_appends",
     "two_handles_observe_each_others_appends",
@@ -838,6 +838,7 @@ const CLOUDFLARE_WASM_RULES: &[&str] = &[
     "read_result_is_stable_under_concurrent_append",
     "a_live_read_stream_does_not_block_an_append",
     "removal_outside_the_port_removes_exactly_the_named_events",
+    "positions_are_not_reused_after_removal",
 ];
 
 /// The sync rules named for the replication row.

@@ -10596,7 +10596,7 @@ between them because its *shape* does not wait on a transport but its
 | ES-35 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` | E2E-46 |
 | ES-36 | FROZEN | `interleaved_appends_on_one_handle_elect_one_winner`, `a_live_read_stream_does… | E2E-09 |
 | ES-37 | FROZEN | *(none — see clause)* | E2E-48, E2E-49, E2E-46 |
-| ES-38 | FROZEN | `positions_are_not_reused_after_removal` † | E2E-46, E2E-10 |
+| ES-38 | FROZEN | `positions_are_not_reused_after_removal` | E2E-46, E2E-10 |
 | ES-39 | DEFERRED | `a_store_reports_the_history_it_does_not_hold` † | E2E-46, E2E-47, E2E-56 |
 | ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` † | E2E-47, E2E-56, E2E-44 |
 | ES-41 | FROZEN | `contains_event_id_reports_membership`, `contains_event_id_reports_a_held_row_… | E2E-32, E2E-34, E2E-36 |
