@@ -21,10 +21,10 @@ with programs you can run.
 > The version moves in lockstep with the rest of the workspace until 1.0. Each
 > rule names the clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
-> it checks; two of those are still `[PROVISIONAL]` (SY-7 and SY-10 among the
-> ones a rule here checks, ADR-0107), and one is `[DEFERRED]` (SY-32, whose
-> rule `retention_gap_is_reported_not_silent` is the evidence its freeze waits
-> on), and a rule over an unfrozen clause moves when its clause does. The
+> it checks; one of those is still `[PROVISIONAL]` among the ones a rule here
+> checks (SY-32, whose rule `retention_gap_is_reported_not_silent` runs on no
+> real peer yet, and whose freeze ADR-0108 holds for the owner), and a rule
+> over an unfrozen clause moves when its clause does. The
 > watermark family plays `happenstance-sync`'s shipped runner, `runner::Edge`,
 > and holds a projection store to what that runner asks of it (SY-31).
 >

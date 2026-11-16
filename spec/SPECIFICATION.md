@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**193 `[FROZEN]`**, **9 `[PROVISIONAL]`**, **3 `[DEFERRED]`** and **seven
+**193 `[FROZEN]`**, **10 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -6906,7 +6906,7 @@ It was written before that code existed, and the clauses that depend on
 measurement rather than on argument are consequently `[DEFERRED]` against the
 phase that builds the port against two real peers — five of the thirty-seven,
 with a further eleven `[PROVISIONAL]` (three and thirteen since ADR-0027 settled SY-27
-and SY-28 without the experiment, and one of thirty-nine and three since ADR-0107 at phase 13's close: SY-32, and SY-7, SY-10 and SY-29). The rest are frozen, because the shape
+and SY-28 without the experiment, and one of thirty-nine and three since ADR-0107 at phase 13's close: SY-32, and SY-7, SY-10 and SY-29; and none and two since ADR-0108 at phase 14: SY-29 and SY-32, both provisional). The rest are frozen, because the shape
 does not wait on the transport. They are written anyway, and the reason is
 recorded in the decision ledger: `RUNBOOK.md:438-439` says deferring the
 sync port **"leaks `EventId` and a tail seam back into `EventStore`"**. That was a
@@ -8324,15 +8324,15 @@ shape for it. ES-39's objection to floors is about completeness. A scattered
 purge on a peer makes it a deleted-from store under ES-38 and ES-40, and SY-32
 does not report that in 1.x.
 
-`[DEFERRED — settled at phase 14 by building the retention case: a peer offline
-for 120 days against a 90-day compaction window, with CF-27's completeness
-instrument (E2E-CASES.md:1679-1684) standing in for the compacted peer. The
-experiment is whether the scalar resume floor, `PeerLimits::retention_floor`,
-detects the offline-too-long peer. ADR-0028 has already decided that the floor
-does not have to describe a scattered purge, which E2E-46 shows no floor can.
-Owning phase: 14, which builds the instrument, and phase 13's two peer adapters
-if it lands first. That reconciles the owner this marker named before phase 16
-(the phase that builds the peers) with the ledger's `freeze-by-14`. Confirmed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md): neither of phase 13's peers built the instrument, every shipped peer declares `retention_floor: None` and the runner reads none, so the experiment stays phase 14's (#158, #163).]`
+`[PROVISIONAL — falsified by a real peer that forgets a prefix of its log, grants `SyncFixture::COMPACTION`, and either cannot state the floor
+it can still resume from or lets a token below it converge on a subset in silence; the experiment is `retention_gap_is_reported_not_silent` mounted on that peer.
+Moved from `[DEFERRED]` at phase 14 by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md), because the experiment this marker named ran (#158, #473): a peer 120 days offline against a
+90-day window is refused `FailureClass::Reseed` and its edge stops with `StopCause::RetentionGap`, its log untouched, while a 60-day peer converges, and seven
+wrong peers in `tests/wrong_retention.rs` fail the rule, one of them answering the 120-day peer with a silent subset. It ran on `MemorySyncPeer`'s own compaction,
+not on CF-27's instrument, and every real peer (Neon, the Postgres `StoreSyncPeer`, the Durable Object) declines `COMPACTION` and declares `retention_floor: None`, so the rule skips on all of them.
+Not frozen, because this clause carries §6.5's completeness row for `SyncPeer`, a frozen port, and freezing it needs an adapter at that row's far end or an accepted record naming the axis and the port. ADR-0108's section 3 is that acceptance, effective only if the owner accepts it; the freeze is then a follow-up.
+The floor still means resumability, not completeness (ADR-0028), and the harms a pruned replica causes (#483, #484) are the ingest path's.
+Owning phase: 14, which keeps `freeze-by-14`; failing the acceptance, phase 14 builds a compacting real peer or renews this past 1.0.]`
 Rule: `retention_gap_is_reported_not_silent` (#158,
 `happenstance-sync-testkit`).
 Cases: E2E-44, E2E-46, E2E-47.
@@ -10057,7 +10057,7 @@ than it does.
 | Async flavour | `SyncPeer` | far end | The Durable Object passes `sync_peer_conformance!` under `workerd`, locally and deployed, as a `!Send` `RemoteSyncPeer` over `CloudflareIngestStore` (`harness/workerd/src/sync_peer.rs`, CI's `workerd` job, #130). The `Send` flavour, `SendSyncPeer`, is `trait_variant`'s, and `SendPeer` puts the shipped peers on it (#421) |
 | Batch shape | `ProjectionStore` | far end | The replay-at-commit adapters pass. The live-transaction end is `LivePostgresProjectionStore` (ADR-0062); the verdict's *near end no* predates it, and the check does not read the near end |
 | Completeness | `EventStore` | far end | SQLite in the gate, Postgres and Neon in their live jobs and the Durable Object under `workerd` remove rows outside the port through `Fixture::REMOVAL` and pass `positions_are_not_reused_after_removal` and `condition_over_removed_history_does_not_reject` over the holed log (#147, #474). It was carried by ES-40 until [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) froze it |
-| Completeness | `SyncPeer` | carried by SY-32 | SY-32 is `[DEFERRED]` to phase 14, which builds CF-27's completeness instrument |
+| Completeness | `SyncPeer` | carried by SY-32 | SY-32 is `[PROVISIONAL]` since [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md): its rule runs on `MemorySyncPeer`'s compaction, and every real peer declines `SyncFixture::COMPACTION`, so no peer adapter sits at this port's far end. The axis's *adapter yes* is `EventStore`'s, and `far end` here would be pro forma. ADR-0108 §3 accepts the axis for this port by name, effective on its acceptance, when SY-32 freezes and this row reads `ADR-0108` |
 | Handle multiplicity | `EventStore` | far end | `SqliteFixture` opens a second `rusqlite::Connection` onto one file. A pool is still unbuilt |
 | Durability | `EventStore` | far end | `SqliteFixture` reopens a real file. The fault half is ES-35's, which is `[PROVISIONAL]` for it |
 | Durability | `ProjectionStore` | far end | `committed_rows_and_checkpoint_survive_a_reopen` (#422) drops every handle and reopens: `SqliteProjectionStore` passes it over a real file in the gate, both Postgres projection stores in `live-postgres`, and `NeonProjectionStore` in `live-neon`. The fault half is as unbuilt here as for `EventStore` |
@@ -10491,9 +10491,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 39 | 37 | 1 | 1 | 0 |
+| §5 `SyncPeer` | `SY` | 39 | 37 | 2 | 0 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **212** | **193** | **9** | **3** | **7** |
+| **Total** | | **212** | **193** | **10** | **2** | **7** |
 
 ### 7.2 The table
 
@@ -10682,7 +10682,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-29 | PROVISIONAL | `ingest_refuses_an_unbounded_peer_query` † | E2E-40 |
 | SY-30 | FROZEN | `push_envelope_preserves_group_boundaries`, `ingest_group_is_atomic_under_a_mi… | E2E-35, E2E-39 |
 | SY-31 | FROZEN | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
-| SY-32 | DEFERRED | `retention_gap_is_reported_not_silent` | E2E-44, E2E-46, E2E-47 |
+| SY-32 | PROVISIONAL | `retention_gap_is_reported_not_silent` | E2E-44, E2E-46, E2E-47 |
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
 | SY-34 | FROZEN | `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` † | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
