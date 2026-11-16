@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**190 `[FROZEN]`**, **12 `[PROVISIONAL]`**, **3 `[DEFERRED]`** and **seven
+**191 `[FROZEN]`**, **11 `[PROVISIONAL]`**, **3 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -7211,11 +7211,11 @@ a compensation for it.**
 A fact family is identified by tag key (SY-35). Assignment is runner
 configuration, not a property of the port.
 
-`[PROVISIONAL — falsified if a deployment exists in which two peers must both be
-able to adjudicate the same fact family and their compensations can be made
-convergent. Falsification test: two adjudicators for one family, disconnected
-from each other, each ingesting the same conflicting pair; assert the two logs
-converge after they meet. Renewed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md), with SY-10: `only_the_adjudicator_compensates` holds the store half and the falsification test ran with its divergence recorded (#136), but no runner authors a compensation, so the MUST that a non-adjudicator writes none cannot fail yet. The named experiment is the runner's adjudication hook, a follow-up to #244, mounting the rule; the marker moves then.]`
+`[FROZEN]` — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase 14, with SY-10, on the runner's adjudication hook (#450, #469), which ADR-0107 renewed it to wait for.
+`runner::Adjudicate` runs on both ingest sites, `Edge::with_adjudicator` on the pull and `StoreSyncPeer::with_adjudicator` behind `serve_sync_adjudicated` on the push,
+and `Accept`, which writes nothing, is the default everywhere. The store half is `only_the_adjudicator_compensates`; the runner half, that a non-adjudicator
+writes none, fails a `MiniEdge` that adjudicates under `Accept` while the shipped `Edge` passes. The falsification test ran and its divergence is recorded (#136).
+Reopened by its own falsifier: a deployment in which two peers must both adjudicate one fact family and their compensations can be made convergent.`
 Rule: `only_the_adjudicator_compensates` (`happenstance-sync-testkit`, #136), in the
 ingest family: two stores take one conflicting pair in opposite orders, the rule plays
 the runner through the shipped hook (`runner::Adjudicate`, #450), mounting a seat rule on
@@ -7228,8 +7228,8 @@ after the two stores meet they hold the same events, and under two adjudicators 
 two reversals with two identities, reversing opposite claims, so no claim to the seat
 stands. The runner half, that a non-adjudicator writes none, is held by
 `happenstance-sync`'s `tests/runner/wrong_runners.rs`: the shipped `Edge` against a
-`MiniEdge` that adjudicates under `Accept` (#450). The marker stays provisional until
-its own change moves it, with SY-10's.
+`MiniEdge` that adjudicates under `Accept` (#450). ADR-0108 froze the marker at phase 14,
+with SY-10's.
 Cases: E2E-39, E2E-42, E2E-45.
 
 *Rejects:* every-peer-adjudicates, which is the reading SY-1 through SY-3 invite
@@ -10491,9 +10491,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 39 | 35 | 3 | 1 | 0 |
+| §5 `SyncPeer` | `SY` | 39 | 36 | 2 | 1 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **212** | **190** | **12** | **3** | **7** |
+| **Total** | | **212** | **191** | **11** | **3** | **7** |
 
 ### 7.2 The table
 
@@ -10657,7 +10657,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` | E2E-42 |
 | SY-6 | FROZEN | `wire_condition_with_after_is_refused` † | E2E-37, E2E-38, E2E-56, E2E-14 |
-| SY-7 | PROVISIONAL | `only_the_adjudicator_compensates` | E2E-39, E2E-42, E2E-45 |
+| SY-7 | FROZEN | `only_the_adjudicator_compensates` | E2E-39, E2E-42, E2E-45 |
 | SY-8 | FROZEN | the whole of `happenstance-sync-testkit` — every rule in it takes exactly one … | E2E-33, E2E-35, E2E-36, E2E-42 |
 | SY-9 | FROZEN | `one_adapter_serves_both_roles` † | E2E-42, E2E-45 |
 | SY-10 | PROVISIONAL | `directional_merge_rules_compose` | E2E-42, E2E-44, E2E-45 |
