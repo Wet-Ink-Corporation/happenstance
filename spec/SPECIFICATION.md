@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**189 `[FROZEN]`**, **12 `[PROVISIONAL]`**, **4 `[DEFERRED]`** and **seven
+**190 `[FROZEN]`**, **12 `[PROVISIONAL]`**, **3 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -9866,13 +9866,13 @@ measurement, and PRESSURE-TEST.md:662-666 is right that it is owed one.
 **CF-27.** The workspace MUST hold a **completeness instrument**: a
 testkit-adjacent store that deliberately holds only a suffix, or an arbitrary
 retained subset, of its own log, and reports what it withholds through its own
-inherent API, never through an `EventStore` method. `[DEFERRED — settled at phase
-14 (SY-27 no longer needs it first: ADR-0027 took whole-log), by building it as a decorator over any
-`EventStore` and running the full suite against it. The outcome that matters is
-the list of rules that pass, which is the list of rules that cannot tell a pruned
-store from a young one. The decision this marker waited on,
-E2E-CASES.md:1663-1669's eleventh open decision, is taken: ADR-0028 chose the
-written refusal, so the report shape is instrument-local and not a port surface.]`
+inherent API, never through an `EventStore` method. `[FROZEN]` — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase
+14, on `WithholdingStore` (#144, #467), a decorator over any `EventStore` holding a suffix or a scattered retained set, built as this marker asked
+and run through the event-store, concurrency and model families with its pass list recorded; three wrong instruments fail its rule (a range report,
+a last-call-only report, leaky membership). Recorded limit: it masks ingest-side harms (`experiments/retention-reader`'s controls), so an ingest
+claim needs `Fixture::REMOVAL`, not the decorator. Reopened by an instrument whose report misstates what it withholds while the suite passes,
+or by a suite rule that can tell a holed log from a young one. The decision this marker waited on,
+E2E-CASES.md:1663-1669's eleventh open decision, was taken by ADR-0028: the report shape is instrument-local, not a port surface.
 [ADR-0028](../.kb/decisions/0028-what-a-store-may-forget.md) widens the instrument
 from a suffix to an arbitrary retained set, because a suffix-only instrument
 cannot falsify the floor that ES-39 rejects. It also names a `Fixture`
@@ -10492,8 +10492,8 @@ between them because its *shape* does not wait on a transport but its
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
 | §5 `SyncPeer` | `SY` | 39 | 35 | 3 | 1 | 0 |
-| §6 conformance | `CF` | 43 | 38 | 2 | 2 | 1 |
-| **Total** | | **212** | **189** | **12** | **4** | **7** |
+| §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
+| **Total** | | **212** | **190** | **12** | **3** | **7** |
 
 ### 7.2 The table
 
@@ -10721,7 +10721,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-24 | FROZEN | `registry::no_orphan_rules`, at the foot of `crates/happenstance-testkit/src/r… | *all* |
 | CF-25 | FROZEN | `cargo xtask spec-trace` (CF-38), which reads the portfolio table and the matu… | E2E-01, E2E-02, E2E-24, E2E-46, E2E-52 |
 | CF-26 | FROZEN | the portfolio table's `Far end exists` column, checked by `cargo xtask spec-tr… | E2E-01, E2E-24 |
-| CF-27 | DEFERRED | `instrument_report_is_accurate_and_the_suite_cannot_tell`, a meta-test in crat… | E2E-46, E2E-47, E2E-56, E2E-33 |
+| CF-27 | FROZEN | `instrument_report_is_accurate_and_the_suite_cannot_tell`, a meta-test in crat… | E2E-46, E2E-47, E2E-56, E2E-33 |
 | CF-28 | FROZEN | the existing suite, invoked against that `Rc<RefCell<Vec<_>>>`-backed store un… | E2E-52, E2E-09, E2E-30 |
 | CF-29 | FROZEN | `mutation_coverage::every_rule_has_a_mutant` (CF-1) enforces the mutant half m… | *all* |
 | CF-30 | NON-NORMATIVE | *(none — see clause)* | *(none — see clause)* |
