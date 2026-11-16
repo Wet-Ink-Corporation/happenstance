@@ -9,7 +9,7 @@ explains event sourcing and dynamic consistency boundaries from the beginning,
 with programs you can run.
 
 > **Status: published, and built against real peers.** Phase 13 built the runner
-> and the network peers on top of the port, and they ship in `0.6.0`:
+> and the network peers on top of the port, and they ship from `0.6.0`:
 >
 > - **the runner** (#244): `runner::Edge` drives one edge, a step at a time or
 >   through `Edge::run`, a loop the caller drives on its own runtime with a
@@ -28,8 +28,8 @@ with programs you can run.
 >
 > Still to come: a peer set above the single edge, and an `Exchange` over a
 > real network in a published crate. The adjudication hook SY-7 and SY-10
-> waited on is built (#450): `runner::Adjudicate`, mounted on an edge or a
-> `StoreSyncPeer`, and ADR-0108 froze both on it. So is SY-32's
+> waited on ships in `0.7.0` (#450): `runner::Adjudicate`, mounted on an edge or a
+> `StoreSyncPeer`, and ADR-0108 froze both on it. So does SY-32's
 > retention case (#158): a far side that has forgotten history an edge's token
 > has not reached refuses it with the fifth failure class, `Reseed`, and the
 > edge stops with `StopCause::RetentionGap` rather than converging on a subset

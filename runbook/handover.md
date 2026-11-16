@@ -12,8 +12,8 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/p13-release`, cut from `claude/p13-exit` at `48af8178`, with `origin/main` (#456)
-and `claude/p13-exit`'s `353eea88` merged in. 2026-11-09.
+`claude/project-thread-xxl8lr-070`, cut from `origin/phase-14` at `2c19afd1`, with
+`origin/main` (#468, #470) merged in. 2026-11-16.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -21,40 +21,44 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**Phase 13 is done** on `phase-13`, and this branch is its `0.6.0` release commit:
-`[Unreleased]` becomes `[0.6.0] — 2026-11-09` under a summary that marks it breaking from
-`0.5.x`, with a `0.6.0` trace of eleven hand rows (wire format 3 and `responder`, the three
-schema moves, the two identity refusals, and the new rules in both testkits). All nine
-crates, the workspace requirements, the sync-testkit's pin, the testkit's recipe pins and
-the six examples are at `0.6.0`; `Cargo.lock` and the three off-workspace lockfiles move
-only the path crates. Status lines, install lines (`"0.6"`), SECURITY's table, the site's
-roadmap card and reference table, and the `0.6.0` status row follow.
+**Phase 14 is done** on `phase-14`, and this branch is its `0.7.0` release commit:
+`[Unreleased]` becomes `[0.7.0] — 2026-11-16` under a summary that marks it breaking from
+`0.6.x`, with a `0.7.0` trace of six hand rows: `BelowRetentionFloor`'s class moving from
+`Stop` to `Reseed`, `MemorySyncPeer::with_limits`' floor, `RemoteSyncPeer`'s refusal before
+sending, and the new rules in both testkits, with the sync-testkit's `REOPEN` declension
+check. Nothing on the wire or in a schema moves. All nine crates, the workspace
+requirements, the sync-testkit's pin, the testkit's recipe pins and the seven examples are
+at `0.7.0`; `Cargo.lock` and seven off-workspace lockfiles move only the path crates. Status
+and install lines (`"0.7"`), SECURITY's table, the README's table and roadmap, the site's
+cards and reference table, two how-to pages that said adjudication was not built, the
+`0.7.0` status row and phase 14's file follow.
 
-**`0.5.1` is the latest on crates.io** (2026-11-08). Phases 0–13, 15–17b and 18 are done.
-What remains is sequenced in [`roadmap.md`](roadmap.md): retention (14), then `1.0.0` (21).
+**`0.6.0` is the latest on crates.io** (2026-11-09). Phases 0–18 are done, 17b included.
+What remains is sequenced in [`roadmap.md`](roadmap.md): `1.0.0` (21), beside phases 19,
+20 and 22.
 
-**`0.6.0` is tagged on `main`, at `phase-13` → `main`'s merge commit**, as `0.5.0` was at
-#403's: the release PR merges into `phase-13`, and `release.yml` publishes only a tag on
-`main`, then creates the GitHub release from the tag's `## [0.6.0]` section
-(`scripts/release-notes.sh`, #456). Cloud sessions cannot push tags; the owner pushes them.
+**`0.7.0` is tagged on `main`, at `phase-14` → `main`'s merge commit**, as `0.6.0` was at
+#462's: the release PR merges into `phase-14`, and `release.yml` publishes only a tag on
+`main`, then creates the GitHub release from the tag's `## [0.7.0]` section
+(`scripts/release-notes.sh`). Cloud sessions cannot push tags; the owner pushes them.
 
 ## In flight
 
-`claude/p13-exit` (#459) and the `0.6.0` release PR (#460) are merged into `phase-13`.
-`claude/p13-upgrade-guide` adds `docs/upgrading-to-0-6.md`, the owner's request of
-2026-11-09, on the `0.5.0` precedent; its PR into `phase-13` is not opened yet.
+The `0.7.0` release PR, `claude/project-thread-xxl8lr-070` → `phase-14`, is pushed and not
+yet opened.
 
 ## Next action
 
-1. The owner merges the upgrade guide PR into `phase-13`.
-2. `phase-13` → `main`. On its merge commit run `cargo semver-checks check-release
-   --workspace --baseline-version 0.5.1 --release-type minor`; any lint no trace row
-   covers becomes a **T** row in the `0.6.0` trace before the tag.
-3. Tag `v0.6.0` on that merge commit. Check that the GitHub release job read the
-   `## [0.6.0]` section.
-4. On the merge, close #64, #108, #117, #130, #131 and #244, whose PRs merged into
-   `phase-13` and so closed nothing.
-5. Phase 14 (#65). It owns SY-7 and SY-10 (#450 first, then #441), SY-32 and VT-36.
+1. The owner merges the release PR into `phase-14`.
+2. `phase-14` → `main`. On its merge commit run `cargo semver-checks check-release
+   --workspace --baseline-version 0.6.0 --release-type minor`; any lint no trace row
+   covers becomes a **T** row in the `0.7.0` trace before the tag.
+3. Tag `v0.7.0` on that merge commit. Check that the GitHub release job read the
+   `## [0.7.0]` section.
+4. On the merge, close #65, #144, #147, #151, #154, #156, #158 and #163, whose PRs merged
+   into `phase-14` and so closed nothing.
+5. Phase 21 (`1.0.0`, #68), with the retention harms phase 14 filed (#483, #484, #485) and
+   #480 ahead of it.
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
@@ -62,24 +66,18 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- #459, the `0.6.0` release PR, `phase-13` → `main`, the semver-checks run and the
-  `v0.6.0` tag.
-- No `docs/upgrading-to-0-6.md` was written: the `0.5` guide's precedent registers it in
-  `xtask/src/narrative.rs`, which the release commit does not touch. The CHANGELOG
-  summary and trace carry the upgrade steps. Write the guide in a follow-up, or confirm
-  the trace is enough for a release whose breaks are wire and schema rather than code.
-- SY-21's `convergent_projection_cannot_observe_local_position` was written in phase
-  14 (#457, #478) and its `Scheduled` entry left `spec_trace.rs`; ADR-0108 (#163, accepted)
-  rewords SY-21's Rule line, which said "phase 13 adds" it. D-457-2's reading is the owner's.
+- The `0.7.0` release PR into `phase-14`, `phase-14` → `main`, the semver-checks run and
+  the `v0.7.0` tag.
+- No `docs/upgrading-to-0-7.md` was written. Every break is behaviour, none needs a code
+  change to compile, and the trace states each; write a guide on the `0.6` precedent if
+  you want one.
+- #480: `sync_declensions_are_stated` still accepts an inherited `COMPACTION` declension,
+  because every real peer fixture inherits it.
 - Eight `[FROZEN]` `SY` clauses name a † rule that exists nowhere in the tree (SY-6, SY-9,
-  SY-13, SY-16, SY-19, SY-26, SY-33, SY-35). Since #458 check 4 reads the sync suites, and
-  each is declared in `SYNC_UNRESOLVABLE_RULE_NAMES` with its owner; SY-3 and SY-34 were
-  repointed by ADR-0108.
-- §1.6 now reads `SyncPeer` as **Frozen at phase 13**, which is what `spec-trace`'s CF-25
-  walk already treated it as. Confirm or reword.
+  SY-13, SY-16, SY-19, SY-26, SY-33, SY-35), each declared in `SYNC_UNRESOLVABLE_RULE_NAMES`
+  with its owner (#465).
 - Calls taken *as recommended* while the owner was asked, still unconfirmed: #101 O1–O3,
   #103 O1(a), #118's schema call, and #123 O1(B)/O2.
-- Follow-ups filed overnight and not yet scheduled: #441, #448, #450–#455.
 - Defaults in force: `trait-variant` keeps its caret (ADR-0092); new CI jobs are not
   required checks.
 
@@ -101,8 +99,9 @@ record, and the owner.
 - GitHub Issues is the tracker; exit criteria stay in the phase files — ADR-0088, D-5.
 - Unattended sessions self-merge on green unless `door:one-way` — `wi-1fde8c`.
 - Ingest is unconditional, with compensation — SY-1 – SY-7.
-- Phase 13's nineteen clauses are frozen; SY-7 and SY-10 wait on the adjudication hook —
-  ADR-0107, ADR-0105, ADR-0106.
+- Phase 13's nineteen clauses are frozen — ADR-0107, ADR-0105, ADR-0106.
+- Phase 14's seven clauses are frozen, ES-39 as the refusal, and SY-32 with no real peer
+  compacting yet — ADR-0108, ADR-0028.
 - The projection port is frozen — ADR-0063.
 - Phase 18's eight clauses are frozen, and the fan-out runner catches nothing —
   ADR-0102, ADR-0101.

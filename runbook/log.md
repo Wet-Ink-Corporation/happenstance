@@ -10,6 +10,29 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-16 — `0.7.0`, retention and the adjudication hook (phase 14)
+
+*Committed on `claude/project-thread-xxl8lr-070`, cut from `origin/phase-14` at `2c19afd1`,
+with `origin/main` (#468, #470) merged in.* The merge's one conflict was `[Unreleased]`:
+main's two entries (`examples/two-devices-one-seat`, the sync-a-device how-to) join phase
+14's under Added. `[Unreleased]` becomes `[0.7.0] — 2026-11-16` under a summary that marks
+it breaking from `0.6.x` with no wire or schema change. The breaking entries are labelled in
+place, and a `0.7.0` trace follows the `0.6.0` one: six hand rows, no tool rows, since
+cargo-semver-checks is not installed here. The trace records why the defaulted type
+parameters (`Edge<R, A = Accept>` and five others), the new variants on
+`#[non_exhaustive]` enums (`FailureClass::Reseed` among them) and the frozen clauses are not
+breaks. All nine crates move to `0.7.0` with the workspace requirements, the sync-testkit's
+pin, the testkit's recipe pins (`=0.7.0` and `"0.7"`) and the seven examples; `Cargo.lock`
+and the benchmarks' and six experiments' lockfiles move only the path crates. Status and
+install lines, the core README's rule count (100), SECURITY's table, the README's table and
+roadmap, the site's cards and reference table, `docs/sync-a-device.md` and
+`docs/choose-a-topology.md` (adjudication ships; pruning a syncing device is not yet safe,
+#483, #484), the status row, phase 14's file (every box ticked) and the handover follow.
+
+**Verified.** See the release commit's body.
+
+---
+
 ## 2026-11-09 — `0.6.0`, sync over the network (phase 13)
 
 *Committed on `claude/p13-release`, cut from `claude/p13-exit` at `48af8178`, with

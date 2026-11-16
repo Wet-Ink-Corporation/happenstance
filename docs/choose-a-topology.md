@@ -80,8 +80,9 @@ central store sees both events and appends the correction, which then syncs
 back to everyone. Only one place should write corrections for a given fact
 ([SY-7](../spec/SPECIFICATION.md)).
 
-**Status:** works today, with the deciding store chosen by convention.
-Automatic adjudication arrives in `0.7`.
+**Status:** works today. From `0.7` the deciding store can adjudicate as it
+syncs, through a merge rule mounted on its edge or its peer
+(`runner::Adjudicate`); without one, it decides by convention after a sync.
 
 ### Each client holds only its workspace
 
@@ -148,7 +149,16 @@ and a pruned store must still behave correctly for what it holds
 ([ES-38](../spec/SPECIFICATION.md)). A decision on the device stays sound only
 over history it still holds in full.
 
-**Status:** coming in `0.7`.
+**Status:** in part. From `0.7` the conformance suite holds every store to
+ES-38 after rows are removed outside its interface, a condition over removed
+history passes rather than refusing
+([ES-40](../spec/SPECIFICATION.md)), and an edge whose far side has forgotten
+history it has not reached stops with a retention gap rather than converging
+on a subset ([SY-32](../spec/SPECIFICATION.md)). Pruning a device that syncs is
+not yet safe: a pruned event can be pulled back in, and pruning one of the
+device's own events can stop its edge
+([#483](https://github.com/Wet-Ink-Corporation/happenstance/issues/483),
+[#484](https://github.com/Wet-Ink-Corporation/happenstance/issues/484)).
 
 ### Edge hubs close to your users
 

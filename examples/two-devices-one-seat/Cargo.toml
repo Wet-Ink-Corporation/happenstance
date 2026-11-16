@@ -30,7 +30,7 @@ doc-scrape-examples = true
 # The typed layer: `commit` for every decision, `run_projection` for the read
 # model. `default-features = false` drops `memory`, because every store here is
 # a file.
-happenstance = { version = "0.6.0", path = "../../crates/happenstance", default-features = false, features = [
+happenstance = { version = "0.7.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
 ] }
@@ -46,7 +46,7 @@ happenstance-sqlite = { path = "../../crates/happenstance-sqlite", features = [
 # re-export, because this application writes against it: an `Exchange` of its
 # own, `serve_sync` on the far side, and one `runner::Edge` per device. No
 # feature: `memory` is a test double, and nothing here is in memory.
-happenstance-sync = { version = "0.6.0", path = "../../crates/happenstance-sync" }
+happenstance-sync = { version = "0.7.0", path = "../../crates/happenstance-sync" }
 # The read model's own table is the application's, so it is created and read
 # through a connection of the application's own. `workspace = true` for the
 # reason `transfers-on-sqlite` gives at length.

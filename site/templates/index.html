@@ -65,7 +65,7 @@
       <div class="hs-card hs-feature">
         <span class="hs-label">Works today</span>
         <div class="hs-feature__title">Many clients, one source of truth</div>
-        <p class="hs-feature__body">Every device syncs to a central store, and a conflict arrives as an event you can see and act on. Automatic adjudication lands in 0.7.</p>
+        <p class="hs-feature__body">Every device syncs to a central store, and a conflict arrives as an event you can see and act on, or that a merge rule answers as it syncs, from 0.7.</p>
       </div>
       <div class="hs-card hs-feature">
         <span class="hs-label">Works today</span>
@@ -88,7 +88,7 @@
         <p class="hs-feature__body">Some commands go straight to the server, where the full history lives, and the rest stay local.</p>
       </div>
       <div class="hs-card hs-feature">
-        <span class="hs-label">Coming in 0.7</span>
+        <span class="hs-label">On the roadmap</span>
         <div class="hs-feature__title">A lean device, a complete cloud</div>
         <p class="hs-feature__body">The device prunes history the hub has confirmed, while Neon keeps everything.</p>
       </div>
@@ -178,12 +178,12 @@
       <div class="hs-card hs-feature">
         <span class="hs-label">Shipped</span>
         <div class="hs-feature__title">Sync between stores</div>
-        <p class="hs-feature__body">Replicate a log between SQLite, Postgres, Neon and Durable Objects, one edge at a time, with conflicts recorded as ordinary events rather than lost. The runner and network peers ship from <code class="hs-inline-code">0.6.0</code>.</p>
+        <p class="hs-feature__body">Replicate a log between SQLite, Postgres, Neon and Durable Objects, one edge at a time, with conflicts recorded as ordinary events rather than lost. The runner and network peers ship from <code class="hs-inline-code">0.6.0</code>; merge rules and the retention-gap report from <code class="hs-inline-code">0.7.0</code>.</p>
       </div>
       <div class="hs-card hs-feature">
-        <span class="hs-label">In progress · 0.7</span>
+        <span class="hs-label">In progress</span>
         <div class="hs-feature__title">Keeping less, on purpose</div>
-        <p class="hs-feature__body">Devices that keep less history than the hub, a report when a peer has been away longer than the hub remembers, and automatic conflict adjudication.</p>
+        <p class="hs-feature__body">Devices that keep less history than the hub. <code class="hs-inline-code">0.7.0</code> settles what a store may forget and reports a peer that has been away longer than the hub remembers; pruning a device without resurrecting what it pruned is next.</p>
       </div>
       <div class="hs-card hs-feature">
         <span class="hs-label">Planned · 1.0</span>

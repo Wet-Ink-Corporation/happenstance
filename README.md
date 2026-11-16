@@ -68,12 +68,12 @@ Pick the pieces your app needs. Every arrangement keeps the same guarantees.
 | You want | How it looks | Status |
 |---|---|---|
 | An app that works offline and syncs when it is back | Each device keeps a SQLite log that syncs with Neon or Postgres | ✅ today |
-| Many clients and one source of truth | Every device syncs to a central store; conflicts arrive as events | ✅ today; automatic conflict handling in 0.7 |
+| Many clients and one source of truth | Every device syncs to a central store; conflicts arrive as events, and a merge rule can answer them as they sync | ✅ today; the merge rule from 0.7 |
 | Each client holding only its own workspace | One store per workspace, case or tenant; a client syncs the ones it holds | ✅ today |
 | Huge views that stay on the server | A server-side read model, queried over HTTP, with read-your-writes | ✅ today ([`tickets-over-http`](examples/tickets-over-http)) |
 | A small local view of a big central store | A projection reads the central log and keeps a local SQLite view | ✅ today |
 | Rules that span several things | One read and one conditional write, across any entities | ✅ today ([`handles-and-quotas`](examples/handles-and-quotas)) |
-| A lean device and a complete cloud | The device prunes history the hub has confirmed | 🛣️ 0.7 |
+| A lean device and a complete cloud | The device prunes history the hub has confirmed | 🛣️ roadmap; 0.7 reports a peer that has been away longer than the hub remembers |
 | Edge hubs close to your users | A Durable Object per tenant, syncing devices nearby and forwarding to Neon | 🛣️ roadmap |
 
 [Choose a topology](https://wet-ink-corporation.github.io/happenstance/guide/choose-a-topology/)
@@ -214,8 +214,8 @@ Rust DCB library, Postgres-only and macro-driven.
 
 | | |
 |---|---|
-| **Today** | Typed events, decision models and projection runners; SQLite, Postgres, Neon and Durable Object stores; sync between stores over one edge at a time |
-| **0.7** | Retention: devices that keep less than the hub, and a report when a peer has been away too long; automatic conflict adjudication |
+| **Today** | Typed events, decision models and projection runners; SQLite, Postgres, Neon and Durable Object stores; sync between stores over one edge at a time, with a merge rule that adjudicates as it syncs and a report when a peer has been away longer than its far side remembers (0.7) |
+| **Next** | Retention: devices that keep less than the hub, pruning without resurrecting what was pruned |
 | **1.0** | Frozen sync, a runner that links several edges, and a stable promise for every surface |
 | **Exploring** | SQLite in the browser, as the offline end of sync |
 
