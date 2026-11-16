@@ -118,6 +118,23 @@ Protecting `projection.id()` marks a name the runner never writes, and the
 reset you meant to refuse goes through
 ([PS-18](../spec/SPECIFICATION.md#46-reset)).
 
+### Re-pointing a view at another store
+
+A view's checkpoint is pinned to the event store it was built from. The first
+run records that store's identity under a second id,
+`source_checkpoint_id(&projection)`, and a later run handed a different store
+stops with `ProjectionError::SourceChanged` before it reads or applies anything
+([PS-40](../spec/SPECIFICATION.md#47-checkpoint-semantics)). Positions belong to
+one store, so resuming another store's log from this checkpoint would skip some
+of its events and apply others twice.
+
+A reset of the main id alone, against the same store, needs nothing more. To
+point a view at a different store, reset both ids: the main one with the view's
+deletes, so it rebuilds, and the pin, so the next run records the new store. If
+the event store and the projection store were restored together and only the
+store's identity was re-minted, the rows are still right for that log, and
+resetting the pin alone is enough: the next run adopts the store it reads.
+
 ### Reset, not a commit at the first position
 
 After a reset, the checkpoint reads `Checkpoint::NeverRun`, so the next run
@@ -206,7 +223,7 @@ async fn main() -> Result<(), Failure> {
 
     // A view that has caught up with the log.
     let views = MemoryProjectionStore::new();
-    run_projection(&log, &views, &mut orders, &Json, chunk).await?;
+    run_projection((&log).into(), &views, &mut orders, &Json, chunk).await?;
     assert_eq!(views.len(), 3);
 
     // The reset: your deletes and the checkpoint, as one unit.
@@ -217,7 +234,7 @@ async fn main() -> Result<(), Failure> {
     assert_eq!(views.checkpoint(&key).await?, Checkpoint::NeverRun);
 
     // The replay applies every event again, the first one included.
-    let replayed = run_projection(&log, &views, &mut orders, &Json, chunk).await?;
+    let replayed = run_projection((&log).into(), &views, &mut orders, &Json, chunk).await?;
     assert_eq!(replayed.applied, 3);
     assert_eq!(views.get("o-1"), Some(1));
 
@@ -232,7 +249,7 @@ async fn main() -> Result<(), Failure> {
     // The count below assumes the log starts at the first position.
     let start = log.snapshot().first().ok_or("the log is empty")?.position;
     assert_eq!(start, first);
-    let resumed = run_projection(&log, &shortcut, &mut orders, &Json, chunk).await?;
+    let resumed = run_projection((&log).into(), &shortcut, &mut orders, &Json, chunk).await?;
     assert_eq!(resumed.applied, 2);
     assert_eq!(shortcut.get("o-1"), None, "the first event is lost");
     Ok(())

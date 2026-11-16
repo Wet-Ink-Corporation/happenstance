@@ -109,7 +109,8 @@
 //!   a read model, in chunks, with the rows and the checkpoint moving in one
 //!   commit. `apply` is `async` (ADR-0074), so it can await a live batch.
 //!   One call drives one projection, or N views over one read, and never
-//!   buffers the replay.
+//!   buffers the replay. The checkpoint is pinned to the event store it was
+//!   built from, handed in as a [`Source`], and another store is refused.
 //!
 //! # Features
 //!
@@ -232,7 +233,14 @@ pub use chunk::Chunk;
 // The id the runner keys a checkpoint on: the name and a digest of the derived
 // query (PS-25). Its own module, because the digest is its own concept.
 mod checkpoint;
-pub use checkpoint::{InvalidCheckpointId, MAX_CHECKPOINT_NAME_LEN, checkpoint_id};
+pub use checkpoint::{
+    InvalidCheckpointId, MAX_CHECKPOINT_NAME_LEN, SourceMark, checkpoint_id, source_checkpoint_id,
+};
+// The event store a run reads, paired with the identity its checkpoint is
+// pinned to (PS-40). Its own module, because it is the runners' argument
+// rather than a part of either.
+mod source;
+pub use source::Source;
 // N views over one read (PS-30). Its own module, because it is its own runner.
 mod fan_out;
 pub use fan_out::{FanOut, ViewError, run_fan_out};

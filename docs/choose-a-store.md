@@ -191,7 +191,10 @@ lives in. Each projection writes to exactly one projection store
 The event log can be in a different database from the read model, but not in a
 different process. The typed layer's `run_projection` takes the event store
 and the projection store as two arguments to one call, so the process that
-runs it has to hold both.
+runs it has to hold both. The event store arrives as a `Source`, paired with its
+identity, and the checkpoint is pinned to that identity: pointed at a different
+event store later, the view stops rather than resuming another store's
+positions ([PS-40](../spec/SPECIFICATION.md#47-checkpoint-semantics)).
 
 | Event store | Projection store in the same crate | Feature |
 | --- | --- | --- |

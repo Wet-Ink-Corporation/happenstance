@@ -9,11 +9,11 @@ use core::convert::Infallible;
 
 use happenstance_core::{
     Authority, EventStore, ProjectionId, ProjectionStore, Query, QueryItem, ReadOptions,
-    SequencePosition, SequencedEvent,
+    SequencePosition, SequencedEvent, StoreId,
 };
 
 use crate::boundary::{AtLeastOneType, derive_query};
-use crate::checkpoint;
+use crate::checkpoint::{self, Bound, Keys};
 use crate::chunk::Chunk;
 use crate::codec::Codec;
 use crate::domain::DomainEvent;
@@ -21,6 +21,7 @@ use crate::runner::{
     Progressed, Projection, ProjectionError, StoreBatch, StoreError, Tally, apply_one,
     considered_through, next_event,
 };
+use crate::source::Source;
 
 /// What one fan-out run did to each view, and to the shared read.
 ///
@@ -136,6 +137,10 @@ where
 ///
 /// A view whose decode, `apply`, `on_error`, `begin` or `commit` fails stops
 /// with its open chunk rolled back, and the others carry on (PS-26, PS-29).
+/// So does a view whose checkpoint was built from another event store than
+/// the [`Source`] handed in: it stops with
+/// [`ProjectionError::SourceChanged`] before the read, and a fresh view
+/// beside it is pinned to this store and runs (PS-40).
 /// Its failure is in the returned [`FanOut`], at its index, as
 /// [`ViewError::Stopped`] holding what `run_projection` would have returned.
 /// That value is `#[must_use]` and is the only place a failure is reported:
@@ -270,7 +275,8 @@ where
 /// let models = MemoryProjectionStore::new();
 /// let chunk = Chunk::of(64.try_into()?);
 ///
-/// let ran = run_fan_out(&events, &models, &mut views, &Json, chunk).await;
+/// let source = (&events).into();
+/// let ran = run_fan_out(source, &models, &mut views, &Json, chunk).await;
 /// assert!(ran.read.is_none(), "the one read did not fail");
 /// for outcome in ran.views {
 ///     outcome?;
@@ -286,7 +292,7 @@ where
 /// # Ok::<(), Box<dyn Error>>(()) }
 /// ```
 pub async fn run_fan_out<S, P, C>(
-    events: &S,
+    source: Source<'_, S>,
     models: &P::Store,
     views: &mut [P],
     codec: &C,
@@ -306,7 +312,7 @@ where
     let mut slots = Vec::with_capacity(derived.len());
     for keyed in derived {
         let lane = match keyed {
-            Ok((query, key)) => resume(models, query, key).await,
+            Ok((query, keys)) => resume(models, query, keys, source.id()).await,
             Err(stop) => Err(stop),
         };
         slots.push(match lane {
@@ -315,7 +321,7 @@ where
         });
     }
 
-    let read = drive(events, models, views, codec, chunk, &mut slots).await;
+    let read = drive(source.events(), models, views, codec, chunk, &mut slots).await;
 
     // A view still running holds an open chunk or none. After a read that
     // reached the end it commits; after a read that failed it rolls back.
@@ -390,23 +396,27 @@ impl<P: Projection> Lane<P> {
     }
 }
 
-/// Derives one view's query and checkpoint key, with `run_projection`'s arms.
-fn derive<P: Projection>(view: &P) -> Result<(Query, ProjectionId), Stop<P>> {
+/// Derives one view's query and its two ids, with `run_projection`'s arms.
+fn derive<P: Projection>(view: &P) -> Result<(Query, Keys), Stop<P>> {
     let query = derive_query(P::Event::EVENT_TYPES, view.scope())?;
-    let key = checkpoint::derive(view.id(), &query).map_err(ProjectionError::CheckpointId)?;
-    Ok((query, key))
+    let keys = checkpoint::derive_pair(view.id(), &query).map_err(ProjectionError::CheckpointId)?;
+    Ok((query, keys))
 }
 
-/// Reads where one view had got to, with `run_projection`'s arms.
+/// Pins one view to the run's store, then reads where it had got to.
+///
+/// With `run_projection`'s arms (PS-40). A view built from another store
+/// stops here, alone.
 async fn resume<P: Projection>(
     models: &P::Store,
     query: Query,
-    key: ProjectionId,
+    keys: Keys,
+    found: StoreId,
 ) -> Result<Lane<P>, Stop<P>> {
-    let checkpoint = models
-        .checkpoint(&key)
+    let checkpoint = checkpoint::bind_source(models, &keys, found)
         .await
-        .map_err(ProjectionError::Checkpoint)?;
+        .map_err(Bound::into_error)?;
+    let key = keys.main;
     let resume = match considered_through(checkpoint) {
         None => None,
         Some(through) => match through.next() {

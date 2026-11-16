@@ -43,7 +43,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::num::{NonZeroU64, NonZeroUsize};
 
-use happenstance::{Chunk, DomainEvent, run_projection};
+use happenstance::{Chunk, DomainEvent, Source, run_projection};
 use happenstance_core::{
     Event, EventId, MemoryEventStore, RecordedAt, SequencePosition, SequencedEvent, StoreId,
 };
@@ -174,7 +174,7 @@ async fn committed<F: ConvergenceFixture>(
     let models = fixture.store().await?;
     let mut projection = fixture.projection();
     let progressed = run_projection(
-        log,
+        Source::new(log, log.store_id()),
         &models,
         &mut projection,
         fixture.codec(),

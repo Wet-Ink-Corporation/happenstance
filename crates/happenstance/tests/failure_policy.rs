@@ -279,7 +279,7 @@ fn a_skipped_decode_failure_advances_past_it() {
         let log = events.snapshot();
         let mut recorder = Recorder::new(Answers::SkipDecodes, 0);
 
-        let done = run_projection(&events, &models, &mut recorder, &Json, chunk(8))
+        let done = run_projection((&events).into(), &models, &mut recorder, &Json, chunk(8))
             .await
             .expect("a skipped event does not stop the run");
 
@@ -306,7 +306,7 @@ fn an_apply_failure_is_offered_as_apply_with_its_identity() {
         let log = events.snapshot();
         let mut recorder = Recorder::new(Answers::SkipRefusals, 1);
 
-        let done = run_projection(&events, &models, &mut recorder, &Json, chunk(8))
+        let done = run_projection((&events).into(), &models, &mut recorder, &Json, chunk(8))
             .await
             .expect("a skipped refusal does not stop the run");
 
@@ -330,7 +330,7 @@ fn a_halting_policy_discards_what_it_wrote() {
         let log = events.snapshot();
         let mut recorder = Recorder::new(Answers::RecordThenHalt, 0);
 
-        let error = run_projection(&events, &models, &mut recorder, &Json, chunk(8))
+        let error = run_projection((&events).into(), &models, &mut recorder, &Json, chunk(8))
             .await
             .expect_err("a halting policy stops the run");
 
@@ -358,7 +358,7 @@ fn a_failing_policy_stops_with_the_policy_arm() {
         let poison = events.snapshot()[1].position;
         let mut recorder = Recorder::new(Answers::Fails, 0);
 
-        let error = run_projection(&events, &models, &mut recorder, &Json, chunk(8))
+        let error = run_projection((&events).into(), &models, &mut recorder, &Json, chunk(8))
             .await
             .expect_err("a failing policy stops the run");
 
@@ -394,7 +394,7 @@ fn a_skip_counts_toward_the_chunk() {
         let log = events.snapshot();
         let mut recorder = Recorder::new(Answers::SkipDecodes, 1);
 
-        let error = run_projection(&events, &models, &mut recorder, &Json, chunk(2))
+        let error = run_projection((&events).into(), &models, &mut recorder, &Json, chunk(2))
             .await
             .expect_err("the refusal in the second chunk halts");
 
@@ -437,9 +437,10 @@ fn skip_and_record_holds_at_every_chunk_and_poison_position() {
                 let mut recorder = Recorder::new(Answers::SkipDecodes, 0);
                 let case = format!("chunk {size}, poison at {poison}");
 
-                let done = run_projection(&events, &models, &mut recorder, &Json, chunk(size))
-                    .await
-                    .unwrap_or_else(|e| panic!("{case}: {e}"));
+                let done =
+                    run_projection((&events).into(), &models, &mut recorder, &Json, chunk(size))
+                        .await
+                        .unwrap_or_else(|e| panic!("{case}: {e}"));
 
                 assert_eq!((done.applied, done.skipped), (3, 1), "{case}");
                 assert_eq!(
@@ -518,7 +519,7 @@ fn a_send_projections_override_is_the_one_the_runner_calls() {
 
         // `run_projection` binds the bare flavour, so this goes through the
         // derived blanket impl. One that ran the default would halt here.
-        let done = run_projection(&events, &models, &mut recorder, &Json, chunk(8))
+        let done = run_projection((&events).into(), &models, &mut recorder, &Json, chunk(8))
             .await
             .expect("the override skipped the poison");
 
@@ -560,7 +561,7 @@ impl Runner for Shipped {
         projection: &mut Recorder,
         size: NonZeroUsize,
     ) -> Result<(), Option<SequencePosition>> {
-        run_projection(events, models, projection, &Json, Chunk::of(size))
+        run_projection(events.into(), models, projection, &Json, Chunk::of(size))
             .await
             .map(|_| ())
             .map_err(|error| error.position())
@@ -580,7 +581,7 @@ impl Runner for FanOutOfOne {
         size: NonZeroUsize,
     ) -> Result<(), Option<SequencePosition>> {
         let views = core::slice::from_mut(projection);
-        let ran = run_fan_out(events, models, views, &Json, Chunk::of(size)).await;
+        let ran = run_fan_out(events.into(), models, views, &Json, Chunk::of(size)).await;
         assert!(ran.read.is_none(), "the memory read failed");
         let [outcome] = <[_; 1]>::try_from(ran.views).expect("one outcome per view");
         outcome.map(|_| ()).map_err(|error| error.position())

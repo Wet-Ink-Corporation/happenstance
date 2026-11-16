@@ -50,7 +50,7 @@ use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
-use happenstance::{Chunk, DomainEvent, Json, Progressed, run_projection};
+use happenstance::{Chunk, DomainEvent, Json, Progressed, Source, StoreId, run_projection};
 use happenstance_benchmarks::domain::{MemoryTotals, Recorded, SqliteTotals};
 use happenstance_benchmarks::fixtures::memory::{MemoryFixture, MemoryHandle};
 use happenstance_benchmarks::fixtures::sqlite::SqliteFixture;
@@ -59,6 +59,10 @@ use happenstance_core::{Event, EventStore, MemoryProjectionStore};
 use happenstance_sqlite::event_store::SqliteEventStore;
 use happenstance_sqlite::projection_store::SqliteProjectionStore;
 use happenstance_testkit::Fixture;
+
+/// The identity the memory handle's runs are pinned to (PS-40). The handle
+/// does not report one, and each projection store here sees one log.
+const MEMORY_SOURCE: StoreId = StoreId::from_bytes([0xbe; 16]);
 
 /// Chunk sizes swept. E2E-22's own three, and no others — see the module docs.
 const CHUNK_SIZES: [usize; 3] = [1, 100, 5_000];
@@ -196,7 +200,7 @@ fn catch_up(criterion: &mut Criterion) {
 
                             let started = Instant::now();
                             let progressed = run_projection(
-                                &memory_events,
+                                Source::new(&memory_events, MEMORY_SOURCE),
                                 &models,
                                 &mut projection,
                                 &Json,
@@ -230,7 +234,7 @@ fn catch_up(criterion: &mut Criterion) {
 
                             let started = Instant::now();
                             let progressed = run_projection(
-                                &sqlite_events,
+                                Source::new(&sqlite_events, sqlite_events.store_id()),
                                 &models,
                                 &mut projection,
                                 &Json,
@@ -278,7 +282,7 @@ fn idle_poll(criterion: &mut Criterion) {
                 // Catch up first, outside the timed region. What is measured is
                 // the *second* run, which finds nothing.
                 let caught_up =
-                    run_projection(&memory_events, &models, &mut projection, &Json, chunk_size)
+                    run_projection(Source::new(&memory_events, MEMORY_SOURCE), &models, &mut projection, &Json, chunk_size)
                         .await
                         .expect("the initial catch-up completes");
                 assert_applied(caught_up);
@@ -286,7 +290,7 @@ fn idle_poll(criterion: &mut Criterion) {
                 let started = Instant::now();
                 for _ in 0..iters {
                     let progressed =
-                        run_projection(&memory_events, &models, &mut projection, &Json, chunk_size)
+                        run_projection(Source::new(&memory_events, MEMORY_SOURCE), &models, &mut projection, &Json, chunk_size)
                             .await
                             .expect("the idle poll completes");
                     black_box(progressed.applied);
@@ -302,7 +306,7 @@ fn idle_poll(criterion: &mut Criterion) {
                 let (models_fixture, models) = fresh_projection_store();
                 let mut projection = SqliteTotals::new(ACCOUNT).expect("valid");
                 let caught_up =
-                    run_projection(&sqlite_events, &models, &mut projection, &Json, chunk_size)
+                    run_projection(Source::new(&sqlite_events, sqlite_events.store_id()), &models, &mut projection, &Json, chunk_size)
                         .await
                         .expect("the initial catch-up completes");
                 assert_applied(caught_up);
@@ -311,7 +315,7 @@ fn idle_poll(criterion: &mut Criterion) {
                 let started = Instant::now();
                 for _ in 0..iters {
                     let progressed =
-                        run_projection(&sqlite_events, &models, &mut projection, &Json, chunk_size)
+                        run_projection(Source::new(&sqlite_events, sqlite_events.store_id()), &models, &mut projection, &Json, chunk_size)
                             .await
                             .expect("the idle poll completes");
                     black_box(progressed.applied);

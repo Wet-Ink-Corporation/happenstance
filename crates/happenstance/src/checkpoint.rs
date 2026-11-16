@@ -241,7 +241,7 @@ pub enum InvalidCheckpointId {
 /// // The runner resumes where the old one stopped.
 /// let chunk = Chunk::of(64.try_into()?);
 /// let done =
-///     run_projection(&events, &models, &mut sold, &Json, chunk)
+///     run_projection((&events).into(), &models, &mut sold, &Json, chunk)
 ///         .await?;
 /// assert_eq!(done.applied, 0);
 /// # Ok(()) }
@@ -262,6 +262,109 @@ pub fn checkpoint_id<P: Projection>(projection: &P) -> Result<ProjectionId, Inva
     derive(projection.id(), &query)
 }
 
+/// The id the runner pins this projection's source store under (PS-40).
+///
+/// It is [`checkpoint_id`] with `#` in place of `@`: the same name, the same
+/// digest, the same length, so it refuses exactly what `checkpoint_id`
+/// refuses. Its position is a [`SourceMark`] of the event store the
+/// checkpoint was built from, recorded with an empty commit before the
+/// first run reads anything. A run handed another store stops with
+/// [`ProjectionError::SourceChanged`](crate::ProjectionError::SourceChanged).
+///
+/// # Re-pointing a view at another store
+///
+/// Reset the pin, and the next run records the store it is handed. Reset
+/// the main checkpoint too, with the read model's deletes in the same batch,
+/// when the view must be rebuilt from the new store's log: its rows were
+/// built from the old one. A pin reset alone over a live checkpoint is an
+/// adoption, which is right only when the new identity names the same log,
+/// as after a restore that re-minted it.
+///
+/// ```
+/// # use happenstance::{bytes::Bytes, Codec, CodecError, DomainEvent};
+/// # use happenstance::{Event, EventStore, EventType, Json, Tags};
+/// # use happenstance::{MemoryEventStore, MemoryProjectionBatch};
+/// # use happenstance::{MemoryProjectionStore, MemoryProjectionStoreError};
+/// # use happenstance::{Delivered, Projection, ProjectionId};
+/// # use happenstance::{Chunk, ProjectionError, ProjectionStore};
+/// # use happenstance::{checkpoint_id, run_projection};
+/// use happenstance::source_checkpoint_id;
+/// # use std::error::Error;
+/// # #[tokio::main] async fn main() -> Result<(), Box<dyn Error>> {
+/// # #[derive(serde::Serialize, serde::Deserialize)]
+/// # enum Seat { Taken }
+/// # const SEAT_TAKEN: EventType = EventType::from_static("SeatTaken");
+/// # impl DomainEvent for Seat {
+/// #     const EVENT_TYPES: &'static [EventType] = &[SEAT_TAKEN];
+/// #     fn event_type(&self) -> EventType { SEAT_TAKEN }
+/// #     fn tags(&self) -> Tags { Tags::empty() }
+/// #     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
+/// #         c.encode(self)
+/// #     }
+/// #     fn decode<C: Codec>(c: &C, _t: &EventType, d: &Bytes)
+/// #         -> Result<Self, CodecError> { c.decode(d) }
+/// # }
+/// # struct Sold { id: ProjectionId, scope: Tags }
+/// # impl Projection for Sold {
+/// #     type Event = Seat;
+/// #     type Store = MemoryProjectionStore;
+/// #     type Error = MemoryProjectionStoreError;
+/// #     fn id(&self) -> &ProjectionId { &self.id }
+/// #     fn scope(&self) -> &Tags { &self.scope }
+/// #     async fn apply(
+/// #         &mut self,
+/// #         _: Delivered<Seat>,
+/// #         batch: &mut MemoryProjectionBatch,
+/// #     ) -> Result<(), MemoryProjectionStoreError> {
+/// #         batch.write("sold", 1);
+/// #         Ok(())
+/// #     }
+/// # }
+/// let taken = Event::new("SeatTaken", Json.encode(&Seat::Taken)?)?;
+/// let old = MemoryEventStore::new();
+/// old.append(&[taken.clone()], None).await?;
+/// let new = MemoryEventStore::new();
+/// new.append(&[taken], None).await?;
+///
+/// let models = MemoryProjectionStore::new();
+/// let mut sold = Sold {
+///     id: ProjectionId::new("seats_sold")?,
+///     scope: Tags::empty(),
+/// };
+/// let chunk = Chunk::of(64.try_into()?);
+/// run_projection((&old).into(), &models, &mut sold, &Json, chunk).await?;
+///
+/// // Handed another store, the run refuses and touches nothing.
+/// let refused = run_projection(
+///     (&new).into(), &models, &mut sold, &Json, chunk,
+/// ).await;
+/// assert!(matches!(refused, Err(ProjectionError::SourceChanged { .. })));
+///
+/// // Re-point it: forget the pin, and rebuild the view from the start.
+/// let pin = source_checkpoint_id(&sold)?;
+/// models.reset(models.begin().await?, &pin).await?;
+/// let mut rows = models.begin().await?;
+/// rows.delete_all();
+/// models.reset(rows, &checkpoint_id(&sold)?).await?;
+///
+/// let rebuilt = run_projection(
+///     (&new).into(), &models, &mut sold, &Json, chunk,
+/// ).await?;
+/// assert_eq!(rebuilt.applied, 1);
+/// # Ok(()) }
+/// ```
+///
+/// # Errors
+///
+/// Exactly [`checkpoint_id`]'s.
+pub fn source_checkpoint_id<P: Projection>(
+    projection: &P,
+) -> Result<ProjectionId, InvalidCheckpointId> {
+    let () = AtLeastOneType::<P::Event>::CHECKED;
+    let query = derive_query(P::Event::EVENT_TYPES, projection.scope())?;
+    derive_pair(projection.id(), &query).map(|keys| keys.pin)
+}
+
 /// The derivation the runner and [`checkpoint_id`] share.
 ///
 /// # Errors
@@ -273,14 +376,46 @@ pub(crate) fn derive(
     name: &ProjectionId,
     query: &Query,
 ) -> Result<ProjectionId, InvalidCheckpointId> {
+    let digest = digest_for(name, query)?;
+    with_separator(name, '@', digest)
+}
+
+/// The main key and the source pin, derived from one digest.
+///
+/// The one derivation both runners call, so the two ids always follow the
+/// same query: a query change gives a new main key **and** a new pin.
+///
+/// # Errors
+///
+/// As [`derive()`]: the pin is the same length as the main key and passes the
+/// same door, so it refuses exactly what the main key refuses.
+pub(crate) fn derive_pair(name: &ProjectionId, query: &Query) -> Result<Keys, InvalidCheckpointId> {
+    let digest = digest_for(name, query)?;
+    Ok(Keys {
+        main: with_separator(name, '@', digest)?,
+        pin: with_separator(name, '#', digest)?,
+    })
+}
+
+/// The query's digest, once the name is known to leave room for it.
+fn digest_for(name: &ProjectionId, query: &Query) -> Result<u64, InvalidCheckpointId> {
     let len = name.as_str().len();
     if len > MAX_CHECKPOINT_NAME_LEN {
         return Err(InvalidCheckpointId::NameTooLong { len });
     }
+    Ok(fnv1a64(&encode_query(query)))
+}
+
+/// `name`, the separator, and the digest as 16 lowercase hex digits.
+fn with_separator(
+    name: &ProjectionId,
+    separator: char,
+    digest: u64,
+) -> Result<ProjectionId, InvalidCheckpointId> {
     // Through the checking door and no other: an unchecked one would let a
     // `sync/` watermark name mint an id in the replication namespace.
-    let digest = fnv1a64(&encode_query(query));
-    ProjectionId::new(format!("{name}@{digest:016x}")).map_err(InvalidCheckpointId::Refused)
+    ProjectionId::new(format!("{name}{separator}{digest:016x}"))
+        .map_err(InvalidCheckpointId::Refused)
 }
 
 /// 64-bit FNV-1a over `bytes`.
@@ -324,6 +459,10 @@ fn encode_query(query: &Query) -> Vec<u8> {
     encoded.dedup();
     encoded.concat()
 }
+
+mod pin;
+pub use pin::SourceMark;
+pub(crate) use pin::{Bound, Keys, bind_source};
 
 #[cfg(test)]
 mod tests;

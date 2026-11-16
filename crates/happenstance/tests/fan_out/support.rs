@@ -22,7 +22,7 @@ use happenstance::{
     AppendCondition, AppendError, ApplyFailure, Checkpoint, Chunk, Codec, CodecError, Delivered,
     DomainEvent, Event, EventId, EventStore, EventType, Json, MemoryEventStore, MemoryStoreError,
     Policy, Projection, ProjectionId, ProjectionStore, Query, ReadOptions, SequencePosition,
-    SequencedEvent, Tags, checkpoint_id,
+    SequencedEvent, Source, Tags, checkpoint_id,
 };
 use happenstance_testkit::{RecordingBatch, RecordingProjectionStore, RecordingStoreError};
 
@@ -293,6 +293,12 @@ impl Instrumented {
 
     pub(crate) fn snapshot(&self) -> Vec<SequencedEvent> {
         self.inner.snapshot()
+    }
+
+    /// The instrument as a runner's source, under the identity of the store
+    /// it wraps.
+    pub(crate) const fn source(&self) -> Source<'_, Self> {
+        Source::new(self, self.inner.store_id())
     }
 }
 

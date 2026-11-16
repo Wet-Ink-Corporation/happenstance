@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use happenstance::{
     Boundary, Chunk, CommandOutcome, EventStore, Json, Query, ReadOptions, Retry, SequencedEvent,
-    collect, commit, read_decision_model, run_projection,
+    Source, collect, commit, read_decision_model, run_projection,
 };
 use happenstance_sqlite::connection::open_configured;
 use happenstance_sqlite::event_store::SqliteEventStore;
@@ -95,7 +95,7 @@ impl Site {
     pub(crate) async fn project(&self, at: Place, show: &ShowId) -> Result<usize, StoryError> {
         let mut timeline = Timeline::new(show);
         let progressed = run_projection(
-            &self.events,
+            Source::new(&self.events, self.events.store_id()),
             &self.models,
             &mut timeline,
             &Json,

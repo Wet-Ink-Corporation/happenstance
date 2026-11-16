@@ -33,6 +33,80 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+A typed projection's checkpoint is pinned to the event store it was built from
+(#485, PS-40, [ADR-0109](.kb/decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md),
+proposed). Resumed against a different store with the same projection store, a
+view used to skip that store's events at or below its old checkpoint and apply
+again the ones above it, in silence (`experiments/retention-reader`'s R1-4). It
+now stops with `ProjectionError::SourceChanged` before it reads or applies
+anything. **This is a breaking change to `happenstance`'s two runners**; read
+[`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md). No schema changes and no
+store migrates: the pin is one more checkpoint row, under an id of its own.
+
+### Added
+
+- `happenstance`: `Source<'a, S>`, an event store paired with its `StoreId`, the
+  identity a run's checkpoint is pinned to. `From<&MemoryEventStore>` builds one
+  behind the `memory` feature; elsewhere `Source::new(&events, events.store_id())`.
+- `happenstance`: `source_checkpoint_id`, the id a projection's pin is kept
+  under: `name#digest`, beside PS-25's unchanged `name@digest`. Resetting it is
+  the remedy for a refusal; the next run pins the store it reads.
+- `happenstance`: `SourceMark`, the 63-bit fingerprint of a `StoreId` that the
+  pin holds, non-zero and at most `i64::MAX` so every SQL adapter keeps it
+  exactly. Its value for a given id is a promise, pinned by goldens.
+- `happenstance`: `ProjectionError::SourceChanged { pin, recorded, found }` and
+  `ProjectionError::RecordSource`, on a `#[non_exhaustive]` enum.
+- `happenstance`: PS-40's rule, `a_checkpoint_is_not_resumed_against_another_store`,
+  a typed-layer test rather than a conformance rule, rejecting a runner with no pin, a pin never compared, and
+  the identity folded into the main key; and `a_view_refuses_another_sqlite_file`
+  on two real SQLite files.
+
+### Changed
+
+- **Breaking: `happenstance`: `run_projection` and `run_fan_out` take a
+  `Source<'_, S>` as their first argument, in place of `&S`.** Over a memory
+  store the change is `(&events).into()`. The first run of a view records its
+  source under `source_checkpoint_id` with an empty commit, before the stream
+  opens; a later run whose source differs stops with `SourceChanged`, and in a
+  fan-out stops only that view (PS-29). A `0.7.x` checkpoint with no pin is
+  adopted by the store its first `0.8` run reads, so **run that first run
+  against the store each view was built from.**
+- **Breaking (behaviour): `happenstance`: a run performs one more
+  `ProjectionStore::checkpoint` read per view, and a view's first run under
+  `0.8` one more `begin` and `commit`, even when it has nothing to apply.** A
+  store that counts its calls sees them.
+- `happenstance-sync-testkit`: the convergence suite builds its runs' `Source`
+  from each log's own `store_id`. No rule's verdict changes.
+- **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
+  an identity that is not the store's.
+
+### `0.8.0` trace
+
+Every break `0.8.0` carries so far, each with the decision that caused it,
+written on 2026-11-16 against `phase-21-prep` at `5f71d44` with #485 applied.
+It has **hand** rows only, found by reading every entry above for a changed
+signature, a removed or renamed item, a changed value or a changed refusal.
+
+**Not run here:** `cargo semver-checks` is not installed on the machine that
+wrote this table. Before tagging, run `cargo semver-checks check-release
+--workspace --baseline-version 0.7.0` on the release's merge commit. Any lint
+it reports that no row below covers becomes a **T** row.
+
+| # | Crate | Break | Source | Decided by | Entry above |
+|---|---|---|---|---|---|
+| H1 | `happenstance` | `run_projection`'s and `run_fan_out`'s first parameter is `Source<'_, S>`, was `&S` (signature) | hand | PS-40, ADR-0109 (#485, 485-Q1) | Changed |
+| H2 | `happenstance` | a run against a store other than the one its checkpoint was built from returns `ProjectionError::SourceChanged`, where it resumed; a `0.7.x` checkpoint is adopted on its first run (behaviour) | hand | PS-40, ADR-0109 (#485, 485-Q2, 485-Q3) | Changed |
+| H3 | `happenstance` | a view's first run commits its pin with an empty batch, and every run reads it, so a `ProjectionStore` sees one more `checkpoint` call per run and one more `begin` and `commit` per view (behaviour) | hand | ADR-0109 (#485) | Changed |
+
+**Not breaks, recorded so the absence is a decision:** `SourceChanged` and
+`RecordSource` are new variants on the `#[non_exhaustive]` `ProjectionError`,
+and `progress()` reports `Progressed::default()` for both; what changes for a
+caller is which runs produce them, and H2 is that. `Source`, `SourceMark` and
+`source_checkpoint_id` are new items. `checkpoint_id` and PS-25's goldens are
+unchanged, so no `0.7.x` checkpoint is orphaned.
+
+**Pending:** the release's other entries.
+
 ## [0.7.0] — 2026-11-16
 
 Phase 14: what a store may forget, and what a peer does about it. The sync

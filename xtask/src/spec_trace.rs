@@ -1029,7 +1029,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 62] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
     // ---- VT: value types -------------------------------------------------
     // VT-6's `restored_peer_does_not_reissue_identities` left this table at
     // #133, in the change that wrote it as the restore family's rule: a name
@@ -1333,6 +1333,16 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 62] = [
         "PS-25",
         "changed_query_starts_a_new_checkpoint",
         Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
+    ),
+    (
+        "PS-40",
+        "a_checkpoint_is_not_resumed_against_another_store",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
+    ),
+    (
+        "PS-40",
+        "a_view_refuses_another_sqlite_file",
+        Unresolvable::Elsewhere("examples/rebuilding-read-models/tests/rebuild_through_reset.rs"),
     ),
     (
         "PS-26",
@@ -4119,7 +4129,7 @@ mod tests {
     }
 
     /// The whole of check 10 against the real documents. §7.6 states the result
-    /// this asserts — *"None. All 58 cases are claimed by at least one clause."*
+    /// this asserts — *"None. All 59 cases are claimed by at least one clause."*
     /// — and until this check that sentence was a hand computation nothing
     /// reproduced.
     #[test]
@@ -4127,7 +4137,7 @@ mod tests {
         let root = workspace_root().unwrap();
         let clauses = parse_clauses(&read(&root, SPEC).unwrap());
         let cases = collect_cases(&read(&root, CASES).unwrap());
-        assert_eq!(cases.len(), 58, "§7.6's count of the document");
+        assert_eq!(cases.len(), 59, "§7.6's count of the document");
 
         let mut problems = Vec::new();
         check_case_ownership(&clauses, &cases, &mut problems);

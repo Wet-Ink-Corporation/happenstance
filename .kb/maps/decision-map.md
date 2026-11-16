@@ -1026,6 +1026,18 @@ SY-34's Rule lines and §6.5's Durability / `SyncPeer` cell are repaired. It sup
 | --- | --- | --- | --- | --- | --- |
 | ADR-0108 | [`kb-decision-0108`](../decisions/0108-phase-14s-clauses-are-frozen.md) | Phase 14's clauses are frozen, SY-32 with a CF-25 acceptance, and five frozen lines are repaired | accepted | 14 | — |
 
+## 2026-11-16: a typed checkpoint is pinned to its source store (#485), proposed
+
+ADR-0109 is written straight here with no intake step, and is **proposed** until the owner
+accepts it. It records the owner's answers 485-Q1..Q6: the runners take a `Source`, a sibling
+`name#digest` checkpoint holds a mark of the store's identity, a 0.7.x checkpoint is adopted,
+three adapters gain `store_id`, and PS-40 is minted `[PROVISIONAL]`. It supersedes nothing;
+ADR-0063's port and ADR-0102's PS-25 id are unchanged.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0109 | [`kb-decision-0109`](../decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md) | A typed checkpoint is pinned to the event store it was built from, and PS-40 is minted provisional | proposed | — | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

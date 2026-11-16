@@ -3,7 +3,8 @@
 use core::num::NonZeroUsize;
 
 use happenstance::{
-    Chunk, EventStore, Json, MemoryProjectionStore, Progressed, SequencePosition, run_projection,
+    Chunk, EventStore, Json, MemoryProjectionStore, Progressed, SequencePosition, Source, StoreId,
+    run_projection,
 };
 use happenstance_sync::runner::{Edge, Stepped};
 use happenstance_sync::{IngestStore, SyncPeer, WriteGroupStore};
@@ -53,13 +54,31 @@ pub(crate) const fn chunk() -> Chunk {
     Chunk::of(NonZeroUsize::MIN.saturating_add(3))
 }
 
+/// The identity [`project`] pins every run to.
+///
+/// Every scenario but R1-4 reads one event store per projection store, or
+/// reopens the same file, so one identity stands for it. R1-4 is the scenario
+/// that hands a second store to the same projection store, and it names each
+/// store's own identity through [`project_from`].
+const SOLE_SOURCE: StoreId = StoreId::from_bytes([0x5e; 16]);
+
 /// Runs `counter` over `events` into `models` to the end of the log.
 pub(crate) async fn project<S: EventStore>(
     events: &S,
     models: &MemoryProjectionStore,
     counter: &mut Counter,
 ) -> Result<Progressed, Error> {
-    Ok(run_projection(events, models, counter, &Json, chunk()).await?)
+    project_from(Source::new(events, SOLE_SOURCE), models, counter).await
+}
+
+/// Runs `counter` over `source` into `models`, pinned to the source's identity
+/// (PS-40, #485).
+pub(crate) async fn project_from<S: EventStore>(
+    source: Source<'_, S>,
+    models: &MemoryProjectionStore,
+    counter: &mut Counter,
+) -> Result<Progressed, Error> {
+    Ok(run_projection(source, models, counter, &Json, chunk()).await?)
 }
 
 /// Steps `edge` until it reports synced, at most [`MAX_STEPS`] times, and

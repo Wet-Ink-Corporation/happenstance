@@ -8,8 +8,9 @@ use std::collections::BTreeMap;
 use std::panic::AssertUnwindSafe;
 
 use happenstance::{
-    Checkpoint, Event, EventStore, Json, Progressed, ProjectionError, SequencePosition, ViewError,
-    checkpoint_id, run_fan_out, run_projection,
+    Checkpoint, Event, EventStore, Json, Progressed, ProjectionError, ProjectionStore,
+    SequencePosition, SourceMark, ViewError, checkpoint_id, run_fan_out, run_projection,
+    source_checkpoint_id,
 };
 use happenstance_testkit::{BatchCall, RecordingProjectionStore, block_on};
 
@@ -48,7 +49,7 @@ async fn sequentially(events: &Instrumented, views: &[Shard], size: usize) -> Ob
     let mut ran: Vec<Shard> = views.iter().map(Shard::fresh).collect();
     let mut outcomes = Vec::with_capacity(ran.len());
     for view in &mut ran {
-        let outcome = run_projection(events, &models, view, &Json, chunk(size)).await;
+        let outcome = run_projection(events.source(), &models, view, &Json, chunk(size)).await;
         outcomes.push(outcome.map_err(|e: ProjectionError<_, _, _>| (e.position(), e.progress())));
     }
     Observed {
@@ -67,7 +68,7 @@ async fn fanned(
 ) -> (Observed, RecordingProjectionStore) {
     let models = RecordingProjectionStore::new();
     let mut ran: Vec<Shard> = views.iter().map(Shard::fresh).collect();
-    let fan = run_fan_out(events, &models, &mut ran, &Json, chunk(size)).await;
+    let fan = run_fan_out(events.source(), &models, &mut ran, &Json, chunk(size)).await;
     assert_eq!(fan.read, None, "the memory read failed");
     let outcomes = fan
         .views
@@ -98,7 +99,7 @@ fn an_empty_fan_out_reads_nothing() {
         let models = RecordingProjectionStore::new();
         let mut views: Vec<Shard> = Vec::new();
 
-        let ran = run_fan_out(&events, &models, &mut views, &Json, chunk(4)).await;
+        let ran = run_fan_out(events.source(), &models, &mut views, &Json, chunk(4)).await;
 
         assert_eq!(ran.views.len(), 0);
         assert_eq!(ran.read, None);
@@ -180,7 +181,7 @@ fn fan_out_resumes_each_view_from_its_own_checkpoint() {
         let events = Instrumented::seeded(&[part("VIN1"), part("VIN2")]).await;
         let models = RecordingProjectionStore::new();
         let mut ahead = Shard::new("ahead");
-        let pre = run_projection(&events, &models, &mut ahead, &Json, chunk(8))
+        let pre = run_projection(events.source(), &models, &mut ahead, &Json, chunk(8))
             .await
             .expect("the pre-run reaches the end");
         assert_eq!(pre.applied, 2);
@@ -191,7 +192,7 @@ fn fan_out_resumes_each_view_from_its_own_checkpoint() {
         let reads = events.reads();
 
         let mut views = [ahead, Shard::new("fresh")];
-        let ran = run_fan_out(&events, &models, &mut views, &Json, chunk(8)).await;
+        let ran = run_fan_out(events.source(), &models, &mut views, &Json, chunk(8)).await;
 
         let applied: Vec<usize> = ran
             .views
@@ -212,7 +213,7 @@ fn fan_out_resumes_each_view_from_its_own_checkpoint() {
             .expect("the tail appends");
         let [ahead, fresh] = views;
         let mut behind = Shard::new("behind");
-        let pre = run_projection(&events, &models, &mut behind, &Json, chunk(8))
+        let pre = run_projection(events.source(), &models, &mut behind, &Json, chunk(8))
             .await
             .expect("the pre-run reaches the end");
         assert_eq!(pre.applied, 5);
@@ -221,7 +222,7 @@ fn fan_out_resumes_each_view_from_its_own_checkpoint() {
             .expect("the tail appends");
         let delivered = events.delivered();
         let mut views = [ahead, fresh, behind];
-        let ran = run_fan_out(&events, &models, &mut views, &Json, chunk(8)).await;
+        let ran = run_fan_out(events.source(), &models, &mut views, &Json, chunk(8)).await;
         let applied: Vec<usize> = ran
             .views
             .iter()
@@ -255,16 +256,28 @@ fn a_commit_for_one_view_moves_no_other_views_checkpoint() {
             [live(read[1].position), Checkpoint::NeverRun]
         );
         assert_eq!(got.outcomes[1], Ok(Progressed::default()));
-        // The idle view nominated nothing, so it never opened a write set.
+        // Write sets 0 and 1 are the two views' source pins, empty and
+        // committed before the read (PS-40). After them, the idle view
+        // nominated nothing, so it never opened a write set for an event.
         assert_eq!(
             models.calls(),
             [
                 BatchCall::Begin(0),
                 BatchCall::Commit(0),
                 BatchCall::Begin(1),
-                BatchCall::Commit(1)
+                BatchCall::Commit(1),
+                BatchCall::Begin(2),
+                BatchCall::Commit(2),
+                BatchCall::Begin(3),
+                BatchCall::Commit(3)
             ]
         );
+        let mark = SourceMark::of(events.inner.store_id());
+        let mark = live(SequencePosition::new(mark.get()).expect("a mark is a position"));
+        for view in &views {
+            let pin = source_checkpoint_id(view).expect("a derivable id");
+            assert_eq!(models.checkpoint(&pin).await.expect("readable"), mark);
+        }
     });
 }
 
@@ -280,7 +293,7 @@ fn a_halting_view_stops_alone() {
         let read = events.snapshot();
         let models = RecordingProjectionStore::new();
         let mut ran: Vec<Shard> = views.iter().map(Shard::fresh).collect();
-        let fan = run_fan_out(&events, &models, &mut ran, &Json, chunk(1)).await;
+        let fan = run_fan_out(events.source(), &models, &mut ran, &Json, chunk(1)).await;
 
         assert!(
             matches!(
@@ -315,7 +328,7 @@ fn a_failing_begin_or_commit_stops_only_its_view() {
         // The second `begin` of the run is the middle view's first.
         let models = RecordingProjectionStore::failing_begin(1);
         let mut views = [Shard::new("a"), Shard::new("b"), Shard::new("c")];
-        let fan = run_fan_out(&events, &models, &mut views, &Json, chunk(8)).await;
+        let fan = run_fan_out(events.source(), &models, &mut views, &Json, chunk(8)).await;
         assert!(
             matches!(
                 &fan.views[1],
@@ -335,7 +348,7 @@ fn a_failing_begin_or_commit_stops_only_its_view() {
         let models = RecordingProjectionStore::failing_commits_under(
             checkpoint_id(&views[1]).expect("a derivable id"),
         );
-        let fan = run_fan_out(&events, &models, &mut views, &Json, chunk(8)).await;
+        let fan = run_fan_out(events.source(), &models, &mut views, &Json, chunk(8)).await;
         assert!(
             matches!(
                 &fan.views[1],
@@ -371,7 +384,7 @@ fn a_read_failure_interrupts_every_running_view() {
             Shard::new("c"),
         ];
 
-        let fan = run_fan_out(&events, &models, &mut views, &Json, chunk(8)).await;
+        let fan = run_fan_out(events.source(), &models, &mut views, &Json, chunk(8)).await;
 
         assert_eq!(fan.read, Some(ReadFault::Injected));
         for at in [0, 2] {
@@ -399,7 +412,23 @@ fn a_read_failure_interrupts_every_running_view() {
         );
         assert!(models.snapshot().is_empty(), "{:?}", models.snapshot());
         let calls = models.calls();
-        for call in &calls {
+        // The first three write sets are the views' source pins, empty and
+        // committed before the read (PS-40). Every write set after them held
+        // events, and each was rolled back.
+        let (pins, chunks) = calls.split_at(6);
+        assert_eq!(
+            pins,
+            [
+                BatchCall::Begin(0),
+                BatchCall::Commit(0),
+                BatchCall::Begin(1),
+                BatchCall::Commit(1),
+                BatchCall::Begin(2),
+                BatchCall::Commit(2)
+            ],
+            "{calls:?}"
+        );
+        for call in chunks {
             if let BatchCall::Begin(serial) = call {
                 assert!(
                     calls.contains(&BatchCall::Rollback(*serial)),
@@ -421,7 +450,7 @@ fn the_fan_out_stops_reading_once_every_view_has_stopped() {
             Shard::new("b").refusing("VIN1"),
         ];
 
-        let fan = run_fan_out(&events, &models, &mut views, &Json, chunk(8)).await;
+        let fan = run_fan_out(events.source(), &models, &mut views, &Json, chunk(8)).await;
 
         assert!(fan.views.iter().all(Result::is_err));
         assert_eq!(
@@ -555,7 +584,8 @@ fn a_panic_unwinds_out_and_nothing_commits_after_it() {
         // builds them fresh.
         let unwound = std::panic::catch_unwind(AssertUnwindSafe(|| {
             block_on(async {
-                let _ran = run_fan_out(&events, &models, &mut views, &Json, chunk(size)).await;
+                let _ran =
+                    run_fan_out(events.source(), &models, &mut views, &Json, chunk(size)).await;
             });
         }));
         assert!(
