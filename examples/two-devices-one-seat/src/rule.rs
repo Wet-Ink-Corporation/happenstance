@@ -6,7 +6,7 @@
 //! refunds it answers in one write (SY-2). Only central's peer mounts it, so
 //! only central writes a refund (SY-7); a device's edge keeps the default,
 //! which judges nothing. The decision itself is the domain's
-//! [`adjudicate`](crate::adjudicate); this module reads what central holds,
+//! [`adjudicate`]; this module reads what central holds,
 //! decodes the push, and encodes the answer.
 //!
 //! # Why the bare `Adjudicate`
