@@ -246,6 +246,15 @@ mod choose_a_store {
     #![doc = include_str!("../../docs/choose-a-store.md")]
 }
 
+// The topology how-to. No Rust fence: it arranges stores, sync edges, views and
+// decisions that the pages around it already compile, and names the clauses each
+// arrangement keeps rather than restating them. Registered so the page is in the
+// harness the moment it gains a fence.
+#[cfg(doctest)]
+mod choose_a_topology {
+    #![doc = include_str!("../../docs/choose-a-topology.md")]
+}
+
 // The Durable Object how-to. Three fences, and none names the Cloudflare crate,
 // because it is not a dependency of this target. The first is a stand-in with
 // that store's shape, an `Rc` over the memory store implementing only the bare
@@ -260,6 +269,25 @@ mod choose_a_store {
 #[cfg(doctest)]
 mod run_on_a_durable_object {
     #![doc = include_str!("../../docs/run-on-a-durable-object.md")]
+}
+
+// The sync how-to. Three fences over `MemoryIngestStore`, the far side shared
+// through a hidden `Rc` wrapper because the memory store is not `Clone`. The
+// first is a whole edge: an `Exchange` that calls `serve_sync`, one step, and
+// both logs holding the same `EventId`s. The second drops the signal, and the
+// step fails `Transient` with the edge still running and the sale delivered by
+// the next step. With no signal that step fails in its pull, before the sale is
+// in any batch, so this fence does not reach a push lost in flight; the
+// example's `a_lost_push_is_transient_and_the_next_step_delivers_it` does, and
+// proof.rs holds it. The third keeps the watermark through
+// `MemoryProjectionStore` and restores an edge from it, which pushes nothing
+// and lands nothing twice. A runner that never delivered the sale once the
+// signal returned, an exchange classifying no signal as anything but
+// transient, or a restored edge that re-pushed what was confirmed, turns this
+// module red.
+#[cfg(doctest)]
+mod sync_a_device {
+    #![doc = include_str!("../../docs/sync-a-device.md")]
 }
 
 // The conformance how-to. Two fences. The first is a whole fixture over

@@ -6,8 +6,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-# A library **and** a binary, which no other example in this workspace is. The
-# reason is the subject: an API process and a projection runner have to agree
+# A library **and** a binary, which one other example in this workspace is
+# (`two-devices-one-seat`, so its tests can drive the story a step at a time).
+# Here the reason is the subject: an API process and a projection runner have to agree
 # about a domain, and the only way to be certain they do is for there to be one
 # copy of it. The other examples' tests restate their domains with `include_str!`
 # assertions precisely because a `src/main.rs` has nothing importable in it.
@@ -36,7 +37,7 @@ doc-scrape-examples = true
 #
 # `default-features = false` drops `memory`: two processes cannot share a
 # `Vec` behind an `RwLock`, which is the whole reason this example exists.
-happenstance = { version = "0.6.0", path = "../../crates/happenstance", default-features = false, features = [
+happenstance = { version = "0.7.0", path = "../../crates/happenstance", default-features = false, features = [
   "std",
   "json",
 ] }

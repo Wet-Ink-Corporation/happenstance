@@ -1,11 +1,11 @@
 //! The domain two processes share, and the protocol they speak.
 //!
-//! This is the only example in the workspace with a library target, and the
-//! reason is the subject: an API process and a projection runner have to agree
-//! about a domain, and the only way to be certain they do is for there to be
-//! one copy of it. A `src/main.rs` has nothing importable in it, which is why
-//! the other examples' tests restate their domains with `include_str!`
-//! assertions instead of using them.
+//! One of two examples in the workspace with a library target (the other is
+//! `two-devices-one-seat`), and here the reason is the subject: an API process
+//! and a projection runner have to agree about a domain, and the only way to be
+//! certain they do is for there to be one copy of it. A `src/main.rs` has
+//! nothing importable in it, which is why the other examples' tests restate
+//! their domains with `include_str!` assertions instead of using them.
 //!
 //! See `src/bin/tickets-demo.rs` for what the two processes are made to do.
 

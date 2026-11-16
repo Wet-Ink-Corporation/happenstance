@@ -431,6 +431,32 @@ const TWO_PROCESS_TESTS: &[&str] = &[
     "runs::nothing_is_oversold_under_contention",
 ];
 
+/// The claims `two-devices-one-seat` makes about an offline oversell and the
+/// convergence after it, each with the wrong implementation it rejects.
+///
+/// `a_sync_without_signal_is_transient_and_loses_nothing` rejects a transport
+/// that reports no signal as anything but transient; with no signal the step
+/// fails in its pull, before the sale is in any batch.
+/// `a_lost_push_is_transient_and_the_next_step_delivers_it` is the push half:
+/// the pull lands and only the push is lost, and it rejects a runner that
+/// drops or confirms the unpushed batch when that step fails, by asserting the
+/// failed phase is the push and that the next step lands the sale on central.
+/// `the_story_converges` rejects three
+/// files that disagree after every handle is dropped, a refund written twice,
+/// and a refund written by anything but central (SY-7).
+/// `the_refunded_sale_is_the_last_to_reach_central` runs the story both ways
+/// round, and rejects a rule that always refunds one device or refunds by
+/// sale id. `without_adjudication_the_show_stays_oversold` is the contrast: it
+/// passes because the oversell is real when central keeps no rule, and it is
+/// listed so that it cannot be silenced alone.
+const OFFLINE_CONVERGENCE_TESTS: &[&str] = &[
+    "story::a_sync_without_signal_is_transient_and_loses_nothing",
+    "story::a_lost_push_is_transient_and_the_next_step_delivers_it",
+    "story::the_story_converges",
+    "story::the_refunded_sale_is_the_last_to_reach_central",
+    "story::without_adjudication_the_show_stays_oversold",
+];
+
 /// Every proof artefact the gate holds to its own names.
 pub(crate) const ARTEFACTS: &[Artefact] = &[
     Artefact {
@@ -515,6 +541,12 @@ pub(crate) const ARTEFACTS: &[Artefact] = &[
         package: "tickets-over-http",
         target: "two_processes",
         tests: TWO_PROCESS_TESTS,
+        registry: None,
+    },
+    Artefact {
+        package: "two-devices-one-seat",
+        target: "story",
+        tests: OFFLINE_CONVERGENCE_TESTS,
         registry: None,
     },
 ];

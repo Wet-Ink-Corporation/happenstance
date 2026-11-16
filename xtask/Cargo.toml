@@ -27,10 +27,12 @@ happenstance = { workspace = true, features = ["std", "memory", "json"] }
 happenstance-core = { workspace = true, features = ["std", "memory", "serde"] }
 happenstance-testkit = { workspace = true }
 # For docs/upgrading-to-0-6.md, whose programs assert the sync wire format's
-# version and the `responder` field `Pulled` and `Ack` gained. No features: the
-# messages and `wire` are in every build. A path crate, so cargo deny's scope is
+# version and the `responder` field `Pulled` and `Ack` gained, and for
+# docs/sync-a-device.md, whose programs run a whole edge. `memory` for that
+# page's `MemoryIngestStore`; it forwards only `happenstance-core/memory`,
+# which this target already enables. A path crate, so cargo deny's scope is
 # unchanged.
-happenstance-sync = { workspace = true }
+happenstance-sync = { workspace = true, features = ["memory"] }
 bytes.workspace = true
 futures-core.workspace = true
 futures-util.workspace = true
