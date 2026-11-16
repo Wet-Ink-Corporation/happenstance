@@ -100,7 +100,7 @@ phase 16 counted them.) Two were settled at phase 2 and their
 markers moved in the specification at phase 3; the third, CF-13, was settled at
 phase 3 by running the experiment its own marker named; the fourth, PS-33, was
 **demoted rather than settled** — §7.2 carries it as `NON-NORMATIVE`, so it is not
-a deferral at all any more. **Two remain**, since SY-27 and SY-28 left at phase 13, PS-18, PS-27 and PS-30 at phase 18 (ADR-0102), SY-14 and SY-18 at phase 13's close (ADR-0107), and ES-39 and CF-27 at phase 14 (ADR-0108), with SY-32 moved to `[PROVISIONAL]` there. The struck rows stay because a
+a deferral at all any more. **Two remain**, since SY-27 and SY-28 left at phase 13, PS-18, PS-27 and PS-30 at phase 18 (ADR-0102), SY-14 and SY-18 at phase 13's close (ADR-0107), and ES-39, CF-27 and SY-32 at phase 14 (ADR-0108), all three frozen. The struck rows stay because a
 reader arriving from an older commit needs to find them, and because a table that
 quietly loses a row cannot be checked against anything.
 

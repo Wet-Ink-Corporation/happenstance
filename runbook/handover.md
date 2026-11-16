@@ -69,7 +69,7 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
   summary and trace carry the upgrade steps. Write the guide in a follow-up, or confirm
   the trace is enough for a release whose breaks are wire and schema rather than code.
 - SY-21's `convergent_projection_cannot_observe_local_position` was written in phase
-  14 (#457, #478) and its `Scheduled` entry left `spec_trace.rs`; ADR-0108 (#163, proposed)
+  14 (#457, #478) and its `Scheduled` entry left `spec_trace.rs`; ADR-0108 (#163, accepted)
   rewords SY-21's Rule line, which said "phase 13 adds" it. D-457-2's reading is the owner's.
 - Eight `[FROZEN]` `SY` clauses name a † rule that exists nowhere in the tree (SY-6, SY-9,
   SY-13, SY-16, SY-19, SY-26, SY-33, SY-35). Since #458 check 4 reads the sync suites, and
