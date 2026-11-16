@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**191 `[FROZEN]`**, **11 `[PROVISIONAL]`**, **3 `[DEFERRED]`** and **seven
+**192 `[FROZEN]`**, **10 `[PROVISIONAL]`**, **3 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -7309,10 +7309,10 @@ store and gives neither of them a name for what the other is doing.
 **SY-10. Hub-and-spoke and peer-to-peer are both first-class. The runner MUST
 permit a different merge rule in each direction of one edge.**
 
-`[PROVISIONAL — falsified if a hub and a spoke can be shown to need the same
-merge rule in a deployment where the hub holds every log and the spoke holds
-one. Falsification test: implement the hub's rule on a spoke and show the spoke's
-projections stay correct. Renewed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md), with SY-7: `directional_merge_rules_compose` (#137) fails `AdjudicatesOnIngest`, but `runner::Edge`'s pull always accepts, so a hub that drives its own edge toward a spoke cannot adjudicate what it pulls. The named experiment is the adjudication hook mounting the rule, after #441's decorative refused-push check is settled.]`
+`[FROZEN]` — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase 14, with SY-7. `directional_merge_rules_compose` (#137) mounts its merge rules through the shipped hook (#450) and fails
+`AdjudicatesOnIngest`; a hub driving its own edge now adjudicates what it pulls (`a_hub_driven_edge_adjudicates_what_it_pulls`), so the per-direction rule holds whichever side drives,
+`tests/runner/directions.rs` walks both topologies through one `Edge` with no role parameter, and `wrong_runners.rs` fails a runner that adjudicates its own push. #441 is settled: #466 removed the refused-push check no store could fail.
+Reopened by its own falsifier: a hub and a spoke shown to need the same merge rule where the hub holds every log and the spoke holds one; the test is the hub's rule implemented on a spoke with the spoke's projections still correct.
 Rule: `directional_merge_rules_compose` (`happenstance-sync-testkit`, #137, ingest family), its merge rules mounted through the shipped hook (#450); the runner half, a rule judging only the ingest site it is mounted on, is `happenstance-sync`'s `tests/runner/wrong_runners.rs`.
 Cases: E2E-42, E2E-44, E2E-45.
 
@@ -10491,9 +10491,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 39 | 36 | 2 | 1 | 0 |
+| §5 `SyncPeer` | `SY` | 39 | 37 | 1 | 1 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **212** | **191** | **11** | **3** | **7** |
+| **Total** | | **212** | **192** | **10** | **3** | **7** |
 
 ### 7.2 The table
 
@@ -10660,7 +10660,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-7 | FROZEN | `only_the_adjudicator_compensates` | E2E-39, E2E-42, E2E-45 |
 | SY-8 | FROZEN | the whole of `happenstance-sync-testkit` — every rule in it takes exactly one … | E2E-33, E2E-35, E2E-36, E2E-42 |
 | SY-9 | FROZEN | `one_adapter_serves_both_roles` † | E2E-42, E2E-45 |
-| SY-10 | PROVISIONAL | `directional_merge_rules_compose` | E2E-42, E2E-44, E2E-45 |
+| SY-10 | FROZEN | `directional_merge_rules_compose` | E2E-42, E2E-44, E2E-45 |
 | SY-11 | FROZEN | `redelivery_of_an_accepted_group_is_a_no_op` | E2E-33, E2E-34, E2E-36 |
 | SY-12 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-34, E2E-36 |
 | SY-13 | FROZEN | `identity_survives_a_tag_reordering_peer` † | E2E-33, E2E-34 |
