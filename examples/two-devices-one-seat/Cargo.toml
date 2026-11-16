@@ -1,0 +1,63 @@
+[package]
+name = "two-devices-one-seat"
+description = "Two devices sell the last seat while offline; sync brings the oversell to a central store, which keeps its rule with an ordinary append, and three files converge on one answer."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+# A library **and** a binary, for the reason `tickets-over-http` gives: the
+# tests drive the story one step at a time, and a `src/main.rs` has nothing
+# importable in it. The second reason is particular to this example. The test
+# that shows what goes wrong without the central decision composes the same
+# public steps and leaves one out, so the binary ships no switch that turns
+# the rule off.
+[lib]
+name = "two_devices_one_seat"
+path = "src/lib.rs"
+# Its calls into the library are shown beside the items they call, in the
+# documentation site's API section (`cargo xtask site`).
+doc-scrape-examples = true
+
+[[bin]]
+name = "two-devices-one-seat"
+path = "src/main.rs"
+doc-scrape-examples = true
+
+# Written long-hand, for the reason `transfers-on-sqlite` gives: these are the
+# lines an application writes, minus the `path` keys.
+[dependencies]
+# The typed layer: `commit` for every decision, `run_projection` for the read
+# model. `default-features = false` drops `memory`, because every store here is
+# a file.
+happenstance = { version = "0.6.0", path = "../../crates/happenstance", default-features = false, features = [
+  "std",
+  "json",
+] }
+# Three files, one adapter. `sync` is what makes a `SqliteEventStore` an
+# `IngestStore` and a `WriteGroupStore`, the two halves a sync edge needs on
+# either side; `projection-store` is the read model's checkpoint, in the same
+# file as the log it follows.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite", features = [
+  "sync",
+  "projection-store",
+] }
+# The replication port, named directly rather than through the adapter's
+# re-export, because this application writes against it: an `Exchange` of its
+# own, `serve_sync` on the far side, and one `runner::Edge` per device. No
+# feature: `memory` is a test double, and nothing here is in memory.
+happenstance-sync = { version = "0.6.0", path = "../../crates/happenstance-sync" }
+# The read model's own table is the application's, so it is created and read
+# through a connection of the application's own. `workspace = true` for the
+# reason `transfers-on-sqlite` gives at length.
+rusqlite.workspace = true
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+# The binary's edge only; the library's errors are typed.
+anyhow = "1"
+# `rt` because the adapter defers its work into `spawn_blocking`; nothing in
+# this package spawns a task of its own.
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[lints]
+workspace = true

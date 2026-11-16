@@ -3157,6 +3157,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "two-devices-one-seat"
+version = "0.6.0"
+dependencies = [
+ "anyhow",
+ "happenstance",
+ "happenstance-sqlite",
+ "happenstance-sync",
+ "rusqlite",
+ "serde",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

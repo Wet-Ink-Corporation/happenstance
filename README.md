@@ -1,63 +1,129 @@
 # happenstance
 
-An opinionated, storage-agnostic event sourcing library for Rust, built on the
-[Dynamic Consistency Boundary specification](https://dcb.events/specification/):
-a contract for storage, and a published conformance suite that decides who meets
-it.
+**Your data stays true, everywhere it lives.**
+
+happenstance is the data layer for Rust apps that run on devices, at the edge
+and in the cloud. Every change is kept, every business rule is checked, and
+every answer can be explained, whether the data sits in SQLite on a laptop that
+is offline, in a Cloudflare Durable Object near your users, or in Postgres and
+Neon.
+
+*Nothing lost. Nothing wrong. Nothing unexplained.*
 
 [![CI](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml/badge.svg)](https://github.com/Wet-Ink-Corporation/happenstance/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/happenstance.svg)](https://crates.io/crates/happenstance)
-[![Guide](https://img.shields.io/badge/guide-read-informational)](https://wet-ink-corporation.github.io/happenstance/)
 [![docs.rs](https://img.shields.io/docsrs/happenstance)](https://docs.rs/happenstance)
+[![Guide](https://img.shields.io/badge/guide-read-informational)](https://wet-ink-corporation.github.io/happenstance/)
 [![MSRV](https://img.shields.io/badge/MSRV-1.97.1-blue)](#minimum-supported-rust-version)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](#licence)
-[![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-**Start with [the guide](https://wet-ink-corporation.github.io/happenstance/).** It
-starts from what an event is and works up to dynamic consistency boundaries,
-then [your first encounter](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/):
-three short programs that end with the store refusing a write that would have
-broken a rule. The API reference is [on docs.rs](https://docs.rs/happenstance).
-
-> **Status: `0.6.0`, and worth being precise about what that number claims.** The
-> contract, the typed layer and a 123-rule conformance suite across four families
-> are real and tested, and **five adapters have run the suite** — SQLite against a
-> real file on disk, across the event-store, projection, concurrency and model
-> families; a Cloudflare Durable Object on `wasm32`; a live PostgreSQL 17.10,
-> including the concurrency family at 64 contenders; a live Neon endpoint over
-> one-shot HTTP; and, until its adapter was retired at phase 17, LadybugDB for the projection role alone. **The release set
-> is what the manifests and `xtask/src/package.rs`'s `PUBLISHABLE` agree on**: the
-> nine `0.6.0` crates, `happenstance-sync` and `happenstance-sync-testkit` among them since `0.4.4`.
->
-> What `0.6.x` promises, as `0.3.0` did: every clause marked `[FROZEN]` in
-> [the specification](spec/SPECIFICATION.md) — the `EventStore` ones since
-> `0.2.0`, and the `ProjectionStore` ones since `0.3.0`. `0.2.0` shipped the
-> projection port behind an off-by-default `unstable-projection` feature, exempt
-> from semver; adapters at both ends of its batch-shape axis now pass its suite
-> and ADR-0063 lifted the gate. The typed projection *runner* had a feature of
-> the same name on `happenstance` until `0.5.0` removed it: the runner is in
-> every build now, and semver covers it like the rest of the crate.
->
-> What it is not is production mileage — see the note under [status](#status),
-> which is narrower than the ticks suggest. Replication's port and conformance
-> suites ship from `0.4.4`, and its runner and network peers from `0.6.0`
-> (Ladybug was retired at phase 17). The ambition is the whole list rather than the nine that ship here.
+**[Read the guide](https://wet-ink-corporation.github.io/happenstance/)** · [API reference](https://docs.rs/happenstance) · [Examples](#examples) · [Roadmap](#roadmap)
 
 ---
 
-## DCB in sixty seconds
+## Why happenstance
 
-Classical event sourcing makes you draw consistency boundaries *before* you know
-what decisions you will make. Every command must fit inside one aggregate, and
-anything that spans two needs a read model plus a saga to hold it together.
+Apps no longer live in one database. Data is written on a phone with no signal,
+at the edge next to the user, and in a central database that has to agree with
+both. Sync engines make that fast, but they merge conflicts away and keep no
+past, so the data drifts and nobody can say why. Event-sourcing frameworks keep
+the past, but they live on one server and bring aggregates, sagas and a vendor
+with them.
 
-DCB draws the boundary *per decision* instead. A command handler reads exactly
-the events its decision depends on — across as many entities as it likes — and
-then appends conditioned on **nothing matching that same query having appeared
-since**. The consistency boundary is whatever the handler actually looked at.
+happenstance keeps both halves. Every change is an event; events sync between
+the places your app runs; each decision checks the rules it depends on; and any
+view of the data can be rebuilt from the history.
 
-The canonical example: a student subscribes to a course, subject to three
-invariants that do not share a boundary.
+### True offline
+
+Every device keeps its own log and keeps working without a network. When it
+reconnects, every change syncs, and nothing is lost or overwritten, because a
+change is a fact rather than a row to fight over.
+
+### True to your rules
+
+Seat limits, balances, quotas and unique names are checked at the moment of the
+write, across every record the rule touches, with no locks and no sagas. When
+two places act at once, you are told, with an event, never left with a silent
+mistake.
+
+### True to its history
+
+The log is the source of truth. See why any record looks the way it does,
+rebuild a view that went wrong, add a new one over years of data, and change
+your event format without a migration.
+
+### True wherever it lives
+
+SQLite on the device, Durable Objects at the edge, Postgres or Neon in the
+middle. The same Rust code runs on each of them, and every store passes the
+same published conformance suite. It is a library over your own databases, with
+no sync service in the middle.
+
+## What you can build
+
+Pick the pieces your app needs. Every arrangement keeps the same guarantees.
+
+![A device's SQLite log, an edge Durable Object and a central Postgres or Neon database, linked by sync, each holding the views it needs](site/static/img/topology.svg)
+
+| You want | How it looks | Status |
+|---|---|---|
+| An app that works offline and syncs when it is back | Each device keeps a SQLite log that syncs with Neon or Postgres | ✅ today |
+| Many clients and one source of truth | Every device syncs to a central store; conflicts arrive as events | ✅ today; automatic conflict handling in 0.7 |
+| Each client holding only its own workspace | One store per workspace, case or tenant; a client syncs the ones it holds | ✅ today |
+| Huge views that stay on the server | A server-side read model, queried over HTTP, with read-your-writes | ✅ today ([`tickets-over-http`](examples/tickets-over-http)) |
+| A small local view of a big central store | A projection reads the central log and keeps a local SQLite view | ✅ today |
+| Rules that span several things | One read and one conditional write, across any entities | ✅ today ([`handles-and-quotas`](examples/handles-and-quotas)) |
+| A lean device and a complete cloud | The device prunes history the hub has confirmed | 🛣️ 0.7 |
+| Edge hubs close to your users | A Durable Object per tenant, syncing devices nearby and forwarding to Neon | 🛣️ roadmap |
+
+[Choose a topology](https://wet-ink-corporation.github.io/happenstance/guide/choose-a-topology/)
+explains each shape and the rule it keeps, [choosing a store](https://wet-ink-corporation.github.io/happenstance/guide/choose-a-store/)
+walks through where each piece can run, and [running on a Durable Object](https://wet-ink-corporation.github.io/happenstance/guide/run-on-a-durable-object/)
+covers the edge.
+
+## Quick start
+
+```console
+cargo add happenstance
+cargo add happenstance-sqlite   # when you want the log on disk
+```
+
+Append an event and read it back:
+
+```rust
+use happenstance::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
+
+async fn define_course() -> Result<(), Box<dyn std::error::Error>> {
+    let store = MemoryEventStore::new();
+
+    store
+        .append(
+            &[Event::new("CourseDefined", &br#"{"capacity":2}"#[..])?
+                .with_tags(Tags::from_pairs([("course", "c1")])?)],
+            None,
+        )
+        .await?;
+
+    let events = collect(store.read(&Query::all(), ReadOptions::new())).await?;
+    assert_eq!(events.len(), 1);
+    Ok(())
+}
+```
+
+Then [your first encounter](https://wet-ink-corporation.github.io/happenstance/guide/first-encounter/): three short programs
+that end with the store refusing a write that would have broken a rule.
+
+## How your rules stay true
+
+A course holds thirty seats, and a student takes at most five courses. The two
+limits are about different things, so in most event-sourced systems one of
+them ends up enforced by a separate copy of the data and a background process
+that undoes mistakes.
+
+Here a decision reads exactly the events it depends on, across as many entities
+as it needs, and its write is accepted only if nothing matching that read has
+been added since. The technique is called a
+[dynamic consistency boundary](https://wet-ink-corporation.github.io/happenstance/guide/what-is-dcb/) (DCB).
 
 ```rust
 use happenstance::{
@@ -95,321 +161,120 @@ where
 }
 ```
 
-No aggregate. No saga. One append that is rejected precisely when — and only
-when — something happened that could have changed the answer.
+No aggregate, no saga, and one append that is refused precisely when something
+happened that could have changed the answer. Run the full version with
+`cargo run -p course-subscriptions`.
 
-Run the full worked example:
+Both Rust blocks on this page are compiled by CI, so neither can drift from the
+API.
 
-```console
-cargo run -p course-subscriptions
-```
+## Examples
 
-That one runs in memory, which proves the semantics and nothing about durability.
-For the same library against a real database — the typed layer's command loop and
-its projection runner, both on one SQLite file, with everything read back after
-every handle is dropped:
+Start with the one that shows what the rest is for:
 
 ```console
-cargo run -p transfers-on-sqlite
+cargo run -p two-devices-one-seat
 ```
 
-Four more, each on a real SQLite file and each showing something the two above
-cannot. Read them in any order; none depends on another.
+`two-devices-one-seat` is a central store and two devices, each a SQLite file.
+The signal drops and both devices sell the last seat, each one right about the
+history it holds. When the signal returns, sync brings both sales to central,
+which now holds four sales for three seats: the oversell is visible, not lost.
+Central keeps its rule with one ordinary append, a refund that carries its
+reason, and the refund syncs back. Every handle is dropped, and the three files
+are read back holding the same events and the same read model. The phone, still
+offline, then refuses the seat on its own. The guide page is
+[Sync a device to a central store](docs/sync-a-device.md).
+
+The rest each run on a real SQLite file except the first, and none depends on
+another:
 
 ```console
-cargo run -p rebuilding-read-models    # four views: skew, backfill, reset, rebuild
-cargo run -p handles-and-quotas        # three boundaries, and no aggregate behind any
-cargo run -p telemetry-across-codecs   # one log, two encodings, two event shapes
-cargo run -p tickets-over-http         # two processes, one file, fourteen sockets
+cargo run -p course-subscriptions      # the canonical rule across two things, in memory
+cargo run -p transfers-on-sqlite       # commands and a read model on one file, read back after restart
+cargo run -p handles-and-quotas        # unique names, per-owner quotas and idempotent delivery
+cargo run -p tickets-over-http         # an HTTP API and a projection runner in two processes
+cargo run -p rebuilding-read-models    # backfill, promote, reset and rebuild views
+cargo run -p telemetry-across-codecs   # one log, two encodings, an old event shape upcast on read
 ```
 
-`rebuilding-read-models` is what an operator does to derived state: two views at
-two checkpoints, a third backfilled beside the one it replaces and then promoted,
-a reset and a rebuild at two chunk sizes, and a fourth poisoned by a field the log
-does not carry — which stalls itself and nothing else.
+## Is it for you?
 
-`handles-and-quotas` is the case DCB exists for. A unique handle over a set nobody
-can enumerate, a per-owner quota over a set nobody knows until it is read, and an
-idempotent delivery, composed into one append condition. It prints the query it
-derived, because the boundary is a value.
+**A good fit** when your rules span several records, when you need to explain
+how data got the way it is, when your Rust code runs on devices, at the edge or
+on servers (or all three), and when you want to choose your database later.
 
-`telemetry-across-codecs` is a log that outlived both its encoding and its schema.
-JSON payloads and postcard payloads, and readings in whole degrees beside readings
-in thousandths, folded by one model that names one codec and branches on neither.
+**Look elsewhere** for collaborative text editing (Automerge), for a reactive
+local database in a JavaScript web app (LiveStore, PowerSync, Zero), or for a
+standalone event-store server (KurrentDB, UmaDB).
+[Disintegrate](https://github.com/disintegrate-es/disintegrate) is the other
+Rust DCB library, Postgres-only and macro-driven.
 
-`tickets-over-http` is the shape people deploy: an HTTP API and a projection
-runner in separate processes over one file. Fourteen clients race for a five-seat
-show and five seats are sold; `GET /seats?at=N` answers `202` with its own
-checkpoint until the runner has caught up, and `200` after.
+## Roadmap
+
+| | |
+|---|---|
+| **Today** | Typed events, decision models and projection runners; SQLite, Postgres, Neon and Durable Object stores; sync between stores over one edge at a time |
+| **0.7** | Retention: devices that keep less than the hub, and a report when a peer has been away too long; automatic conflict adjudication |
+| **1.0** | Frozen sync, a runner that links several edges, and a stable promise for every surface |
+| **Exploring** | SQLite in the browser, as the offline end of sync |
+
+The plan, phase by phase, is in [the runbook](runbook/README.md).
 
 ## Status
 
-A ✅ below means **passing its suite**. The rows that say *in the `0.6.0`
-release set* are on crates.io at `0.6.0`; the manifests and
-`xtask/src/package.rs`'s `PUBLISHABLE` are what name them. `happenstance-ladybug`
-is retired and outside the workspace, for the reason its row gives.
+Pre-1.0, on crates.io, and precise about what it claims. The `EventStore`
+contract has been frozen under semver since `0.2.0` and `ProjectionStore`
+since `0.3.0`; sync is published and still growing. Every store has passed the
+conformance suite; none has production mileage yet.
 
-| Crate | Role | Status |
+| Crate | What it is | Status |
 |---|---|---|
-| [`happenstance`](crates/happenstance) | Codecs, typed domain events, decision models — the crate an application programs against | ✅ in the `0.6.0` release set |
-| [`happenstance-core`](crates/happenstance-core) | DCB types, storage ports, in-memory reference store | ✅ in the `0.6.0` release set |
-| [`happenstance-testkit`](crates/happenstance-testkit) | Conformance suite adapters must pass | ✅ in the `0.6.0` release set — 123 rules across four families |
-| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ in the `0.6.0` release set; passes the suite against a real file |
-| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Durable Object event store — the workspace's only `!Send` store, and the reason the ports have two flavours | ✅ in the `0.6.0` release set; passes the suite on `wasm32` — read the note below |
-| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store — the target that does *not* serialise its writers | ✅ in the `0.6.0` release set; both roles pass their suites against a live server, and the first adapter to clear the concurrency family against a store that does not serialise its writers |
-| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP: no connection, no interactive transaction, no cursor | ✅ in the `0.6.0` release set; passes its suites against a live endpoint, with one open clause question its README names |
-| [`happenstance-ladybug`](crates/happenstance-ladybug) | LadybugDB graph projection store | ⛔ **retired** at phase 17 ([ADR-0078](.kb/decisions/0078-happenstance-ladybug-is-retired.md)) and excluded from the workspace, kept as a frozen record. It passed the projection suite against the real driver at phase 11 and was never published — `lbug` does not render on docs.rs |
-| [`happenstance-sync`](crates/happenstance-sync) | The replication port: peers, the ingest port every adapter implements behind its `sync` feature, and the wire messages | 🚧 in the `0.6.0` release set, first released at `0.4.4`; from `0.6.0`, a runner over one edge, write groups, and network peers that pass the peer suite |
-| [`happenstance-sync-testkit`](crates/happenstance-sync-testkit) | Conformance suites for sync peers and ingest stores | 🚧 in the `0.6.0` release set, first released at `0.4.4`, and still growing rule by rule — pin it exactly |
+| [`happenstance`](crates/happenstance) | Typed events, codecs, decision models and projection runners: the crate an application uses | ✅ |
+| [`happenstance-core`](crates/happenstance-core) | The storage contract and an in-memory store: the crate an adapter implements | ✅ |
+| [`happenstance-sqlite`](crates/happenstance-sqlite) | SQLite event store and projection store | ✅ passes the suite on a real file |
+| [`happenstance-postgres`](crates/happenstance-postgres) | Postgres event store and projection store | ✅ passes the suite against a live server, 64 concurrent writers included |
+| [`happenstance-neon`](crates/happenstance-neon) | Postgres over one-shot HTTP, for serverless and `wasm32` | ✅ passes the suite against a live endpoint |
+| [`happenstance-cloudflare`](crates/happenstance-cloudflare) | Event store inside a Durable Object, on `wasm32` | ✅ passes the suite in a real Durable Object |
+| [`happenstance-sync`](crates/happenstance-sync) | Replication between stores: the peer port, the runner and network peers | 🚧 growing |
+| [`happenstance-testkit`](crates/happenstance-testkit) | The conformance suite every store must pass | ✅ pin it exactly |
+| [`happenstance-sync-testkit`](crates/happenstance-sync-testkit) | Conformance suites for sync peers | 🚧 pin it exactly |
 
-Read the ✅ rows narrowly. **"Passes the suite" is the only claim being made** —
-that the adapter has run `happenstance-testkit` and cleared it, which is what
-this project means by an adapter existing at all. It is not a claim of production
-mileage: nothing here has run anywhere but a test.
+Each crate's README says exactly what its tick covers. Read them before you
+rely on one.
 
-The two 🚧 rows are published so that an adapter can implement the ingest port
-behind an optional feature, and so that an adapter outside this repository can
-be measured by the same suite. What replication between two running stores
-needs, a runner and a network peer, was built at phase 13 and ships in `0.6.0`:
-`NeonSyncPeer`, a Durable Object served over HTTP and a Postgres `StoreSyncPeer`
-pass the peer suite, and a SQLite store round-trips through each byte for byte.
-The rows stay 🚧 while SY-7, SY-10, SY-29 and SY-32 are open, and until a peer
-set above the single edge and an `Exchange` over a real network ship in a
-published crate.
+## How we know it works
 
-**`happenstance-postgres` is the row that changed and the one most easily
-misread.** It is no longer a stub: the event store clears 101 of 101 conformance
-rules against a live PostgreSQL 17.10 including the concurrency family at 64
-contenders — the first adapter here to clear that family against a store whose
-writers are *not* serialised — and the projection store clears the projection
-suite, 15 rules run and 3 reported as skips. **It ships in `0.6.0`**, together
-with `happenstance-neon`: the release set was five, decided, and the owner
-re-opened it on that evidence at `e597c34`. It is the *first* adapter here to
-clear the concurrency family against a store whose writers are not serialised,
-not the only one — `happenstance-neon` clears it too, over the same server
-through a different transport. Both have been on crates.io since `0.2.0`.
-
-`happenstance-cloudflare` is the row most easily misread, and it ships in
-`0.6.0` with the thinnest evidence of the four adapters. Two things a reader should have
-before weighing it. In the gate it passes the conformance suite under a
-`node:sqlite`-backed shim rather than under `workerd` itself. Since phase 17, the
-`workerd` CI job, a sibling of the gate, also runs every event-store rule in a real
-Durable Object, under local `workerd` and on an object deployed to Cloudflare. Its
-own README says what each run establishes. It is also `wasm32`-only, so nothing in
-the host test matrix exercises it. Its own front
-page does not claim a frozen API, and neither does this row.
-
-[`RUNBOOK.md`](RUNBOOK.md) explains why the remaining work is ordered as it is —
-sequenced by blast radius, with the artefact each phase has to produce before it
-counts as finished. Read it for that reasoning; the table above is the shorter
-answer to what is built.
-
-## Quick start
-
-```toml
-[dependencies]
-happenstance = "0.6"
-```
-
-Add an adapter when you want durability — `happenstance-sqlite = "0.6"` — and
-`happenstance-testkit` as a `[dev-dependencies]` if you are writing one of your
-own. **Pin the testkit exactly.** Adding a conformance rule is a semver-*minor*
-change that can turn a passing adapter's CI red, which is why it carries its own
-version number rather than the workspace's.
+- **A published conformance suite.** An adapter that has not passed
+  `happenstance-testkit` is not an adapter, and each rule is paired with a wrong
+  store that fails it. [Writing your own store](docs/pass-conformance-suite.md)
+  means inheriting the whole suite in one line.
+- **A specification in numbered clauses.** [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md)
+  marks each clause frozen, provisional or deferred, and names the rule that
+  checks it.
+- **Documentation the gate compiles.** Every Rust example in the guide and on
+  this page is compiled, and the guide's are run, before a change merges.
+- **Measurements with their raw data.** About 34 µs to check a rule spanning two
+  things on SQLite, about 57,000 events a second appended in batches, and 64
+  concurrent writers with exactly one winner and no errors.
+  [`benchmarks/results/GRADES.md`](benchmarks/results/GRADES.md) has the method,
+  the raw output and what the numbers do not show.
 
 ## Minimum supported Rust version
 
-**1.97.1**, and it is a promise from `0.2.0` rather than a preference: raising it
-is a breaking change and needs a decision record, not a commit message. The
-floor moved to 1.97.1 at phase 2 for a dependency's build script rather than for
-anything in this workspace — five of the five database crates here declare no
-`rust-version` at all, so neither `cargo hack --rust-version` nor `resolver = "3"`
-can protect a floor against them, and only running the compiler finds it.
+**1.97.1.** Raising it is a breaking change before `1.0.0`; after it, a rise
+ships only in a minor release, only to a Rust stable at least six months old,
+and always with a `CHANGELOG.md` entry
+([ADR-0067](.kb/decisions/0067-msrv-after-1-0-rises-are-bounded.md)).
 
-After `1.0.0` a rise ships only in a minor release, only to a Rust stable at
-least six months old, and always with a `CHANGELOG.md` entry
-([ADR-0067](.kb/decisions/0067-msrv-after-1-0-rises-are-bounded.md)). Each
-published crate's README states its own floor and the same rule, and
-`cargo xtask lints` holds them to the manifests.
+## Contributing
 
-```rust
-use happenstance::{Event, EventStore, MemoryEventStore, Query, ReadOptions, Tags, collect};
-
-async fn define_course() -> Result<(), Box<dyn std::error::Error>> {
-    let store = MemoryEventStore::new();
-
-    store
-        .append(
-            &[Event::new("CourseDefined", &br#"{"capacity":2}"#[..])?
-                .with_tags(Tags::from_pairs([("course", "c1")])?)],
-            None,
-        )
-        .await?;
-
-    let events = collect(store.read(&Query::all(), ReadOptions::new())).await?;
-    assert_eq!(events.len(), 1);
-    Ok(())
-}
-```
-
-This block and the DCB example above are compiled by CI, so neither can drift
-from the API the way a README example normally does. They are doctests of
-`xtask`, not of a published crate: `include_str!` resolves against the file tree,
-and a path reaching outside the package does not exist inside a packaged
-`.crate` — so attaching this file to `happenstance` would make `cargo test` fail
-for anyone who ran it. `xtask` is never published. Each crate's own `README.md`
-is compiled by that crate, where the relative path stays inside the package.
-
-## Design
-
-**Illegal states are unrepresentable.** `Query` is an enum, not a vector,
-because the specification allows "at least one item" or "match everything" and
-nothing else — an empty query cannot be constructed. `SequencePosition` wraps a
-`NonZeroU64`, so position zero does not exist and `Option<SequencePosition>`
-costs no more than a bare one. `Tags` is canonically sorted at construction, so
-it can never be observed out of order and set equality is just `==`.
-
-**Payloads are opaque.** `Event` holds `Bytes`, and `happenstance-core` has no
-`serde` dependency by default — the optional feature covers the envelope types
-only, for replication. Adapters need no domain knowledge, and replication can
-forward events byte-for-byte without deserialising them. Encoding belongs to the
-layer above, which is what `happenstance` itself is for.
-
-**The concurrency signal is in the type system.** `append` returns
-`AppendError`, which separates `ConditionViolated` — routine under contention,
-and a cue to retry — from adapter-specific failures. No caller has to match on a
-string to tell "retry" from "something broke".
-
-**Two flavours of each port.** `EventStore` carries no `Send` bound, so it can
-be implemented on `wasm32` where futures are `!Send` — which is what makes a
-Cloudflare Durable Object adapter possible at all. `SendEventStore` is derived
-from it for native use, and implementing it gives you both. Generic code binds
-the weaker one and accepts either. CI builds `happenstance-core` for
-`wasm32-unknown-unknown` on every commit so this stays true.
-
-**Adapters are separate crates, not feature flags.** `rusqlite` bundles a C
-library; LadybugDB's `lbug`, the retired graph adapter's driver, compiled C++ through `cmake`; Postgres needs a
-network and a container to test against. Nobody who wants one should pay for the
-other, and a third-party adapter is a first-class citizen rather than a fork.
-
-**The adapter portfolio is deliberately unlike itself.** Adapters are not only
-targets to support — they are the instrument that keeps the contract honest, and
-that only works if they disagree. A store that serialises its writers under a
-lock, one that assigns positions outside the transaction, and one reached over
-one-shot HTTP with no interactive transaction at all will each refuse a different
-part of a badly-shaped port, and a portfolio where all three behave alike proves
-nothing. So Postgres is here for what it *breaks* — it is the only target on the
-roadmap that can violate the position-visibility invariant, which is what makes
-that invariant testable rather than decorative. It is not a flagship, and if you
-want DCB on Postgres today, `disintegrate` below is the mature choice.
-
-## Performance
-
-**This README makes no performance claim, and that is deliberate.** The library
-is positioned on correctness, and an earlier version of that positioning opened
-with the words "fast, efficient" while nothing in the repository supported them —
-three of the fourteen reviews say so. The numbers came out on purpose.
-
-What exists instead is a measured record, kept where it can be checked:
-
-* [`benchmarks/results/GRADES.md`](benchmarks/results/GRADES.md) — what the
-  abstraction costs over raw SQL, throughput, the DCB guard, the typed layer,
-  the projection runner, and exact allocation counts. Every figure is written by
-  hand from `benchmarks/results/raw/`, which is committed beside it.
-* [`benchmarks/README.md`](benchmarks/README.md) — the conditions each figure was
-  taken under, and a **What none of this shows** section that is the first thing
-  to read if you are about to quote one.
-
-Two of its own rules are worth repeating here, because they are what make the
-rest usable. Read the figures as **orders of magnitude and as ratios between arms
-of one run**; nothing there should be quoted to a third significant figure. And
-prefer the allocation counts to the timings — they are reproducible to the digit
-where the wall clock is not.
-
-`benchmarks/` is not a workspace member, appears in no `cargo xtask ci` step, and
-contains no threshold on any budget. CF-34 forbids a benchmark result gating a
-merge: an adapter that is slow is conformant. To re-derive the whole record from
-a clean checkout, `cd benchmarks && ./run.sh`.
-
-## Writing an adapter
-
-Implement `SendEventStore` (or `EventStore` if your target cannot be `Send`),
-write a small `Fixture` for it, then inherit the entire conformance suite:
-
-```rust,ignore
-happenstance_testkit::event_store_conformance!(MyFixture::new());
-```
-
-A fixture is what tells the suite how to reach your store: one fixture instance
-is one isolated backing store, and each `connect()` on it is one handle onto
-that store. That separation is what lets rules check the things a bare
-constructor could not express — that two fixtures share nothing, and that two
-handles onto one store observe each other's writes both when reading and when
-evaluating an append condition. Your fixture also declares, as associated
-constants, whether it can hand out a second handle and whether it can be
-reopened; a rule needing something you decline still runs and prints your stated
-reason rather than disappearing.
-
-The macro expands to one `#[tokio::test]` per rule, so a failure names the rule
-that broke. **An adapter is not finished until it passes.**
-
-There are 123 rules in four families. The **event-store** family (97) covers
-query semantics, read options, position uniqueness and monotonicity, append
-atomicity and the full append-condition matrix including the exact `after`
-boundary. The **concurrency** family (6) supplies the second caller a
-one-at-a-time suite cannot, and is the case DCB exists to prevent. The
-**projection** family (19) holds a read-model write and its checkpoint to one
-unit of work. The **model** family (1) replays generated sequences of appends,
-conditional appends and reads against a model and compares every answer — which
-is the one that finds what the worked examples did not think to ask.
-
-## Development
-
-```console
-cargo xtask ci     # the whole gate: fmt, clippy, tests, wasm32, docs, deny
-cargo test --workspace --all-features
-cargo run -p course-subscriptions
-```
-
-`cargo xtask ci` is defined once, in `xtask/src/main.rs`, and is exactly what CI
-runs. If it passes locally, it passes on CI.
-
-## Prior art
-
-[Disintegrate](https://github.com/disintegrate-es/disintegrate) is the other
-Rust DCB library; it is Postgres-bound and macro-driven.
-[`umadb-dcb`](https://crates.io/crates/umadb-dcb) ships duplicated sync and
-async traits. happenstance's bet is different: ports plus a *published* conformance
-suite, so that "storage agnostic" is a claim anyone can check and third parties
-can ship adapters against.
-
-## The name
-
-The everyday sense of the word is chance, which is the wrong idea for a durable
-event store and worth displacing early. The sense meant here is the older half of
-the compound: a happenstance is what *happened to be the case*, as against what was
-arranged in advance. That distinction is the one DCB draws. A classical aggregate
-fixes the consistency boundary when the schema is written, before anyone knows
-which decisions will be made against it. A DCB boundary is deliberate but not
-pre-declared — the handler chooses its query, and the boundary is then whatever
-that query happened to match.
-
-The project was called **eventum** until 2026-08-05. It was renamed because the
-bare `eventum` name on crates.io belongs to an unrelated crate, dormant since
-2020, which forced an awkward layout — prefixed crates only, and a `-core` suffix
-that existed for no reason but the collision. `happenstance` was free. Nothing had
-been published, so no release was affected; see
-[ADR-0005](.kb/decisions/0005-rename-to-happenstance.md).
-
-The bare name went to the contract crate for four hours, and then to the typed
-layer where it belongs: `-core` is what an adapter author pins, and the bare name
-is what an application installs — the allocation `serde_core`/`serde`,
-`futures-core`/`futures` and `tracing-core`/`tracing` each arrived at
-independently. See
-[ADR-0006](.kb/decisions/0006-bare-name-to-the-typed-layer.md), which supersedes
-the second half of ADR-0005 and explains why that half was wrong.
+[`CONTRIBUTING.md`](CONTRIBUTING.md) covers the gate (`cargo xtask ci`), how to
+write an adapter, the design principles the contract follows, and where the
+name comes from.
 
 ## Licence
 
 Dual-licensed under [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your
-option.
+option. If happenstance is useful to you,
+[buy the maintainer a coffee](https://buymeacoffee.com/ryanbritton).

@@ -7,7 +7,7 @@
 
 base_url = "https://wet-ink-corporation.github.io/happenstance"
 title = "happenstance"
-description = "A storage-agnostic, DCB-compliant event sourcing library for Rust."
+description = "Your data stays true, everywhere it lives. Event-sourced data for Rust apps on devices, at the edge and in the cloud."
 default_language = "en"
 
 compile_sass = false

@@ -1,6 +1,9 @@
 # happenstance
 
-An opinionated, storage-agnostic event sourcing library for Rust, built on the
+**Your data stays true, everywhere it lives.** Event-sourced data for Rust apps
+on devices, at the edge and in the cloud: every change kept, every business rule
+checked, every answer explained, on SQLite, Cloudflare Durable Objects, Postgres
+and Neon. Decisions follow the
 [Dynamic Consistency Boundary specification](https://dcb.events/specification/).
 
 Guide-level documentation is [the happenstance guide](https://wet-ink-corporation.github.io/happenstance/), which starts from events
