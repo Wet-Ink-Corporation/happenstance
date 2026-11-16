@@ -97,9 +97,8 @@ use happenstance_sync::{
 use sqlx::{PgPool, Postgres, Transaction};
 
 use super::{
-    IDENTITY_SQL, NewRow, Origin, PostgresEventStore, ROW_PARAMETERS, StoredOrigin,
-    allocate_positions, exceeded, identity_from_row, insert_statement, now, position_from_row,
-    stored_store_id, write_group,
+    NewRow, Origin, PostgresEventStore, ROW_PARAMETERS, StoredOrigin, allocate_positions, exceeded,
+    identity_from_row, insert_statement, now, position_from_row, stored_store_id, write_group,
 };
 use crate::error::PostgresEventStoreError;
 
@@ -242,16 +241,8 @@ impl SendIngestStore for PostgresEventStore {
     /// cached (ADR-0086), so a re-mint is answered by the next call on any
     /// handle, clones included.
     async fn store_id(&self) -> Result<StoreId, Self::Error> {
-        let pool = self.pool.clone();
-        let stored: Option<Vec<u8>> = self
-            .on_runtime(async move {
-                sqlx::query_scalar(IDENTITY_SQL)
-                    .fetch_optional(&pool)
-                    .await
-                    .map_err(PostgresEventStoreError::from)
-            })
-            .await?;
-        identity_from_row(stored)
+        // The inherent read, which needs no feature (#485).
+        PostgresEventStore::store_id(self).await
     }
 
     async fn ingest(

@@ -63,8 +63,15 @@ let source = Source::new(&events, events.store_id());   // SqliteEventStore
 run_projection(source, &views, &mut projection, &Json, chunk).await?;
 ```
 
-On `PostgresEventStore`, `NeonEventStore` and `CloudflareEventStore`, the
-identity is the one their `sync` feature's `IngestStore::store_id` reads.
+`PostgresEventStore`, `NeonEventStore` and `CloudflareEventStore` gain a
+`store_id` of their own in 0.8, with no feature to enable. It reads the
+store's identity row, so it can fail. Also not compiled here:
+
+```text
+let id = events.store_id().await?;                      // Postgres, Neon
+let id = events.store_id()?;                            // Cloudflare
+run_projection(Source::new(&events, id), &views, &mut projection, &Json, chunk).await?;
+```
 
 The program below runs one view both ways over the same store:
 

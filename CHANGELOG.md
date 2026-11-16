@@ -56,6 +56,12 @@ store migrates: the pin is one more checkpoint row, under an id of its own.
   exactly. Its value for a given id is a promise, pinned by goldens.
 - `happenstance`: `ProjectionError::SourceChanged { pin, recorded, found }` and
   `ProjectionError::RecordSource`, on a `#[non_exhaustive]` enum.
+- `happenstance-postgres`, `happenstance-neon`, `happenstance-cloudflare`: an
+  inherent `store_id` on each event store, behind no feature: one read of the
+  identity row, never cached, so it follows a re-mint. It is what a typed
+  view's `Source` is built from on these stores, where it used to need the
+  `sync` feature's `IngestStore::store_id`, which now delegates to it (#485,
+  485-Q4). Async and fallible on Postgres and Neon, fallible on Cloudflare.
 - `happenstance`: PS-40's rule, `a_checkpoint_is_not_resumed_against_another_store`,
   a typed-layer test rather than a conformance rule, rejecting a runner with no pin, a pin never compared, and
   the identity folded into the main key; and `a_view_refuses_another_sqlite_file`
@@ -103,7 +109,10 @@ it reports that no row below covers becomes a **T** row.
 and `progress()` reports `Progressed::default()` for both; what changes for a
 caller is which runs produce them, and H2 is that. `Source`, `SourceMark` and
 `source_checkpoint_id` are new items. `checkpoint_id` and PS-25's goldens are
-unchanged, so no `0.7.x` checkpoint is orphaned.
+unchanged, so no `0.7.x` checkpoint is orphaned. The adapters' new inherent
+`store_id` shadows `IngestStore::store_id` in method-call syntax on
+`PostgresEventStore` and `NeonEventStore`, with the same signature and the same
+answer, so a call written against the trait compiles and behaves unchanged.
 
 **Pending:** the release's other entries.
 

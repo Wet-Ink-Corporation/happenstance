@@ -212,6 +212,46 @@ async fn remint_identity_refuses_without_an_identity_row() {
     assert!(persisted(&pool).await.is_empty(), "no row was created");
 }
 
+/// `store_id`, which needs no `sync` feature (#485), answers the row as raw SQL
+/// reads it, follows a re-mint made through another handle, and refuses with
+/// `MissingIdentity` once the row is gone.
+///
+/// Rejects an identity cached per handle, which would go on answering the
+/// retired one, and so would pin a typed view to an incarnation the store no
+/// longer stamps.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container, or set HAPPENSTANCE_POSTGRES_URL)"]
+async fn store_id_answers_the_row_and_follows_a_remint() {
+    let fixture = PostgresFixture::new();
+    let pool = fixture.pool_for_test().await;
+    let open = fixture.connect().await;
+
+    let first = open
+        .store_id()
+        .await
+        .expect("a migrated store has an identity");
+    assert_eq!(persisted(&pool).await, vec![first.to_bytes().to_vec()]);
+
+    let minted = fixture
+        .connect()
+        .await
+        .remint_identity()
+        .await
+        .expect("a migrated store re-mints");
+    assert_eq!(
+        open.store_id().await.expect("the row reads"),
+        minted,
+        "an open handle answers the re-minted identity"
+    );
+
+    delete_identity(&pool).await;
+    let refused = open.store_id().await.expect_err("there is no row");
+    assert!(
+        matches!(refused, PostgresEventStoreError::MissingIdentity),
+        "{refused:?}"
+    );
+}
+
 /// The negative control: a restored store that is **not** re-minted re-issues
 /// the identity of an event it lost, to a different event.
 ///

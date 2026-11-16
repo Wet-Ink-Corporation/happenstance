@@ -570,7 +570,16 @@ About 30 files and about 1,500 lines changed:
 - [x] Gate: `cargo xtask ci --fast` steps all green (the run was split by an
   environment OOM and a linker bus error on a full disk, then each remaining step
   run on its own); temper gate GREEN at `bb637e679c1cf072`. Commit A.
-- [ ] Q4 accessors, commit B.
+- [x] Q4 accessors, commit B. Inherent `store_id` on `PostgresEventStore` and
+  `CloudflareEventStore` in new child modules (`event_store/identity.rs`) so the
+  cited lines of each `event_store.rs` do not move; Neon's lives in
+  `event_store/remint.rs`, beside `remint_identity`, with `identity_statement`
+  and `identity_from` moved out of the `sync`-gated `ingest.rs`. Each
+  `IngestStore::store_id` delegates. Cloudflare's private reader is renamed
+  `incarnation` in place, so its existing wasm tests now call the public
+  method. **Not test-first:** the reads moved rather than changed, so the
+  tests were written after: Neon's two unit tests (no feature), and one live
+  Postgres test, `#[ignore]`d with the file's standing reason.
 - Also changed, beyond the plan: `xtask/src/spec_trace.rs`'s
   `the_real_documents_orphan_no_case` counts 59 cases, not 58, because E2E-59
   was added; it is a census of the document, as §7.6's sentence is.

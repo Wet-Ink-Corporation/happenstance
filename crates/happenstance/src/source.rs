@@ -25,8 +25,10 @@ use happenstance_core::StoreId;
 /// - `MemoryEventStore`: `(&events).into()`, the one door where the identity
 ///   cannot be wrong.
 /// - `SqliteEventStore`: `Source::new(&events, events.store_id())`.
-/// - Other adapters: the identity their `IngestStore::store_id` reports,
-///   behind their `sync` feature.
+/// - `CloudflareEventStore`: `Source::new(&events, events.store_id()?)`.
+/// - `PostgresEventStore` and `NeonEventStore`:
+///   `Source::new(&events, events.store_id().await?)`, one read of the
+///   store's identity row, with no feature to enable.
 ///
 /// `EventStore` itself carries no identity, which is why this type exists:
 /// adding one to the contract would change every adapter, and the hazard is
