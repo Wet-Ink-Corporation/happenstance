@@ -389,7 +389,7 @@ Behaviour (new `crates/happenstance/tests/source_pin.rs`, memory store unless no
     `a_0_7_checkpoint_is_refused_until_adopted` → `SourceUnrecorded`.*
 12. [x] `resetting_the_pin_re_adopts`: refused on B, reset the pin, and the run on B
     adopts. This is the documented remedy, executed.
-13. [~] `a_failing_pin_read_is_a_checkpoint_error` and
+13. [~] `a_failing_pin_read_is_a_checkpoint_error` (blocked, below) and
     `a_refused_pin_commit_is_record_source`: wrapper store, with
     `progress() == default`.
 
@@ -556,15 +556,39 @@ About 30 files and about 1,500 lines changed:
     store then refuses itself.
   - W3 is a runner written in the rule's own test file
     (`FoldedIntoTheKey`), asserted to fail legs A, B, E.
-- [~] Test 13's pin-read-failure half is not written: `RecordingProjectionStore`
-  has no knob that fails a `checkpoint` read. The refused-pin-commit and
-  refused-pin-begin halves are written.
+- [~] Test 13's pin-read-failure half (review F3) is **blocked on an H-16
+  decision.** A local fake store wrapping the recording store was written and
+  passed, with two `bind_source` mutants as red evidence (the pin read's error
+  folded into `NeverRun` failed the pin-read and fan-out cases; the main read's
+  failed the main-read case). But `crates/happenstance/tests/doc_surface.rs`'s
+  `no_local_projection_store` forbids any `impl ProjectionStore for` in this
+  crate (HS-P0010's AC-012), and relaxing it is H-12. The remaining routes are
+  an additive knob on the published testkit's `RecordingProjectionStore` (a
+  public API change) or the fake in a crate outside `happenstance`. The draft
+  is kept outside the tree for whichever is chosen.
 - [x] **H-12, flagged for the owner:** two existing expectations in
   `tests/fan_out/runs.rs` count calls on the recording store and now include the
   eager pin's `begin`/`commit` (`a_commit_for_one_view_moves_no_other_views_checkpoint`,
   `a_read_failure_interrupts_every_running_view`). The Postgres live test
   `a_commit_fault_takes_the_projections_rows_with_it` runs an idle run before
   arming its fault, because the trigger fires on every checkpoint insert.
+- [x] **H-12, flagged for the owner, after review (F1):**
+  `a_failing_begin_or_commit_stops_only_its_view` used `failing_begin(1)`, which
+  the eager pins turned into view b's *pin* begin, duplicating
+  `a_refused_pin_begin_is_begin_with_no_progress` and leaving no chunk-begin
+  failure covered anywhere. Retargeted to `failing_begin(7)` at `chunk(1)`: b's
+  second chunk begin, after one committed chunk, asserting `Begin` carries
+  `(Some(first), 1, 0)` progress, b's checkpoint at the first event, and c's
+  second row. Red: with the old index 1 it fails on `(None, 0, 0)`. The single
+  runner had no chunk-begin test either:
+  `pins.rs::a_refused_chunk_begin_is_begin_with_the_committed_progress` adds it
+  (`failing_begin(2)`).
+- [x] Review F2, F4, F5: the bench and experiment are rustfmt'd and compile
+  (`cargo check --benches`; the experiment's tests run green, 23 passed);
+  `a_view_refuses_another_sqlite_file`'s doc and PS-40's Rule say W4 is pinned
+  deterministically by `source_mark_fits_a_signed_sixty_four_bit_column` and the
+  SQLite test shows only the round trip; §7.6's "three of the four" sentence
+  names the five single-claim cases.
 - [x] Docs (upgrading-to-0-8, rebuild, choose-a-store, choose-a-topology),
   CHANGELOG + `0.8.0` trace, ledger rows, decision map, Q6 experiment edit.
 - [x] Gate: `cargo xtask ci --fast` steps all green (the run was split by an

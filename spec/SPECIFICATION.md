@@ -6410,11 +6410,11 @@ store A, then run on store B holding four events of its own and five like A's:
 the run returns `SourceChanged` naming the pin, A's mark and B, applies nothing,
 and leaves the main checkpoint, the pin and the rows as they were. A typed-layer
 rule, in `crates/happenstance/tests/projection_runner.rs`, beside PS-25's, held
-against the wrong runners below; the mark is pinned by golden values in
-`crates/happenstance/src/checkpoint/tests.rs`, and its round trip through a real
-`INTEGER` column by `a_view_refuses_another_sqlite_file` in
-`examples/rebuilding-read-models/tests/rebuild_through_reset.rs`. No adapter can
-fail it, so it is not a conformance rule.
+against the wrong runners below. W4 is rejected deterministically, and the mark's
+goldens bound, by `source_mark_fits_a_signed_sixty_four_bit_column` and its neighbours in
+`crates/happenstance/src/checkpoint/tests.rs`; `a_view_refuses_another_sqlite_file` in
+`examples/rebuilding-read-models/tests/rebuild_through_reset.rs` shows only the round trip
+through a real `INTEGER` column. No adapter can fail the rule, so it is not a conformance rule.
 **Cases:** E2E-59.
 **Rejects:** W1, a runner with no record, which is every runner before `0.8.0`;
 W2, a runner that records the store and never compares it; W3, the store's
@@ -10689,7 +10689,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
 | PS-38 | FROZEN | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint`, `fan_o… | E2E-15, E2E-17, E2E-23 |
 | PS-39 | FROZEN | `projection_ids_round_trip_by_bytes` | E2E-18 |
-| PS-40 | PROVISIONAL | `a_checkpoint_is_not_resumed_against_another_store` †, `a_view_refuses_another… | E2E-59 |
+| PS-40 | PROVISIONAL | `a_checkpoint_is_not_resumed_against_another_store` †, `source_mark_fits_a_sig… | E2E-59 |
 
 #### `SY` — the `SyncPeer` port (§5)
 
@@ -11106,8 +11106,8 @@ The distribution is uneven and the unevenness is informative rather than
 alarming. Five cases are claimed by exactly one clause each: **E2E-14** (SY-6),
 **E2E-31** (PS-31), **E2E-50** (PS-25), **E2E-51** (VT-18) and **E2E-59** (PS-40).
 Single-claim cases
-are the ones a later edit can orphan without anyone noticing, and three of the
-four are the lifecycle cases whose surrounding decisions are still open. At the
+are the ones a later edit can orphan without anyone noticing. Three of the first four
+are lifecycle cases, and E2E-59's one clause is still provisional (PS-40). At the
 other end, **E2E-42** — transitive convergence — is claimed by 26 clauses across
 four sections, which is what a case that exercises a whole design looks like.
 

@@ -205,6 +205,40 @@ fn a_refused_pin_begin_is_begin_with_no_progress() {
     });
 }
 
+/// A chunk's `begin` refused after the pin and one committed chunk is still
+/// `Begin`, but carries the chunk the run committed, which is how it differs
+/// from a refused pin begin.
+///
+/// Begin 0 is the pin's, 1 the first chunk's and 2 the second's.
+#[test]
+fn a_refused_chunk_begin_is_begin_with_the_committed_progress() {
+    block_on(async {
+        let events = store_with(&[]).await;
+        let first = EventStore::append(&events, &[part("VIN1")], None)
+            .await
+            .expect("the first event appends");
+        EventStore::append(&events, &[part("VIN2")], None)
+            .await
+            .expect("the second event appends");
+        let models = RecordingProjectionStore::failing_begin(2);
+        let mut view = Shard::new("solo");
+
+        let error = run_projection((&events).into(), &models, &mut view, &Json, chunk(1))
+            .await
+            .expect_err("the second chunk's begin is refused");
+
+        let ProjectionError::Begin { progress, .. } = error else {
+            panic!("a chunk begin: {error:?}");
+        };
+        assert_eq!(
+            (progress.through, progress.applied, progress.skipped),
+            (Some(first), 1, 0)
+        );
+        assert_eq!(pin_of(&models, &view).await, pinned_to(&events));
+        assert_eq!(models.get("solo:VIN2"), None, "no write set, no row");
+    });
+}
+
 /// The pin's commit is refused: `RecordSource`, with nothing read.
 #[test]
 fn a_refused_pin_commit_is_record_source() {

@@ -324,25 +324,35 @@ fn a_failing_begin_or_commit_stops_only_its_view() {
     block_on(async {
         let log = [part("VIN1"), part("VIN2")];
         let events = Instrumented::seeded(&log).await;
+        let read = events.snapshot();
 
-        // The second `begin` of the run is the middle view's first.
-        let models = RecordingProjectionStore::failing_begin(1);
+        // Begins 0-2 are the three pins (PS-40), 3-5 the first chunk's, one
+        // per view, and 4 + 3 = 7 the middle view's second chunk: a chunk
+        // begin after events were read and one chunk committed, so the
+        // failure carries progress, which a refused pin begin never does.
+        let models = RecordingProjectionStore::failing_begin(7);
         let mut views = [Shard::new("a"), Shard::new("b"), Shard::new("c")];
-        let fan = run_fan_out(events.source(), &models, &mut views, &Json, chunk(8)).await;
-        assert!(
-            matches!(
-                &fan.views[1],
-                Err(ViewError::Stopped(ProjectionError::Begin { .. }))
-            ),
-            "{:?}",
-            fan.views[1]
+        let fan = run_fan_out(events.source(), &models, &mut views, &Json, chunk(1)).await;
+        let Err(ViewError::Stopped(stopped @ ProjectionError::Begin { .. })) = &fan.views[1] else {
+            panic!("the middle view's chunk begin: {:?}", fan.views[1]);
+        };
+        let progress = stopped.progress();
+        assert_eq!(
+            (progress.through, progress.applied, progress.skipped),
+            (Some(read[0].position), 1, 0),
+            "the chunk committed before the refused begin"
         );
         assert!(
             fan.views[0].is_ok() && fan.views[2].is_ok(),
             "{:?}",
             fan.views
         );
-        assert_eq!(views[1].applied, 0, "a view with no write set applied");
+        assert_eq!(
+            checkpoint_of(&models, &views[1]).await,
+            live(read[0].position)
+        );
+        assert_eq!(models.get("b:VIN2"), None, "no write set, no row");
+        assert_eq!(models.get("c:VIN2"), Some(2), "the view after it ran on");
 
         let mut views = [Shard::new("a"), Shard::new("b"), Shard::new("c")];
         let models = RecordingProjectionStore::failing_commits_under(

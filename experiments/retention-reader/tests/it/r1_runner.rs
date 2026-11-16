@@ -193,7 +193,8 @@ fn a_source_switch_resumes_against_the_wrong_store() -> Outcome {
             .collect();
         b.ingest(&groups).await?;
         let b_id = IngestStore::store_id(&b).await?;
-        let on_b = run_projection(Source::new(&b, b_id), &models, &mut counter, &Json, chunk()).await;
+        let on_b =
+            run_projection(Source::new(&b, b_id), &models, &mut counter, &Json, chunk()).await;
 
         let b_held = seams(&b, &[]).await?.held;
         let local_ids: Vec<EventId> = b_held

@@ -1029,7 +1029,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 65] = [
     // ---- VT: value types -------------------------------------------------
     // VT-6's `restored_peer_does_not_reissue_identities` left this table at
     // #133, in the change that wrote it as the restore family's rule: a name
@@ -1343,6 +1343,11 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 64] = [
         "PS-40",
         "a_view_refuses_another_sqlite_file",
         Unresolvable::Elsewhere("examples/rebuilding-read-models/tests/rebuild_through_reset.rs"),
+    ),
+    (
+        "PS-40",
+        "source_mark_fits_a_signed_sixty_four_bit_column",
+        Unresolvable::Elsewhere("crates/happenstance/src/checkpoint/tests.rs"),
     ),
     (
         "PS-26",

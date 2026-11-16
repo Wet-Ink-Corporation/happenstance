@@ -281,18 +281,28 @@ fn idle_poll(criterion: &mut Criterion) {
                 let mut projection = MemoryTotals::new(ACCOUNT).expect("valid");
                 // Catch up first, outside the timed region. What is measured is
                 // the *second* run, which finds nothing.
-                let caught_up =
-                    run_projection(Source::new(&memory_events, MEMORY_SOURCE), &models, &mut projection, &Json, chunk_size)
-                        .await
-                        .expect("the initial catch-up completes");
+                let caught_up = run_projection(
+                    Source::new(&memory_events, MEMORY_SOURCE),
+                    &models,
+                    &mut projection,
+                    &Json,
+                    chunk_size,
+                )
+                .await
+                .expect("the initial catch-up completes");
                 assert_applied(caught_up);
 
                 let started = Instant::now();
                 for _ in 0..iters {
-                    let progressed =
-                        run_projection(Source::new(&memory_events, MEMORY_SOURCE), &models, &mut projection, &Json, chunk_size)
-                            .await
-                            .expect("the idle poll completes");
+                    let progressed = run_projection(
+                        Source::new(&memory_events, MEMORY_SOURCE),
+                        &models,
+                        &mut projection,
+                        &Json,
+                        chunk_size,
+                    )
+                    .await
+                    .expect("the idle poll completes");
                     black_box(progressed.applied);
                 }
                 started.elapsed()
@@ -305,19 +315,29 @@ fn idle_poll(criterion: &mut Criterion) {
             runtime::block_on(async {
                 let (models_fixture, models) = fresh_projection_store();
                 let mut projection = SqliteTotals::new(ACCOUNT).expect("valid");
-                let caught_up =
-                    run_projection(Source::new(&sqlite_events, sqlite_events.store_id()), &models, &mut projection, &Json, chunk_size)
-                        .await
-                        .expect("the initial catch-up completes");
+                let caught_up = run_projection(
+                    Source::new(&sqlite_events, sqlite_events.store_id()),
+                    &models,
+                    &mut projection,
+                    &Json,
+                    chunk_size,
+                )
+                .await
+                .expect("the initial catch-up completes");
                 assert_applied(caught_up);
                 models_fixture.checkpoint();
 
                 let started = Instant::now();
                 for _ in 0..iters {
-                    let progressed =
-                        run_projection(Source::new(&sqlite_events, sqlite_events.store_id()), &models, &mut projection, &Json, chunk_size)
-                            .await
-                            .expect("the idle poll completes");
+                    let progressed = run_projection(
+                        Source::new(&sqlite_events, sqlite_events.store_id()),
+                        &models,
+                        &mut projection,
+                        &Json,
+                        chunk_size,
+                    )
+                    .await
+                    .expect("the idle poll completes");
                     black_box(progressed.applied);
                 }
                 started.elapsed()

@@ -692,12 +692,15 @@ mod rebuild_through_reset {
     /// A view built from one SQLite file refuses another file's log, after
     /// every handle is dropped and the file is reopened (PS-40, E2E-59).
     ///
-    /// The mark lives in a real `INTEGER` column. Rejects a mark that keeps
-    /// FNV-1a's top bit: SQLite saturates such a position to `i64::MAX`, so
-    /// two stores whose marks both exceed it would read back equal, and about
-    /// half of all stores would then pass for one another. Rejects too a pin
-    /// that does not survive a reopen, which would adopt the second file. The
-    /// first file's own log, reopened, resumes: the positive control.
+    /// The mark lives in a real `INTEGER` column, and this shows it round-trips
+    /// there. It does not pin W4, a mark that keeps FNV-1a's top bit: SQLite
+    /// saturates such a mark to `i64::MAX`, and for one pair of random stores in
+    /// four both marks exceed it and read back equal, so under W4 this test
+    /// still passes one run in four. `source_mark_fits_a_signed_sixty_four_bit_column`,
+    /// in `crates/happenstance/src/checkpoint/tests.rs`, rejects W4
+    /// deterministically. What this test does reject is a pin that does not
+    /// survive a reopen, which would adopt the second file. The first file's
+    /// own log, reopened, resumes: the positive control.
     #[tokio::test]
     async fn a_view_refuses_another_sqlite_file() -> TestResult {
         let built_from = Fixture::open("refuses-built")?;
