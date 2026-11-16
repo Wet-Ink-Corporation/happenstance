@@ -80,9 +80,12 @@ central store sees both events and appends the correction, which then syncs
 back to everyone. Only one place should write corrections for a given fact
 ([SY-7](../spec/SPECIFICATION.md)).
 
-**Status:** works today. From `0.7` the deciding store can adjudicate as it
-syncs, through a merge rule mounted on its edge or its peer
-(`runner::Adjudicate`); without one, it decides by convention after a sync.
+**Status:** works today, from `0.7`. The central store adjudicates as it
+syncs, through a merge rule (`runner::Adjudicate`) mounted on the peer the
+devices push to, and each correction lands in the same write as the event it
+answers. The
+[`two-devices-one-seat`](../examples/two-devices-one-seat) example runs it end
+to end.
 
 ### Each client holds only its workspace
 

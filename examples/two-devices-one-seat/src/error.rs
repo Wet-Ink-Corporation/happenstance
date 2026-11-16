@@ -10,10 +10,12 @@ use happenstance_sync::RemoteSyncPeer;
 use happenstance_sync::runner::{Failure, StepFailure};
 
 use crate::domain::{Device, Place, Refusal};
+use crate::rule::RuleError;
 use crate::uplink::{CentralError, Uplink};
 
 /// What one step failure looks like for a device: its peer is the uplink to
-/// central, and its own log is a SQLite file.
+/// central, and its own log is a SQLite file. The same type whichever rule
+/// central mounts, since every rule's error is a [`RuleError`].
 pub type DeviceStep = StepFailure<RemoteSyncPeer<Uplink>, SqliteEventStore>;
 
 /// What a run of the story can fail with. Every variant names the place or
@@ -74,9 +76,9 @@ pub enum StoryError {
     /// The show could not be scheduled.
     #[error("central could not schedule the show")]
     Schedule(#[source] Box<CommandError<CentralError, Infallible>>),
-    /// Central's rule could not be applied.
+    /// Central's rule could not judge what it was asked about.
     #[error("central could not keep its rule")]
-    Adjudicate(#[source] Box<CommandError<CentralError, Infallible>>),
+    Adjudicate(#[source] RuleError),
     /// A sync step failed.
     #[error("{device} could not sync")]
     Sync {

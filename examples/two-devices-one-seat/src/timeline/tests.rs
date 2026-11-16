@@ -2,8 +2,8 @@
 //! order.
 //!
 //! The story can never show this. Every log it builds holds a sale before the
-//! refund that names it, because central decides the refund after ingesting
-//! the sale. So this test writes the logs a store could hold in some other
+//! refund that names it, because central's refund lands in the same write as
+//! the sale it answers, after it. So this test writes the logs a store could hold in some other
 //! order, the refund ahead of its sale among them, and projects each once.
 
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ use happenstance::{DecisionModel, DomainEvent, Event, EventStore, Json};
 
 use crate::domain::{BoxOffice, Place, ShowId, ShowLedger, adjudicate, schedule, sell_seat};
 use crate::scenario::Site;
-use crate::timeline::TimelineView;
+use crate::timeline::{DDL, TimelineView};
 
 /// A directory of this test's own, removed when the test ends.
 struct Scratch {
@@ -60,10 +60,11 @@ fn the_oversell(show: &ShowId) -> Vec<BoxOffice> {
     };
     let mut log = scheduled.clone();
     log.extend(on(Place::Tablet));
-    log.extend(on(Place::Phone));
     let mut central = empty.clone();
     log.iter().cloned().for_each(|e| central.apply(e));
-    log.extend(adjudicate(&central).expect("adjudication is infallible"));
+    let phone = on(Place::Phone);
+    log.extend(phone.iter().cloned());
+    log.extend(adjudicate(central, [], phone));
     log
 }
 
@@ -86,7 +87,31 @@ async fn delivered_as(dir: &Path, show: &ShowId, events: &[&BoxOffice]) -> Timel
         .await
         .expect("an unconditional append");
     site.project(Place::Central, show).await.expect("projected");
-    site.view().expect("the view")
+    site.view(show).expect("the view")
+}
+
+/// A view reads its own show's rows and capacity, never another's, though
+/// both tables hold every show. Rejects a read with no `WHERE show = ?`,
+/// which would count the other show's sale as one of this show's and could
+/// take the other show's capacity.
+#[test]
+fn the_view_reads_only_its_show() {
+    let app = rusqlite::Connection::open_in_memory().expect("an in-memory database");
+    app.execute_batch(DDL).expect("the read model's tables");
+    app.execute_batch(
+        "INSERT INTO show_seats (show, capacity) VALUES ('matinee', 9), ('premiere', 3);
+         INSERT INTO seat_ledger (show, sale, buyer, sold_by, status) VALUES
+             ('matinee', 'tablet-1', 'Ada', 'tablet', 'held'),
+             ('premiere', 'phone-1', 'Grace', 'phone', 'held');",
+    )
+    .expect("two shows' rows");
+    let premiere = ShowId::new("premiere").expect("a valid show");
+
+    let view = TimelineView::read(&app, &premiere).expect("the view");
+
+    assert_eq!(view.capacity, Some(3), "the premiere's capacity");
+    let sales: Vec<&str> = view.rows.iter().map(|row| row.sale.as_str()).collect();
+    assert_eq!(sales, ["phone-1"], "the premiere's sales only");
 }
 
 #[tokio::test]

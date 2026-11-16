@@ -10,8 +10,8 @@ publish = false
 # tests drive the story one step at a time, and a `src/main.rs` has nothing
 # importable in it. The second reason is particular to this example. The test
 # that shows what goes wrong without the central decision composes the same
-# public steps and leaves one out, so the binary ships no switch that turns
-# the rule off.
+# public steps around a central that judges by a rule answering nothing, so
+# the binary ships no switch that turns the rule off.
 [lib]
 name = "two_devices_one_seat"
 path = "src/lib.rs"

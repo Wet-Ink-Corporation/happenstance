@@ -17,11 +17,12 @@ mod story {
     use std::process::Command;
     use std::{fs, io};
 
-    use happenstance::CommandOutcome;
-    use happenstance_sync::FailureClass;
-    use happenstance_sync::runner::{EdgeState, Phase};
+    use happenstance::Event;
+    use happenstance_sync::runner::{Adjudicate, EdgeState, Phase};
+    use happenstance_sync::{EventGroup, FailureClass};
     use two_devices_one_seat::{
-        CAPACITY, Converged, Device, Link, Place, Refusal, SaleId, Scenario, StoryError, tell,
+        CAPACITY, Converged, Device, Link, Place, Refusal, RuleError, SaleId, Scenario, StoryError,
+        tell,
     };
 
     /// A directory of this test's own, removed when the test ends.
@@ -230,23 +231,39 @@ mod story {
         scenario.sync(Device::Phone).await.expect("phone up");
 
         let central = scenario.ledger(Place::Central).await.expect("central fold");
-        assert_eq!(central.held(), 4, "ingest never refuses (SY-1)");
+        // Counted as sales, not seats held: the push that oversold the show
+        // landed with its refund in the same write, so both sales are in
+        // central's log and one of them no longer holds a seat.
+        assert_eq!(central.sales().count(), 4, "ingest never refuses (SY-1)");
         assert_eq!(central.capacity(), Some(CAPACITY));
     }
 
+    /// Central's rule, asked again about everything central holds, answers
+    /// nothing, and a second sync of both devices writes nothing. Rejects a
+    /// rule that refunds a sale it has already judged when that sale is
+    /// delivered again, which the runner's skip would otherwise hide.
     #[tokio::test]
     async fn adjudication_is_idempotent() {
         let dir = Scratch::new("idempotent").expect("a scratch directory");
-        let scenario = oversold(dir.path(), Device::Tablet)
+        let mut scenario = oversold(dir.path(), Device::Tablet)
             .await
             .expect("oversold");
-        let first = scenario.adjudicate().await.expect("adjudicated");
-        assert!(matches!(first, CommandOutcome::Committed(_)));
+        let central = scenario.ledger(Place::Central).await.expect("central fold");
+        assert_eq!(
+            central.refunded().count(),
+            1,
+            "the push landed with its refund"
+        );
         let before = scenario.log(Place::Central).await.expect("log").len();
 
-        let second = scenario.adjudicate().await.expect("adjudicated again");
+        let answered = scenario.judge_again().await.expect("judged again");
+        scenario.sync(Device::Tablet).await.expect("tablet again");
+        scenario.sync(Device::Phone).await.expect("phone again");
 
-        assert_eq!(second, CommandOutcome::Nothing);
+        assert_eq!(
+            answered, 0,
+            "the rule answers a judged history with nothing"
+        );
         let after = scenario.log(Place::Central).await.expect("log").len();
         assert_eq!(after, before);
     }
@@ -257,9 +274,6 @@ mod story {
             let dir = Scratch::new(&format!("last-to-reach-{first}")).expect("a scratch dir");
             let scenario = oversold(dir.path(), first).await.expect("oversold");
 
-            let outcome = scenario.adjudicate().await.expect("adjudicated");
-
-            assert!(matches!(outcome, CommandOutcome::Committed(_)));
             let central = scenario.ledger(Place::Central).await.expect("central fold");
             let names: Vec<&str> = central.refunded().map(SaleId::as_str).collect();
             assert_eq!(names, [refunded], "{first} reached central first");
@@ -267,14 +281,41 @@ mod story {
         }
     }
 
+    /// A central rule that judges nothing: every sale lands unanswered.
+    #[derive(Debug, Clone, Copy)]
+    struct NoRule;
+
+    impl Adjudicate for NoRule {
+        type Error = RuleError;
+
+        async fn compensation(
+            &self,
+            _group: &EventGroup,
+            _earlier: &[EventGroup],
+        ) -> Result<Vec<Event>, RuleError> {
+            Ok(Vec::new())
+        }
+    }
+
+    /// The contrast: the same steps, with central's peer judging by a rule
+    /// that answers nothing. The oversell is real, and only the rule answers it.
     #[tokio::test]
     async fn without_adjudication_the_show_stays_oversold() {
         let dir = Scratch::new("no-adjudication").expect("a scratch directory");
-        let mut scenario = oversold(dir.path(), Device::Tablet)
-            .await
-            .expect("oversold");
-        scenario.sync(Device::Tablet).await.expect("tablet");
-        scenario.sync(Device::Phone).await.expect("phone");
+        let mut scenario = Scenario::judged_by(dir.path(), |_, _| NoRule).expect("three files");
+        scenario.schedule(CAPACITY).await.expect("scheduled");
+        scenario.sell(Place::Central, "Ada").await.expect("sold");
+        scenario.sell(Place::Central, "Brian").await.expect("sold");
+        for device in [Device::Tablet, Device::Phone] {
+            scenario.sync(device).await.expect("synced down");
+            scenario.set_link(device, Link::Down);
+        }
+        scenario.sell(Place::Tablet, "Grace").await.expect("sold");
+        scenario.sell(Place::Phone, "Linus").await.expect("sold");
+        for device in [Device::Tablet, Device::Phone, Device::Tablet] {
+            scenario.set_link(device, Link::Up);
+            scenario.sync(device).await.expect("synced");
+        }
 
         scenario.project().await.expect("projected");
 
@@ -399,6 +440,8 @@ mod story {
             include_str!("../src/lib.rs"),
             include_str!("../src/main.rs"),
             include_str!("../src/domain.rs"),
+            include_str!("../src/domain/decide.rs"),
+            include_str!("../src/rule.rs"),
             include_str!("../src/uplink.rs"),
             include_str!("../src/timeline.rs"),
             include_str!("../src/scenario.rs"),
@@ -410,7 +453,8 @@ mod story {
         for needle in [
             "commit(",
             "run_projection(",
-            "serve_sync(",
+            "serve_sync_adjudicated(",
+            ".with_adjudicator(",
             "RemoteSyncPeer::new(",
             "Edge::new(",
             "impl ConvergentProjection for Timeline",
