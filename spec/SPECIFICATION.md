@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**187 `[FROZEN]`**, **13 `[PROVISIONAL]`**, **5 `[DEFERRED]`** and **seven
+**188 `[FROZEN]`**, **13 `[PROVISIONAL]`**, **4 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -485,9 +485,9 @@ answer.
 - **Retention, deletion and completeness** (ES-39, CF-27). A store that has been
   deleted from is currently indistinguishable from a young one at every value in
   §2, and four of the six scenarios reach that from unrelated doors. ADR-0028
-  took the written refusal at phase 17. What stays open is whether a reader needs
-  a report, which could only arrive as a provided method, and phase 14's instrument
-  answers that.
+  took the written refusal at phase 17, and ADR-0108 froze ES-39 as that refusal at
+  phase 14: no reader the instrument ran needed a report, so none is added. Kept on
+  this list only so the citation resolves: it no longer moves.
 - **The scope of replication** (SY-27). Whole-log at 1.0 by ADR-0027, a slice is
   its own store, and scoped replication can only arrive later as an opt-in. SY-27 itself is `[FROZEN]` since ADR-0107; what may move is only that later opt-in (SY-29).
 - **A store-assigned time on `SequencedEvent`** (VT-9). Frozen at phase 13 by ADR-0107, and kept on this list only so the citation resolves: it no longer moves.
@@ -4884,19 +4884,19 @@ assigned, its remaining positions MUST remain unique and strictly monotonic, and
 
 #### ES-39 — Whether a store can declare what it does not hold
 
-**[DEFERRED — settled at phase 14 by building CF-27's completeness instrument (a
-store holding a deliberately scattered subset of its own log), then writing an
-ingest path and a projection runner against it and recording whether either needs
-a port-level report. ADR-0028 has already fixed the surface class, so this
-experiment chooses only between two outcomes, both additive. Either the clause
-freezes as the refusal (the port does not report completeness, and a caller MUST
-NOT infer it from any port value), or it gains a provided `EventStore` method
-whose default answers "unknown". Two of the three primitives this marker used to
-list are gone. The floor (`earliest_position`) is rejected by ADR-0028 on this
-clause's own grounds, below. A third outcome on condition evaluation is rejected
-for 1.x with ES-40's MAY. A set of retained ranges survives only as a possible
-shape of that provided method's report. If phase 14 slips past 1.0 the clause may
-be renewed past it, because firing it is additive.]**
+**[FROZEN]** — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase 14, as ADR-0028 decision 9's refusal: **the port does not
+report completeness, and a caller MUST NOT infer it from any port value.** The experiment this marker named ran as
+`experiments/retention-reader/` (#156, #482), on criteria committed before any test: a reader needs a report only if it
+meets harm (C1), undetectable today (C2), cured generically by a report defaulting to "unknown" (C3) and `EventStore`
+as the seam (C4). The typed runner, the ingest path from and into a holed store, and a decision model ran over CF-27's
+instrument and a raw SQLite `DELETE`. Four harms were found and every one fails C4: a checkpoint resumed on another
+store (#485, the typed checkpoint's), pruned foreign events resurrected by a re-pull (#483, the ingest path's), and a
+pruned own event wedging an edge with a false `UnheldOwnIdentity`, spoke and hub side (#484, the adapter's ingest and
+SY-38's wording). No reader met C1, C2 and C4 together, so ADR-0028's falsifier, a report that would have to be
+required, did not fire, and no provided method is added. Reopened by a reader meeting all four criteria; one failing
+only C3, because "unknown" cannot be its default, is ADR-0028's falsifier and goes to the owner. The floor stays
+rejected on this clause's grounds, below, and a third outcome on condition evaluation stays rejected with ES-40's
+MAY. A set of retained ranges is no longer a candidate shape: no report is added for it to describe.
 
 No port surface in 1.x reports held or unheld history, and none is owed in
 `0.4.0` (ADR-0028). If one arrives, its default MUST answer "unknown" and MUST
@@ -4912,9 +4912,9 @@ its neighbours are destroyed. A floor is the shape a prefix truncation has and
 precisely the shape this purge does not, and it ships looking correct until a claim
 runs long.
 
-- **Rule:** `a_store_reports_the_history_it_does_not_hold` **(new)**, if phase 14
-  adds the provided method. Otherwise the rules of ADR-0028's refusal, which are
-  the two ES-38 and ES-40 name, run against CF-27's instrument.
+- **Rule:** the rules of ADR-0028's refusal, ES-38's `positions_are_not_reused_after_removal` and ES-40's
+  `condition_over_removed_history_does_not_reject`, against CF-27's instrument and every fixture granting `REMOVAL`;
+  the provided method's rule is not written, because the experiment found no reader that needs it (ADR-0108).
 - **Cases:** E2E-46, E2E-47, E2E-56.
 - **Rejects:** shipping `earliest_position()` on the strength of the prune case,
   which is the path of least resistance and the one that looks correct in every
@@ -5150,7 +5150,7 @@ machinery named was the wrong one, and the next entry in this group deserves the
 same scepticism.
 
 **Blocked on a decision:** `reissued_batch_after_a_dropped_future_lands_once`
-(ES-24), `a_store_reports_the_history_it_does_not_hold` (ES-39),
+(ES-24), ~~a_store_reports_the_history_it_does_not_hold~~ (ES-39, refused by ADR-0108),
 `wire_condition_with_after_is_refused` (ES-29 and SY-6, and it lives in a crate
 that does not exist).
 
@@ -10489,11 +10489,11 @@ between them because its *shape* does not wait on a transport but its
 |---|---|---|---|---|---|---|
 | §2.1–§2.6 value types | `VT` | 36 | 32 | 3 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
-| §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
+| §3 `EventStore` | `ES` | 43 | 40 | 3 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
 | §5 `SyncPeer` | `SY` | 39 | 35 | 3 | 1 | 0 |
 | §6 conformance | `CF` | 43 | 38 | 2 | 2 | 1 |
-| **Total** | | **212** | **187** | **13** | **5** | **7** |
+| **Total** | | **212** | **188** | **13** | **4** | **7** |
 
 ### 7.2 The table
 
@@ -10597,7 +10597,7 @@ between them because its *shape* does not wait on a transport but its
 | ES-36 | FROZEN | `interleaved_appends_on_one_handle_elect_one_winner`, `a_live_read_stream_does… | E2E-09 |
 | ES-37 | FROZEN | *(none — see clause)* | E2E-48, E2E-49, E2E-46 |
 | ES-38 | FROZEN | `positions_are_not_reused_after_removal`, `removal_outside_the_port_removes_ex… | E2E-46, E2E-10 |
-| ES-39 | DEFERRED | `a_store_reports_the_history_it_does_not_hold` † | E2E-46, E2E-47, E2E-56 |
+| ES-39 | FROZEN | `positions_are_not_reused_after_removal`, `condition_over_removed_history_does… | E2E-46, E2E-47, E2E-56 |
 | ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` | E2E-47, E2E-56, E2E-44 |
 | ES-41 | FROZEN | `contains_event_id_reports_membership`, `contains_event_id_reports_a_held_row_… | E2E-32, E2E-34, E2E-36 |
 | ES-42 | FROZEN | compile-level — the erasure wrapper of ADR-0011's E11 compiles and round-trips… | *(none — see clause)* |

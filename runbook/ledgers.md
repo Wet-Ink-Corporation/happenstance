@@ -92,15 +92,15 @@ Three obligations, all mechanical to check, all previously answerable only by
 prose search — and the middle one previously not answerable at all, which is why
 phase 12's audit of it had nothing behind it.
 
-### The 5 `[DEFERRED]` clauses
+### The 4 `[DEFERRED]` clauses
 
-Sixteen rows are listed; eleven are struck. (Four until ADR-0027 settled SY-27 and
+Sixteen rows are listed; twelve are struck. (Four until ADR-0027 settled SY-27 and
 SY-28 at phase 13 and moved them to the provisional ledger below.) (This sentence said seventeen until
 phase 16 counted them.) Two were settled at phase 2 and their
 markers moved in the specification at phase 3; the third, CF-13, was settled at
 phase 3 by running the experiment its own marker named; the fourth, PS-33, was
 **demoted rather than settled** — §7.2 carries it as `NON-NORMATIVE`, so it is not
-a deferral at all any more. **Five remain**, since SY-27 and SY-28 left at phase 13, PS-18, PS-27 and PS-30 at phase 18 (ADR-0102), and SY-14 and SY-18 at phase 13's close (ADR-0107). The struck rows stay because a
+a deferral at all any more. **Four remain**, since SY-27 and SY-28 left at phase 13, PS-18, PS-27 and PS-30 at phase 18 (ADR-0102), SY-14 and SY-18 at phase 13's close (ADR-0107), and ES-39 at phase 14 (ADR-0108). The struck rows stay because a
 reader arriving from an older commit needs to find them, and because a table that
 quietly loses a row cannot be checked against anything.
 
@@ -113,7 +113,7 @@ they moved.
 | Clause | What it defers | Owning phase |
 |---|---|---|
 | ~~ES-6~~ | ~~`Error: Send + Sync`~~ | **settled at 2 — ADR-0009**, and `[FROZEN]` in the specification since phase 3 |
-| ES-39 | a store reporting history it does not hold | 14 |
+| ~~ES-39~~ | ~~a store reporting history it does not hold~~ | **frozen at 14 — [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md)**, as ADR-0028's refusal: `experiments/retention-reader` found no reader that needs a port report |
 | WF-1 | DCB wire interoperability | 13 |
 | ~~PS-33~~ | ~~evaluating ADR-0007's falsifier~~ | **demoted at §7.2 to `NON-NORMATIVE`**, and therefore not a deferral. It was a clause about this document's own work rather than about a store's behaviour |
 | ~~PS-35~~ | ~~one derivation ADR covering both ports~~ | **settled at 2 — ADR-0008**, and `[FROZEN]` in the specification since phase 3 |
@@ -133,7 +133,7 @@ Checked against `SPECIFICATION.md` §7.2's maturity column, and **the two sets a
 equal again as of the `0.2.0` release pass**. `cargo xtask spec-trace` counts
 **twelve** `[DEFERRED]` clauses — WF-1, ES-39, PS-18, PS-27, PS-30, SY-14, SY-18,
 SY-27, SY-28, SY-32, CF-14, CF-27 — and this table now lists exactly those twelve.
-(Ten since phase 13, when ADR-0027 moved SY-27 and SY-28 to `[PROVISIONAL]`, and five since ADR-0107 froze SY-14 and SY-18;
+(Ten since phase 13, when ADR-0027 moved SY-27 and SY-28 to `[PROVISIONAL]`, and five since ADR-0107 froze SY-14 and SY-18, and four since ADR-0108 froze ES-39;
 `cargo xtask lints` holds the heading to the live count.)
 
 Phase 9 read this and recorded the drift rather than repairing it, on the ground
@@ -276,7 +276,7 @@ rows will move every time a phase freezes a clause. CF-39 is not here: ADR-0066
 froze it. Nor is VT-10: ADR-0073 froze it at phase 17. Nor are ES-41 and PS-22:
 ADR-0028 froze both at phase 17. Nor are PS-9 and PS-11, which ADR-0074 froze at
 phase 17, nor PS-15, PS-23 and PS-24, which ADR-0075 froze at phase 17, nor ES-17, which
-ADR-0080 froze at phase 17, nor VT-14, which ADR-0089 froze at phase 17b, nor PS-39, which ADR-0094 froze at phase 17b, nor ES-7, which ADR-0092 froze at phase 17b. VT-30's row stays, struck: ADR-0096 froze it at phase 17b. PS-16, PS-18, PS-25, PS-27, PS-30, PS-38, SY-21 and CF-43's rows stay, struck: ADR-0102 froze them at phase 18. VT-6, VT-9, VT-21, VT-24, SY-14, SY-18, SY-20, SY-22, SY-23, SY-27, SY-28, SY-30, SY-31 and CF-40's rows stay, struck: ADR-0107 froze them at phase 13, and SY-36, SY-37, SY-38 and CF-42's, which its section 5 froze, and SY-39's, which its section 6 froze.
+ADR-0080 froze at phase 17, nor VT-14, which ADR-0089 froze at phase 17b, nor PS-39, which ADR-0094 froze at phase 17b, nor ES-7, which ADR-0092 froze at phase 17b. VT-30's row stays, struck: ADR-0096 froze it at phase 17b. PS-16, PS-18, PS-25, PS-27, PS-30, PS-38, SY-21 and CF-43's rows stay, struck: ADR-0102 froze them at phase 18. VT-6, VT-9, VT-21, VT-24, SY-14, SY-18, SY-20, SY-22, SY-23, SY-27, SY-28, SY-30, SY-31 and CF-40's rows stay, struck: ADR-0107 froze them at phase 13, and SY-36, SY-37, SY-38 and CF-42's, which its section 5 froze, and SY-39's, which its section 6 froze. ES-39's row stays, struck: ADR-0108 froze it at phase 14.
 
 **This is the schedule; the owner columns above are history.** Rule 4 keeps those
 rows, and most of them name phases long `done` — they record who owned a
@@ -313,7 +313,7 @@ replication needs no filtered or suffix store: SY-27 and SY-28 freeze on
 | WF-11 | renew-past-1.0: a workerd-class isolate must forward a payload another store accepted, at or above about 36.6 MB under a 128 MiB cap (peak is payload × 11/3) | `serialize_str` makes a human-readable encoder hold the whole payload. Phase 17's workerd job exists and runs every event-store rule under workerd and on a deployed object. It does not run the WF-11 memory probe, which is still `tests/wf11_memory_ceiling.rs` on the shim. The row wall it measured, 8,388,637 B deployed, bounds what a Durable Object stores, not what a peer must forward. Phase 13 confirms which encoding the sync transport uses |
 | ES-32 | renew-past-1.0: the `experiments/polling-cost` harness, re-run over a round-trip adapter with a stated staleness budget, shows 2N idle reads per interval breaking that budget at realistic N | A tail seam would be an added method, so renewing is additive. Phase 18's fan-out runner (PS-30) is the natural producer of the measurement |
 | ES-35 | renew-past-1.0: an adapter fixture arms a real fault against a real medium — a process killed mid-commit, a disk lying about fsync — and observes what survives | The marker's own fault falsifier. The reopen end is answered by four adapters. The fault end is unbuilt, and CF-39's armed faults do not build it: the Postgres, Neon and Cloudflare fixtures raise an in-store trigger that aborts a batch before it is acknowledged, while ES-35 is falsified only by a medium that loses a write after `append` returned `Ok`. `happenstance-postgres` killing a backend mid-commit is the cheapest candidate |
-| ES-39 | freeze-by-14 | Decided at 17 by ADR-0028: the refusal plus an additive reservation, so no trait change in `0.4.0`. Frozen at 14 against the CF-27 instrument, as the refusal or with a provided method defaulting to `Unknown`. If 14 slips past 1.0 the row may become renew-past-1.0, because firing it is additive |
+| ~~ES-39~~ | ~~freeze-by-14~~ | **frozen at 14 — [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md)**, as the refusal: the reader experiment's four harms (#483, #484, #485) each fail its seam criterion, so no provided method is added. ~~Decided at 17 by ADR-0028: the refusal plus an additive reservation, so no trait change in `0.4.0`. Frozen at 14 against the CF-27 instrument, as the refusal or with a provided method defaulting to `Unknown`. If 14 slips past 1.0 the row may become renew-past-1.0, because firing it is additive~~ |
 | ES-40 | freeze-by-14 | ADR-0028 kept the MAY and rejected a third outcome for 1.x, so nothing flips in `0.4.0`. Frozen with its rule at 14 against the CF-27 instrument |
 | PS-6 | renew-past-1.0: an adapter that must reserve server state at `begin` and cannot afford the round trip | The original falsifier fired at phase 10b on sqlx's `BEGIN` (ADR-0062) and the port absorbed it. Firing the residual would relax an adapter obligation, not change a signature |
 | ~~PS-16~~ | ~~freeze-by-18~~ | **frozen at 18 — ADR-0102.** Corrected at 18: no adapter clears with `TRUNCATE` (every SQL `probe_delete_all` is a `DELETE`), `happenstance-cloudflare` has no projection store, and the typed rebuild (#129) runs on SQLite only, so nothing here sits at that axis's far end. ~~A typed-runner rebuild through `reset` against a multi-table or graph read model, with the reset-refusal clause composed~~ |
