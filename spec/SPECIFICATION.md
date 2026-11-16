@@ -4866,17 +4866,17 @@ assigned, its remaining positions MUST remain unique and strictly monotonic, and
 
 **[FROZEN]**
 
-- **Rule:** `positions_are_not_reused_after_removal` **(new)** and the existing
-  rules re-run against the completeness fixture: a testkit-adjacent store that
-  deliberately holds only a scattered subset of its own log, so that a runner or
-  an ingest path written against it fails loudly rather than being accidentally
-  correct. That instrument does not exist and CLAUDE.md names no adapter for this
-  axis; it should. **The rule was examined at phase 4 and deliberately not
-  written**: it needs a store events can be removed from, `Fixture` declares no
-  such capability, and the instrument is CF-27's, which is `[DEFERRED]` with
-  nothing planned before phase 14. **Owner: phase 14.** A `[FROZEN]` marker binds
-  the design; it does not assert that anything checks it (ADR-0013, "What this
-  ADR leaves open").
+- **Rule:** `positions_are_not_reused_after_removal` (#151), run against CF-27's
+  instrument (`PrunedMemoryFixture` over `WithholdingStore`, where it passes by
+  delegation) and against every fixture that grants `Fixture::REMOVAL` (#147):
+  SQLite, Postgres, Neon, the Durable Object over the shim and under workerd. It
+  removes the tail and then everything, and requires each next append above every
+  position ever assigned, `head` to name a held event, and the removed identity to
+  stay unheld. It rejects `RowidReuseFixture`, the named wrong implementation (a
+  rowid table without `AUTOINCREMENT` reusing the deleted tail's highest rowid),
+  `SequenceHeadFixture` and `TruncatingWhenEmptyFixture`. It stands on the guard
+  `removal_outside_the_port_removes_exactly_the_named_events`. Amended by
+  [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) (#163): the phase 4 note that no capability existed is gone.
 - **Cases:** E2E-46, E2E-10.
 - **Rejects:** an adapter that renumbers on compaction — the obvious move for a
   device pruning to save space, and one that silently invalidates every checkpoint
@@ -7081,9 +7081,9 @@ port as an `Event`. The port supplies: the single-batch guarantee (SY-2), the
 that makes re-authorship a no-op.
 
 `[FROZEN]`
-Rule: `compensation_is_idempotent_under_redelivery` (new,
-`happenstance-sync-testkit`) — deliver a conflicting group twice; assert exactly
-one compensation exists.
+Rule: `dedupe_reaches_identity_without_decoding` (`happenstance-sync-testkit`, SY-12's, ingest family), repointed by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) from the never-written
+compensation_is_idempotent_under_redelivery: it delivers a group carrying a compensation twice and requires exactly one compensation held, the second delivery
+writing none, and it fails `RecompensatesOnRedelivery` in `tests/wrong_ingest_stores.rs`. The assertion this line stated is unchanged.
 Cases: E2E-33, E2E-39.
 
 *Rejects:* the adjudication seam as a trait method returning a domain type. A
@@ -7822,8 +7822,8 @@ over.**
 on `Delivered` as built at #98. Reopened if a convergent projection needs the local position
 for a reason other than ordering: name one that survives being given `EventId` plus the store's own checkpoint.
 Rule: `apply_is_handed_the_origin_identity_not_the_local_position`, and the `compile_fail,E0599`
-fences on `Delivered` and `ApplyFailure` beside their compiling controls; phase 13 adds
-`convergent_projection_cannot_observe_local_position` (`happenstance-sync-testkit`).
+fences on `Delivered` and `ApplyFailure` beside their compiling controls; and, since #457 (#478),
+`convergent_projection_cannot_observe_local_position` (`happenstance-sync-testkit`), which fails `RecordsItsCheckpoint` (ADR-0108).
 Cases: E2E-41.
 
 *Local*, because the other reading is false on its face.
@@ -8386,7 +8386,7 @@ door SY-1 did not close.
 It MUST NOT delete, rewrite or reorder a local event because a peer declined it.
 
 `[FROZEN]`
-Rule: `a_refused_spoke_retains_its_log` (new, `happenstance-sync-testkit`).
+Rule: `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` (`happenstance-sync`'s `tests/runner/main.rs`), repointed by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) from the never-written a_refused_spoke_retains_its_log (#465): the shipped `Edge` is refused a push and must leave the local log, the watermark and the pending count as they were, and park on the class. No wrong runner is built for it; a rollback runner fails its log assertion.
 Cases: E2E-45.
 
 *Rejects:* the assumption E2E-45 names as untested in the whole catalogue — that a
@@ -10061,7 +10061,7 @@ than it does.
 | Handle multiplicity | `EventStore` | far end | `SqliteFixture` opens a second `rusqlite::Connection` onto one file. A pool is still unbuilt |
 | Durability | `EventStore` | far end | `SqliteFixture` reopens a real file. The fault half is ES-35's, which is `[PROVISIONAL]` for it |
 | Durability | `ProjectionStore` | far end | `committed_rows_and_checkpoint_survive_a_reopen` (#422) drops every handle and reopens: `SqliteProjectionStore` passes it over a real file in the gate, both Postgres projection stores in `live-postgres`, and `NeonProjectionStore` in `live-neon`. The fault half is as unbuilt here as for `EventStore` |
-| Durability | `SyncPeer` | far end | `ack_never_confirms_a_non_durable_event` passes against three peers whose acknowledged state lives behind a server: `NeonSyncPeer` in `live-neon`, which keeps nothing in process but its HTTP client, the Postgres peer in `live-postgres`, and the Durable Object in `workerd`. The rule reconnects rather than reopens, because `SyncFixture` has no reopen capability yet, so a peer buffering in fixture-wide memory would still pass it (#448) |
+| Durability | `SyncPeer` | far end | `ack_never_confirms_a_non_durable_event` passes against three peers whose acknowledged state lives behind a server: `NeonSyncPeer` in `live-neon`, which keeps nothing in process but its HTTP client, the Postgres peer in `live-postgres`, and the Durable Object in `workerd`. Since #448 (#477) the rule reopens where `SyncFixture::REOPEN` is granted: the Postgres fixture closes its pool and reopens onto the same schema, and Neon's drops its transport and builds a fresh one, each of which must answer `Discarded` before a fresh handle reads back what was acknowledged. `BuffersAcrossHandles`, a peer acknowledging into fixture-wide memory, fails it there (`tests/wrong_reopens.rs`). The Durable Object's served fixture declines `REOPEN` in its own words and is reconnected, not reopened, so a buffering peer would still pass against a declining fixture: that is the stated cost of a declension, by D-448-4 in [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) |
 
 ---
 
@@ -10596,7 +10596,7 @@ between them because its *shape* does not wait on a transport but its
 | ES-35 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` | E2E-46 |
 | ES-36 | FROZEN | `interleaved_appends_on_one_handle_elect_one_winner`, `a_live_read_stream_does… | E2E-09 |
 | ES-37 | FROZEN | *(none — see clause)* | E2E-48, E2E-49, E2E-46 |
-| ES-38 | FROZEN | `positions_are_not_reused_after_removal` | E2E-46, E2E-10 |
+| ES-38 | FROZEN | `positions_are_not_reused_after_removal`, `removal_outside_the_port_removes_ex… | E2E-46, E2E-10 |
 | ES-39 | DEFERRED | `a_store_reports_the_history_it_does_not_hold` † | E2E-46, E2E-47, E2E-56 |
 | ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` | E2E-47, E2E-56, E2E-44 |
 | ES-41 | FROZEN | `contains_event_id_reports_membership`, `contains_event_id_reports_a_held_row_… | E2E-32, E2E-34, E2E-36 |
@@ -10653,7 +10653,7 @@ between them because its *shape* does not wait on a transport but its
 |---|---|---|---|
 | SY-1 | FROZEN | `ingest_never_rejects` | E2E-33, E2E-39, E2E-42, E2E-45, E2E-47 |
 | SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event` | E2E-39 |
-| SY-3 | FROZEN | `compensation_is_idempotent_under_redelivery` † | E2E-33, E2E-39 |
+| SY-3 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-39 |
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` | E2E-42 |
 | SY-6 | FROZEN | `wire_condition_with_after_is_refused` † | E2E-37, E2E-38, E2E-56, E2E-14 |
@@ -10684,7 +10684,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-31 | FROZEN | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
 | SY-32 | DEFERRED | `retention_gap_is_reported_not_silent` | E2E-44, E2E-46, E2E-47 |
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
-| SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |
+| SY-34 | FROZEN | `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` † | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
 | SY-36 | FROZEN | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
 | SY-37 | FROZEN | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |

@@ -68,9 +68,9 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
   `xtask/src/narrative.rs`, which the release commit does not touch. The CHANGELOG
   summary and trace carry the upgrade steps. Write the guide in a follow-up, or confirm
   the trace is enough for a release whose breaks are wire and schema rather than code.
-- SY-21's `convergent_projection_cannot_observe_local_position` was not written at phase
-  13: its Rule line says "phase 13 adds" it and `spec_trace.rs` still declares it
-  `Scheduled` for phase 13. Write it, or reschedule it with a follow-up issue.
+- SY-21's `convergent_projection_cannot_observe_local_position` was written in phase
+  14 (#457, #478) and its `Scheduled` entry left `spec_trace.rs`; ADR-0108 (#163, proposed)
+  rewords SY-21's Rule line, which said "phase 13 adds" it. D-457-2's reading is the owner's.
 - Ten `[FROZEN]` `SY` clauses name a † rule that exists nowhere in the tree (SY-3, SY-6,
   SY-9, SY-13, SY-16, SY-19, SY-26, SY-33, SY-34, SY-35), and `spec-trace`'s check 4 reads
   no sync suite, so nothing fails on it. A follow-up decides whether check 4 reads

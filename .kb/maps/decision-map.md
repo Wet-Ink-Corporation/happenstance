@@ -1014,6 +1014,18 @@ unchanged.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0106 | [`kb-decision-0106`](../decisions/0106-adr-0003-is-no-longer-provisional.md) | ADR-0003 is no longer provisional, because two unlike peers round-trip a payload byte for byte | accepted | 13 | — |
 
+## 2026-11-16: phase 14's clauses are frozen (#163), proposed
+
+ADR-0108 is written straight here with no intake step, and is **proposed**: every freeze in it is
+the owner's call, one commit each. Six clauses freeze (ES-39 as ADR-0028's refusal, ES-40, CF-27,
+SY-7, SY-10, VT-36). SY-32 moves to `[PROVISIONAL]` and keeps `freeze-by-14`, held for the CF-25
+acceptance in its section 3, which takes effect only on acceptance. ES-38's, SY-3's, SY-21's and
+SY-34's Rule lines and §6.5's Durability / `SyncPeer` cell are repaired. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0108 | [`kb-decision-0108`](../decisions/0108-phase-14s-clauses-are-frozen.md) | Phase 14's clauses are frozen, SY-32 is held for a CF-25 acceptance, and five frozen lines are repaired | proposed | 14 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it
