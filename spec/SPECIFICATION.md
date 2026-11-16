@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**192 `[FROZEN]`**, **10 `[PROVISIONAL]`**, **3 `[DEFERRED]`** and **seven
+**193 `[FROZEN]`**, **9 `[PROVISIONAL]`**, **3 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -1757,10 +1757,10 @@ ceiling MUST be at least its own tags-per-event ceiling, so that a split batch
 reaches one that lands, and MUST be reachable under its events-per-batch ceiling,
 or it refuses nothing. On the ingest path the batch is the call: every foreign event and every compensation of one `ingest` count together, and a refusal is `IngestError::ExceedsStoreLimit { limit: StoreLimit::TagsPerBatch, .. }`, which `happenstance-sync` classifies `Split`.
 
-`[PROVISIONAL — falsified by a store whose per-call wall is not a function of the
-tag count, so that no count says where it is; the instrument is
-happenstance-cloudflare, whose deployed wall moved between 524,288 and 1,040,384
-tag rows in one call]`
+`[FROZEN]` — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase 14. The strict deployed `workerd` leg runs the 262,144-tag branch of `append_reports_exceeded_store_limits` green, and the floor has met a sync
+ingest that splits on `TagsPerBatch`: `the_runner_splits_a_push_on_tags_per_batch_through_the_object` (#475) pushes two groups of 129 events of 1,024 tags (264,192) to the deployed object, the first push refused `413 Split` with the ingest's own text, then one group a push, both landing whole.
+Both green on the deployed leg of runs 43721323137 and 43746838635. Reopened by a store whose per-call wall is not a function of the tag count, so that no count says where it is;
+the instrument is happenstance-cloudflare, whose deployed wall moved between 524,288 and 1,040,384 tag rows in one call.
 `Rule:` `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit_names_its_floor` and
 `the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared ceiling to the whole ingest call: exactly at it lands, and one over, across groups or in the compensation alone, is refused as `TagsPerBatch`, `Split`, with nothing written
 `Cases:` E2E-35, E2E-42
@@ -10487,13 +10487,13 @@ between them because its *shape* does not wait on a transport but its
 
 | Section | Prefix | Clauses | `[FROZEN]` | `[PROVISIONAL]` | `[DEFERRED]` | `[NON-NORMATIVE]` |
 |---|---|---|---|---|---|---|
-| §2.1–§2.6 value types | `VT` | 36 | 32 | 3 | 0 | 1 |
+| §2.1–§2.6 value types | `VT` | 36 | 33 | 2 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
 | §5 `SyncPeer` | `SY` | 39 | 37 | 1 | 1 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **212** | **192** | **10** | **3** | **7** |
+| **Total** | | **212** | **193** | **9** | **3** | **7** |
 
 ### 7.2 The table
 
@@ -10536,7 +10536,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-33 | FROZEN | unit tests `a_borrowed_and_an_owned_tag_are_one_value`, `a_map_keyed_by_event_… | E2E-40, E2E-51 |
 | VT-34 | FROZEN | `read_from_is_inclusive` | *(none — see clause)* |
 | VT-35 | FROZEN | unit tests `projection_id_refuses_what_vt_14_refuses`, `projection_id_accepts_… | *(none — see clause)* |
-| VT-36 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit… | E2E-35, E2E-42 |
+| VT-36 | FROZEN | `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit… | E2E-35, E2E-42 |
 
 #### `WF` — wire format (§2.7)
 
