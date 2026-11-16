@@ -29,18 +29,18 @@ with programs you can run.
 > Still to come: a peer set above the single edge, and an `Exchange` over a
 > real network in a published crate. The adjudication hook SY-7 and SY-10
 > waited on is built (#450): `runner::Adjudicate`, mounted on an edge or a
-> `StoreSyncPeer`; their markers move in a change of their own. So is SY-32's
+> `StoreSyncPeer`, and ADR-0108 froze both on it. So is SY-32's
 > retention case (#158): a far side that has forgotten history an edge's token
 > has not reached refuses it with the fifth failure class, `Reseed`, and the
 > edge stops with `StopCause::RetentionGap` rather than converging on a subset
-> in silence. Its marker, too, moves in a change of its own.
+> in silence. ADR-0108 froze it, accepting that no real peer compacts yet.
 >
 > A `[FROZEN]` `SY` clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > binds this crate's semver as an `ES` clause binds `happenstance-core`'s.
-> Thirty-five of the thirty-nine `SY` clauses are `[FROZEN]`. SY-7, SY-10 and
-> SY-29 are `[PROVISIONAL]`, binding until the falsifier each names, and SY-32
-> is `[DEFERRED]` (ADR-0107). The version moves in lockstep with the rest of the
+> Thirty-eight of the thirty-nine `SY` clauses are `[FROZEN]`. SY-29 is
+> `[PROVISIONAL]`, binding until the falsifier it names (ADR-0107; ADR-0108
+> froze the rest at phase 14). The version moves in lockstep with the rest of the
 > workspace.
 
 ## Which stores implement the port

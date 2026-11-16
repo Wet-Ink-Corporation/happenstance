@@ -11,7 +11,7 @@
 //! The table is [`UNRESOLVABLE_RULE_NAMES`]'s sibling, not a second kind of
 //! thing, and every rule written there applies here: reconciled in all three
 //! directions on every run, so it can only shrink. It lives in its own file
-//! because `.kb` atoms cite `spec_trace.rs` by line, and twenty-one entries
+//! because `.kb` atoms cite `spec_trace.rs` by line, and twenty entries
 //! written into the parent's table would move every line those atoms cite
 //! below it.
 
@@ -57,34 +57,32 @@ pub(super) fn all_declarations()
         .chain(&SYNC_UNRESOLVABLE_RULE_NAMES)
 }
 
-/// The owner of the eight `[FROZEN]` clauses whose named rule nobody wrote. A
+/// The owner of the seven `[FROZEN]` clauses whose named rule nobody wrote. A
 /// keyword search over every `pub async fn` in the seven families found a
-/// differently named rule enforcing one of them, SY-3's, and its entry says
-/// which. #458 asks for each to be written or for its `Rule:` line to be
-/// repointed, and a repoint of a `[FROZEN]` line is a record's.
+/// differently named rule enforcing an eighth, SY-3's, and ADR-0108 repointed
+/// SY-3's `Rule:` line to it. #458 asks for each of the rest to be written or
+/// for its `Rule:` line to be repointed, and a repoint of a `[FROZEN]` line is
+/// a record's.
 const OWED_BY_458: &str = "#458's second half: written into `happenstance-sync-testkit`, or the \
-     `[FROZEN]` Rule line repointed by a record (#163's freeze ADR)";
+     `[FROZEN]` Rule line repointed by a record";
 
-/// SY-33's and SY-34's owner, which predates #458 and names both.
-const OWED_BY_465: &str = "#465: written at the runner level, or the `[FROZEN]` Rule line \
-     repointed at the runner tests by a record (#163's freeze ADR)";
+/// SY-33's owner, which predates #458. #465 named SY-34 too, and ADR-0108
+/// repointed SY-34's line at the runner test that holds it; no test anywhere
+/// varies a refusal with the receiver's log, so SY-33's stays unwritten.
+const OWED_BY_465: &str = "#465: written at the runner or peer level with a wrong peer whose \
+     refusal varies with its log, or the `[FROZEN]` Rule line repointed by a record";
 
 /// Every `(clause, rule)` pair an `SY` clause states and no resolution source
 /// can find, with the reason.
 ///
 /// The count in the type is written twice on purpose, as the parent table's is:
 /// a change to it is a change a reviewer should be made to see.
-pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 21] = [
+pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 20] = [
     // ---- Scheduled: nothing has written them -----------------------------
-    (
-        // Already enforced under another name: SY-12's
-        // `dedupe_reaches_identity_without_decoding` delivers the same batch
-        // twice and refuses a second compensation, which is SY-3's stated
-        // assertion. The candidate for #163's repoint, not a rule to duplicate.
-        "SY-3",
-        "compensation_is_idempotent_under_redelivery",
-        Unresolvable::Scheduled(OWED_BY_458),
-    ),
+    // SY-3's `compensation_is_idempotent_under_redelivery` left this table at
+    // ADR-0108, which repointed SY-3's line to SY-12's
+    // `dedupe_reaches_identity_without_decoding`: it delivers the same batch
+    // twice and refuses a second compensation, SY-3's stated assertion.
     (
         // ES-29 cites the same name from the store side and is declared with
         // the phase that lands the wire condition; this is the ingest side.
@@ -134,11 +132,6 @@ pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 21] 
         Unresolvable::Scheduled(OWED_BY_465),
     ),
     (
-        "SY-34",
-        "a_refused_spoke_retains_its_log",
-        Unresolvable::Scheduled(OWED_BY_465),
-    ),
-    (
         "SY-35",
         "the_sync_suite_never_decodes",
         Unresolvable::Scheduled(OWED_BY_458),
@@ -151,6 +144,14 @@ pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 21] 
         "SY-21",
         "apply_is_handed_the_origin_identity_not_the_local_position",
         Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
+    ),
+    (
+        // SY-34's line since ADR-0108 (#465): the refusal is the runner's to
+        // survive, and the store is never told of one, so the test holds the
+        // shipped `Edge` in `happenstance-sync`'s own runner tests.
+        "SY-34",
+        "a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class",
+        Unresolvable::Elsewhere("crates/happenstance-sync/tests/runner/main.rs"),
     ),
     (
         // A request count inside one `ingest` call, which no port method sees

@@ -204,6 +204,18 @@ not the same as what a user needed to be told.
 
 ### Changed
 
+- **Seven specification clauses are `[FROZEN]`** (#163,
+  [ADR-0108](.kb/decisions/0108-phase-14s-clauses-are-frozen.md), accepted
+  2026-11-16). No code changed. ES-39 freezes as the
+  refusal: the port does not report completeness, and a caller must not infer it
+  from any port value (`experiments/retention-reader`, #156); ES-40 (a condition
+  over removed history passes vacuously), CF-27 (the completeness instrument),
+  SY-7 and SY-10 (the adjudication hook, #450), and VT-36 (a runner `Split` on
+  `TagsPerBatch` through the deployed Durable Object, #475). From `1.0.0`,
+  loosening any of them is a major release. SY-32 (a retention gap is reported,
+  not silent) freezes too, with the record accepting that no real peer compacts yet. The rule
+  lines of ES-38, SY-3, SY-21 and SY-34 now name rules that exist.
+
 - `happenstance-sync-testkit`: `directional_merge_rules_compose` (SY-10) no
   longer plays a refused push in its hub-and-spoke walk, a check no store
   could fail: the store is never told of a refusal, and no port the runner

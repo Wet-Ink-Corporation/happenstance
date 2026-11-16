@@ -75,20 +75,20 @@ indistinguishable from a young one at every value in §2.
 - [x] Redaction (E2E-49). **Answered by ADR-0028**: a tag cannot be redacted
       through the port, and a crypto-shred of `data` moves no position.
 - [ ] #163 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-14` row
-      in [the 1.0 dispositions](../ledgers.md). All four are *decided* at phase 17,
+      in [the 1.0 dispositions](../ledgers.md). **Proposed 2026-11-16 as [ADR-0108](../../.kb/decisions/0108-phase-14s-clauses-are-frozen.md)**; each freeze is the owner's. All four are *decided* at phase 17,
       in ADR-0028, and *built and frozen* here against the suffix store:
       - **ES-39** — the rules of ADR-0028's written refusal (ES-38's and ES-40's),
-        or `a_store_reports_the_history_it_does_not_hold` if the reader experiment
+        or `a_store_reports_the_history_it_does_not_hold` if the reader experiment (verdict: refusal, #482; **frozen as the refusal**)
         adds the provided method. If this phase slips past 1.0, the row may become
         renew-past-1.0, because firing it is additive.
       - **ES-40** — frozen with its rule against the instrument. ADR-0028 kept the
-        *MAY admit*, so nothing flipped in `0.4.0`.
+        *MAY admit*, so nothing flipped in `0.4.0`. **Frozen** on #474; the completeness verdict reads adapter yes.
       - **SY-32** — the 120-day-offline case, with the instrument standing in for
         the compacted peer, against the floor ADR-0028 narrowed to resumability.
-        The marker's owner text was reconciled with the ledger at phase 17.
+        The marker's owner text was reconciled with the ledger at phase 17. **Held**: `[PROVISIONAL]`, `freeze-by-14`, pending ADR-0108 §3's CF-25 acceptance.
       - **CF-27** — the instrument itself, as a decorator over any `EventStore`
         run through the full suite, with the rule
-        `instrument_report_is_accurate_and_the_suite_cannot_tell`. If phase 13 built
+        `instrument_report_is_accurate_and_the_suite_cannot_tell` (**frozen**, #467). If phase 13 built
         the filtered-subset store for SY-27, this phase extends that one rather
         than writing a second. It did not: ADR-0027 (2026-10-14) took whole-log
         replication, so SY-27 no longer needs the instrument and this phase builds it
@@ -116,9 +116,9 @@ what it withholds.
       `condition_over_removed_history_does_not_reject` run against it and against
       every fixture that grants the removal capability, and ES-38's rule rejects
       its named wrong implementation.
-- [ ] ES-39, CF-27 and SY-32 are no longer `[DEFERRED]`.
-- [ ] Every `freeze-by-14` clause in [`ledgers.md`](../ledgers.md)'s 1.0
-      dispositions — ES-39, ES-40, SY-32 and CF-27 — is `[FROZEN]`, or
+- [x] ES-39, CF-27 and SY-32 are no longer `[DEFERRED]`. All three frozen by ADR-0108, accepted 2026-11-16.
+- [x] Every `freeze-by-14` clause in [`ledgers.md`](../ledgers.md)'s 1.0
+      dispositions — ES-39, ES-40, SY-32 and CF-27, and since ADR-0107 SY-7, SY-10 and VT-36 — is `[FROZEN]`, or
       re-dispositioned by a record that says why.
 - [ ] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
@@ -128,3 +128,15 @@ what it withholds.
 **Estimate.** 5 days.
 
 **Session log**
+
+- **2026-11-16** — #163: the phase's freeze, proposed as
+  [ADR-0108](../../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) on
+  `claude/project-thread-xxl8lr-163`, one commit per clause, held for the owner. Frozen: ES-39
+  (the refusal, on `experiments/retention-reader`'s verdict; harms #483, #484, #485 filed outside
+  `EventStore`), ES-40 (the completeness axis's verdict moved to adapter yes), CF-27, SY-7 and
+  SY-10 (#450's hook; #441 settled by #466), and VT-36 (deployed runs 43721323137 and
+  43746838635). SY-32 not frozen: its rule skips on every real peer and the CF-25 Completeness /
+  `SyncPeer` row needs an accepted record, which §3 offers. ES-38's, SY-3's, SY-21's and SY-34's
+  Rule lines and the Durability / `SyncPeer` ledger cell repaired; SY-33's left declared (#465).
+- **2026-11-16** — the owner accepted ADR-0108 as drafted (wi-a1a7b315fa), and SY-32 froze under
+  its §3 acceptance. Every `freeze-by-14` row is now discharged.

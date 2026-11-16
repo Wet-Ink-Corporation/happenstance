@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**187 `[FROZEN]`**, **13 `[PROVISIONAL]`**, **5 `[DEFERRED]`** and **seven
+**194 `[FROZEN]`**, **9 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -286,11 +286,11 @@ It is discharged three ways, and the split matters more than the total:
   waiting for. ES-10 is `[FROZEN]` as of phase 4, so its `[PROVISIONAL]` marker
   no longer carries the disclosure and ADR-0013's CF-25 acceptance carries it
   instead.
-- **Two `ES` clauses carry the residual exposure and say so in their own
-  markers** rather than in a preamble a reader skips: **ES-35** (durability) and
-  **ES-40** (completeness). Each is `[PROVISIONAL]` with its axis named and its
-  falsifier the far end that has not been built — for ES-40 that far end is still
-  an adapter; for ES-35 it is narrower since phase 8 built the adapter, and is now
+- **One `ES` clause carries the residual exposure and says so in its own
+  marker** rather than in a preamble a reader skips: **ES-35** (durability). ES-40
+  (completeness) was the second until ADR-0108 froze it at phase 14, when four real
+  adapters reached the far end through `Fixture::REMOVAL`. ES-35 is `[PROVISIONAL]` with
+  its axis named: its far end is narrower since phase 8 built the adapter, and is now
   a fixture that arms a real fault against a real medium. ES-10 was a fifth until
   phase 4 froze it, and ES-11 and ES-12 (transport) the third and fourth until
   phase 17: the one-shot-HTTP adapter at that axis's far end passes both through
@@ -401,9 +401,9 @@ unrelated crate wanted replication.
 
 | Port | Where it lives | What exists today | Maturity | What would freeze it |
 |---|---|---|---|---|
-| **`EventStore`** | `crates/happenstance-core/src/store.rs:151-331` | Four methods; 96 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; one — completeness — is empty at both ends, and transport was the second until phase 10b put `happenstance-neon` at its far end (ADR-0061), where it was the workspace's only adapter instrument to have *failed* a clause rather than passed one, until ADR-0087's fence made it pass. Two `ES` clauses hold the residual and are `[PROVISIONAL]` for it (ES-35, ES-40) — ES-10 was a fifth until phase 4 froze it, and ES-11 and ES-12 left at phase 17 (ADR-0087), and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
+| **`EventStore`** | `crates/happenstance-core/src/store.rs:151-331` | Four methods; 96 conformance rules; one reference implementation (`memory.rs:293`) and, since phase 8, one file-backed adapter passing the same suite (`happenstance-sqlite`) | **Frozen at 0.1**, conditional on CF-25 risk acceptance | Already frozen — §3. The exposure, stated precisely because phase 4's freeze cites this cell: §6.5's portfolio carries **seven axes and, at the freeze, no adapter instrument at any far end**; phase 8 put two at far ends this port sits on — durability's and handle multiplicity's, both through `SqliteFixture` — and nowhere else among them; the third it filled, batch shape's, belongs to `ProjectionStore` and is one-sided (§6.5). Four — async flavour, handle multiplicity, durability, position allocation — have a fixture instrument, which by CF-26 buys falsifiability and not implementability; one — completeness — was empty at both ends until phase 14's instrument and `Fixture::REMOVAL` put a fixture and four adapters there, and transport was the second until phase 10b put `happenstance-neon` at its far end (ADR-0061), where it was the workspace's only adapter instrument to have *failed* a clause rather than passed one, until ADR-0087's fence made it pass. One `ES` clause holds the residual and is `[PROVISIONAL]` for it (ES-35; ES-40 left at phase 14, ADR-0108) — ES-10 was a fifth until phase 4 froze it, and ES-11 and ES-12 left at phase 17 (ADR-0087), and position allocation moved from that list into ADR-0013's CF-25 acceptance rather than off the ledger; the other axes are accepted risk in the landing ADRs |
 | **`ProjectionStore`** | `crates/happenstance-core/src/projection.rs` | The trait, and six impls straddling the batch-shape axis — **none of them a skeleton any more** — owned write sets in `happenstance-sqlite`, `happenstance-neon`, `happenstance-postgres` and `happenstance-ladybug` (retired at phase 17 by ADR-0078 and outside the workspace, so five remain and four of them build), a live `sqlx` transaction in `happenstance-postgres`'s second store (`crates/happenstance-postgres/src/live_projection_store.rs`, ADR-0062), and a live borrowed handle in `live_handle.rs:174`. **The count of skeletons was two and is none**, and what changed between is the finding rather than the arithmetic. `PostgresProjectionStore` bound `type Batch = sqlx::Transaction<'static, Postgres>` and was cited in this cell as the owned-transaction shape; **that binding could not be discharged while `begin` was total, synchronous and infallible**, every route to a `sqlx` transaction being `async` and fallible — so `PostgresProjectionStore` became an owned buffered write set like the other three (`crates/happenstance-postgres/src/projection_store.rs:455-685`), and stayed one when ADR-0062 moved `begin`, because the buffered shape is the one a synchronous `Projection::apply` could drive; the live binding was discharged one module over instead. Five `todo!()` bodies type-checked against the old binding for a whole phase, which is this cell's own point about `!` arriving from the direction it did not expect: a body of `todo!()` proves a signature is nameable, and a *real* associated type does not prove it is inhabitable either. `NeonProjectionStore` carries real bodies throughout including its decoders (`crates/happenstance-neon/src/projection_store.rs:570-637`), `LiveHandleProjectionStore` in `begin`, `commit` and `rollback` with only `checkpoint` outstanding (`experiments/live-handle-projection-batch/live_handle.rs:187-223`), and `SqliteProjectionStore` in all four since phase 8 (`crates/happenstance-sqlite/src/projection_store.rs:707-870`). and `LadybugProjectionStore` in all four since phase 11 (`crates/happenstance-ladybug/src/projection_store.rs:808`). **Five of the six ran against the suite, and four still do since ADR-0078 retired the Ladybug adapter at phase 17** — `SqliteProjectionStore` since phase 8, `PostgresProjectionStore` and `NeonProjectionStore` since phase 10b, `LadybugProjectionStore` since phase 11, and `LivePostgresProjectionStore` since ADR-0062, each through `happenstance_testkit::projection_store_conformance!` against a real backing store; the last is the only one whose batch is a live transaction, and the only one on which PS-12's read-through rule has ever run rather than skipped. `LiveHandleProjectionStore` is the one that does not, and it is an experiment rather than an adapter | **Frozen** (ADR-0063); the `unstable-projection` feature survived on the contract crate as an empty name, so that `0.2.0` manifests resolved, until `0.4.0` removed it | PS-2, met: `CheckpointOnlyStore` fails the suite, and `LivePostgresProjectionStore` (`crates/happenstance-postgres/src/live_projection_store.rs`) passes it from the live-transaction end that the three buffered stores do not occupy |
-| **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Three ports in two flavours each — `SyncPeer` (`peer.rs:82`), `IngestStore` (`crates/happenstance-sync/src/ingest.rs:140`) and, since #420, `WriteGroupStore` (`crates/happenstance-sync/src/write_group.rs`) — a runner over one edge (`runner::Edge`, #244), a network peer's two halves (`StoreSyncPeer` and `serve_sync`, and `RemoteSyncPeer` over a caller's `Exchange`, #117; `SendPeer` for the `Send` flavour, #421), and a `memory` reference peer. **`sync_peer_conformance!` is green against four unlike peers**: `MemorySyncPeer`; a `StoreSyncPeer` over `happenstance-postgres` (`live-postgres`); `NeonSyncPeer`, one SQL request per pull and per push over one-shot HTTP with no interactive transaction (#131, `live-neon`); and a Durable Object serving `serve_sync` over HTTP (#130, `workerd`, local and deployed). A native SQLite store round-trips through the last three with payload bytes identical (ADR-0106). The two stand-in peers in the crate's own `tests/` are still the phase-2 sketch, built to be falsified by a type checker (`lib.rs:3-16`) | **Frozen at phase 13** (ADR-0107), its CF-25 ledger rows each discharged (§6.5) — 35 of 39 clauses `[FROZEN]`, 3 `[PROVISIONAL]` (SY-7, SY-10, SY-29) and 1 `[DEFERRED]` (SY-32) | Already frozen. SY-7 and SY-10 freeze at phase 14 once the runner's adjudication hook (#450) can fail them; SY-29 is renewed past 1.0 against the first scoped-replication proposal; SY-32 waits on phase 14's retention instrument |
+| **`SyncPeer`** | `crates/happenstance-sync/src/lib.rs` | Three ports in two flavours each — `SyncPeer` (`peer.rs:82`), `IngestStore` (`crates/happenstance-sync/src/ingest.rs:140`) and, since #420, `WriteGroupStore` (`crates/happenstance-sync/src/write_group.rs`) — a runner over one edge (`runner::Edge`, #244), a network peer's two halves (`StoreSyncPeer` and `serve_sync`, and `RemoteSyncPeer` over a caller's `Exchange`, #117; `SendPeer` for the `Send` flavour, #421), and a `memory` reference peer. **`sync_peer_conformance!` is green against four unlike peers**: `MemorySyncPeer`; a `StoreSyncPeer` over `happenstance-postgres` (`live-postgres`); `NeonSyncPeer`, one SQL request per pull and per push over one-shot HTTP with no interactive transaction (#131, `live-neon`); and a Durable Object serving `serve_sync` over HTTP (#130, `workerd`, local and deployed). A native SQLite store round-trips through the last three with payload bytes identical (ADR-0106). The two stand-in peers in the crate's own `tests/` are still the phase-2 sketch, built to be falsified by a type checker (`lib.rs:3-16`) | **Frozen at phase 13** (ADR-0107), its CF-25 ledger rows each discharged (§6.5) — 38 of 39 clauses `[FROZEN]` since ADR-0108 at phase 14, and 1 `[PROVISIONAL]` (SY-29) | Already frozen. SY-7 and SY-10 froze at phase 14 on the runner's adjudication hook (#450), and SY-32 on its retention rule with ADR-0108 §3's acceptance; SY-29 is renewed past 1.0 against the first scoped-replication proposal |
 
 The asymmetry is the point, and it has narrowed to one port. `EventStore` is
 frozen because it has evidence: ninety-six rules — each one shown to reject a
@@ -485,9 +485,9 @@ answer.
 - **Retention, deletion and completeness** (ES-39, CF-27). A store that has been
   deleted from is currently indistinguishable from a young one at every value in
   §2, and four of the six scenarios reach that from unrelated doors. ADR-0028
-  took the written refusal at phase 17. What stays open is whether a reader needs
-  a report, which could only arrive as a provided method, and phase 14's instrument
-  answers that.
+  took the written refusal at phase 17, and ADR-0108 froze ES-39 as that refusal at
+  phase 14: no reader the instrument ran needed a report, so none is added. Kept on
+  this list only so the citation resolves: it no longer moves.
 - **The scope of replication** (SY-27). Whole-log at 1.0 by ADR-0027, a slice is
   its own store, and scoped replication can only arrive later as an opt-in. SY-27 itself is `[FROZEN]` since ADR-0107; what may move is only that later opt-in (SY-29).
 - **A store-assigned time on `SequencedEvent`** (VT-9). Frozen at phase 13 by ADR-0107, and kept on this list only so the citation resolves: it no longer moves.
@@ -1757,10 +1757,10 @@ ceiling MUST be at least its own tags-per-event ceiling, so that a split batch
 reaches one that lands, and MUST be reachable under its events-per-batch ceiling,
 or it refuses nothing. On the ingest path the batch is the call: every foreign event and every compensation of one `ingest` count together, and a refusal is `IngestError::ExceedsStoreLimit { limit: StoreLimit::TagsPerBatch, .. }`, which `happenstance-sync` classifies `Split`.
 
-`[PROVISIONAL — falsified by a store whose per-call wall is not a function of the
-tag count, so that no count says where it is; the instrument is
-happenstance-cloudflare, whose deployed wall moved between 524,288 and 1,040,384
-tag rows in one call]`
+`[FROZEN]` — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase 14. The strict deployed `workerd` leg runs the 262,144-tag branch of `append_reports_exceeded_store_limits` green, and the floor has met a sync
+ingest that splits on `TagsPerBatch`: `the_runner_splits_a_push_on_tags_per_batch_through_the_object` (#475) pushes two groups of 129 events of 1,024 tags (264,192) to the deployed object, the first push refused `413 Split` with the ingest's own text, then one group a push, both landing whole.
+Both green on the deployed leg of runs 43721323137 and 43746838635. Reopened by a store whose per-call wall is not a function of the tag count, so that no count says where it is;
+the instrument is happenstance-cloudflare, whose deployed wall moved between 524,288 and 1,040,384 tag rows in one call.
 `Rule:` `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit_names_its_floor` and
 `the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared ceiling to the whole ingest call: exactly at it lands, and one over, across groups or in the compensation alone, is refused as `TagsPerBatch`, `Split`, with nothing written
 `Cases:` E2E-35, E2E-42
@@ -4866,17 +4866,17 @@ assigned, its remaining positions MUST remain unique and strictly monotonic, and
 
 **[FROZEN]**
 
-- **Rule:** `positions_are_not_reused_after_removal` **(new)** and the existing
-  rules re-run against the completeness fixture: a testkit-adjacent store that
-  deliberately holds only a scattered subset of its own log, so that a runner or
-  an ingest path written against it fails loudly rather than being accidentally
-  correct. That instrument does not exist and CLAUDE.md names no adapter for this
-  axis; it should. **The rule was examined at phase 4 and deliberately not
-  written**: it needs a store events can be removed from, `Fixture` declares no
-  such capability, and the instrument is CF-27's, which is `[DEFERRED]` with
-  nothing planned before phase 14. **Owner: phase 14.** A `[FROZEN]` marker binds
-  the design; it does not assert that anything checks it (ADR-0013, "What this
-  ADR leaves open").
+- **Rule:** `positions_are_not_reused_after_removal` (#151), run against CF-27's
+  instrument (`PrunedMemoryFixture` over `WithholdingStore`, where it passes by
+  delegation) and against every fixture that grants `Fixture::REMOVAL` (#147):
+  SQLite, Postgres, Neon, the Durable Object over the shim and under workerd. It
+  removes the tail and then everything, and requires each next append above every
+  position ever assigned, `head` to name a held event, and the removed identity to
+  stay unheld. It rejects `RowidReuseFixture`, the named wrong implementation (a
+  rowid table without `AUTOINCREMENT` reusing the deleted tail's highest rowid),
+  `SequenceHeadFixture` and `TruncatingWhenEmptyFixture`. It stands on the guard
+  `removal_outside_the_port_removes_exactly_the_named_events`. Amended by
+  [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) (#163): the phase 4 note that no capability existed is gone.
 - **Cases:** E2E-46, E2E-10.
 - **Rejects:** an adapter that renumbers on compaction — the obvious move for a
   device pruning to save space, and one that silently invalidates every checkpoint
@@ -4884,19 +4884,19 @@ assigned, its remaining positions MUST remain unique and strictly monotonic, and
 
 #### ES-39 — Whether a store can declare what it does not hold
 
-**[DEFERRED — settled at phase 14 by building CF-27's completeness instrument (a
-store holding a deliberately scattered subset of its own log), then writing an
-ingest path and a projection runner against it and recording whether either needs
-a port-level report. ADR-0028 has already fixed the surface class, so this
-experiment chooses only between two outcomes, both additive. Either the clause
-freezes as the refusal (the port does not report completeness, and a caller MUST
-NOT infer it from any port value), or it gains a provided `EventStore` method
-whose default answers "unknown". Two of the three primitives this marker used to
-list are gone. The floor (`earliest_position`) is rejected by ADR-0028 on this
-clause's own grounds, below. A third outcome on condition evaluation is rejected
-for 1.x with ES-40's MAY. A set of retained ranges survives only as a possible
-shape of that provided method's report. If phase 14 slips past 1.0 the clause may
-be renewed past it, because firing it is additive.]**
+**[FROZEN]** — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase 14, as ADR-0028 decision 9's refusal: **the port does not
+report completeness, and a caller MUST NOT infer it from any port value.** The experiment this marker named ran as
+`experiments/retention-reader/` (#156, #482), on criteria committed before any test: a reader needs a report only if it
+meets harm (C1), undetectable today (C2), cured generically by a report defaulting to "unknown" (C3) and `EventStore`
+as the seam (C4). The typed runner, the ingest path from and into a holed store, and a decision model ran over CF-27's
+instrument and a raw SQLite `DELETE`. Four harms were found and every one fails C4: a checkpoint resumed on another
+store (#485, the typed checkpoint's), pruned foreign events resurrected by a re-pull (#483, the ingest path's), and a
+pruned own event wedging an edge with a false `UnheldOwnIdentity`, spoke and hub side (#484, the adapter's ingest and
+SY-38's wording). No reader met C1, C2 and C4 together, so ADR-0028's falsifier, a report that would have to be
+required, did not fire, and no provided method is added. Reopened by a reader meeting all four criteria; one failing
+only C3, because "unknown" cannot be its default, is ADR-0028's falsifier and goes to the owner. The floor stays
+rejected on this clause's grounds, below, and a third outcome on condition evaluation stays rejected with ES-40's
+MAY. A set of retained ranges is no longer a candidate shape: no report is added for it to describe.
 
 No port surface in 1.x reports held or unheld history, and none is owed in
 `0.4.0` (ADR-0028). If one arrives, its default MUST answer "unknown" and MUST
@@ -4912,9 +4912,9 @@ its neighbours are destroyed. A floor is the shape a prefix truncation has and
 precisely the shape this purge does not, and it ships looking correct until a claim
 runs long.
 
-- **Rule:** `a_store_reports_the_history_it_does_not_hold` **(new)**, if phase 14
-  adds the provided method. Otherwise the rules of ADR-0028's refusal, which are
-  the two ES-38 and ES-40 name, run against CF-27's instrument.
+- **Rule:** the rules of ADR-0028's refusal, ES-38's `positions_are_not_reused_after_removal` and ES-40's
+  `condition_over_removed_history_does_not_reject`, against CF-27's instrument and every fixture granting `REMOVAL`;
+  the provided method's rule is not written, because the experiment found no reader that needs it (ADR-0108).
 - **Cases:** E2E-46, E2E-47, E2E-56.
 - **Rejects:** shipping `earliest_position()` on the strength of the prune case,
   which is the path of least resistance and the one that looks correct in every
@@ -4928,7 +4928,7 @@ is sound only where that store holds every event the condition's query ranges
 over. A store that has had matching history removed MAY admit an append that
 would have been rejected, and the contract MUST NOT imply otherwise.
 
-**[PROVISIONAL — axis: **completeness**, whose far end is unbuilt until phase 14 builds CF-27's instrument. A pruned store and a young store are the same value at every seam the port exposes, so this clause currently describes a hazard no test can stage. The clause's content is no longer on this axis: ADR-0028 decided the MAY, and it stands for 1.x. E2E-47's third outcome is rejected, because it would make an append admitted today fail, which is a behaviour break, and no adapter can see what was removed outside it. Only ADR-0028's own falsifier reopens that. What stays provisional is the rule's assertion. CF-27's instrument can supply it, by staging a condition over removed history and observing the vacuous pass, and cannot reopen the clause. The one observation at phase 14 that would still move this marker is an instrument that cannot stage the removal the rule needs, in which case the rule is renewed against a named instrument and the MAY is unchanged. Phase 14 supplies the rule and the freeze.]**
+**[FROZEN]** — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase 14, on `condition_over_removed_history_does_not_reject` (#154, #474). It proves the condition refuses while the matching event is held, removes the event outside the port, then requires the append to be admitted, and still refuses over survivors on either side of the hole. It fails `RememberingConditionFixture` (a soft delete), `FailClosedFixture` and `ConditionBlindFixture` in `crates/happenstance-testkit/tests/mutation_coverage/removed_history.rs`, and runs against CF-27's instrument and every fixture granting `Fixture::REMOVAL`: SQLite in the gate, Postgres in `live-postgres`, Neon in `live-neon` and the Durable Object under `workerd`, local, cold and deployed. The one observation this marker said would still move it, an instrument that cannot stage the removal, did not occur. **Axis: completeness.** This marker carried the axis for `EventStore` (ADR-0013 §7); §6.5 now discharges that row at the far end, because four real adapters hold a log with a scattered hole made by a raw `DELETE` outside the port and pass this rule and ES-38's over it. E2E-47's third outcome stays rejected for 1.x: it would make an append admitted today fail, which is a behaviour break, and no adapter can see what was removed outside it. Reopened only by ADR-0028's own falsifier; the MAY stands.
 
 `is_violated_by` is a pure predicate over events that still exist
 (`append.rs:239-253`) and has no third outcome. Where history is gone the
@@ -5150,7 +5150,7 @@ machinery named was the wrong one, and the next entry in this group deserves the
 same scepticism.
 
 **Blocked on a decision:** `reissued_batch_after_a_dropped_future_lands_once`
-(ES-24), `a_store_reports_the_history_it_does_not_hold` (ES-39),
+(ES-24), ~~a_store_reports_the_history_it_does_not_hold~~ (ES-39, refused by ADR-0108),
 `wire_condition_with_after_is_refused` (ES-29 and SY-6, and it lives in a crate
 that does not exist).
 
@@ -6906,7 +6906,7 @@ It was written before that code existed, and the clauses that depend on
 measurement rather than on argument are consequently `[DEFERRED]` against the
 phase that builds the port against two real peers — five of the thirty-seven,
 with a further eleven `[PROVISIONAL]` (three and thirteen since ADR-0027 settled SY-27
-and SY-28 without the experiment, and one of thirty-nine and three since ADR-0107 at phase 13's close: SY-32, and SY-7, SY-10 and SY-29). The rest are frozen, because the shape
+and SY-28 without the experiment, and one of thirty-nine and three since ADR-0107 at phase 13's close: SY-32, and SY-7, SY-10 and SY-29; and none and one since ADR-0108 at phase 14: SY-29, renewed past 1.0). The rest are frozen, because the shape
 does not wait on the transport. They are written anyway, and the reason is
 recorded in the decision ledger: `RUNBOOK.md:438-439` says deferring the
 sync port **"leaks `EventId` and a tail seam back into `EventStore`"**. That was a
@@ -7081,9 +7081,9 @@ port as an `Event`. The port supplies: the single-batch guarantee (SY-2), the
 that makes re-authorship a no-op.
 
 `[FROZEN]`
-Rule: `compensation_is_idempotent_under_redelivery` (new,
-`happenstance-sync-testkit`) — deliver a conflicting group twice; assert exactly
-one compensation exists.
+Rule: `dedupe_reaches_identity_without_decoding` (`happenstance-sync-testkit`, SY-12's, ingest family), repointed by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) from the never-written
+compensation_is_idempotent_under_redelivery: it delivers a group carrying a compensation twice and requires exactly one compensation held, the second delivery
+writing none, and it fails `RecompensatesOnRedelivery` in `tests/wrong_ingest_stores.rs`. The assertion this line stated is unchanged.
 Cases: E2E-33, E2E-39.
 
 *Rejects:* the adjudication seam as a trait method returning a domain type. A
@@ -7211,11 +7211,11 @@ a compensation for it.**
 A fact family is identified by tag key (SY-35). Assignment is runner
 configuration, not a property of the port.
 
-`[PROVISIONAL — falsified if a deployment exists in which two peers must both be
-able to adjudicate the same fact family and their compensations can be made
-convergent. Falsification test: two adjudicators for one family, disconnected
-from each other, each ingesting the same conflicting pair; assert the two logs
-converge after they meet. Renewed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md), with SY-10: `only_the_adjudicator_compensates` holds the store half and the falsification test ran with its divergence recorded (#136), but no runner authors a compensation, so the MUST that a non-adjudicator writes none cannot fail yet. The named experiment is the runner's adjudication hook, a follow-up to #244, mounting the rule; the marker moves then.]`
+`[FROZEN]` — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase 14, with SY-10, on the runner's adjudication hook (#450, #469), which ADR-0107 renewed it to wait for.
+`runner::Adjudicate` runs on both ingest sites, `Edge::with_adjudicator` on the pull and `StoreSyncPeer::with_adjudicator` behind `serve_sync_adjudicated` on the push,
+and `Accept`, which writes nothing, is the default everywhere. The store half is `only_the_adjudicator_compensates`; the runner half, that a non-adjudicator
+writes none, fails a `MiniEdge` that adjudicates under `Accept` while the shipped `Edge` passes. The falsification test ran and its divergence is recorded (#136).
+Reopened by its own falsifier: a deployment in which two peers must both adjudicate one fact family and their compensations can be made convergent.
 Rule: `only_the_adjudicator_compensates` (`happenstance-sync-testkit`, #136), in the
 ingest family: two stores take one conflicting pair in opposite orders, the rule plays
 the runner through the shipped hook (`runner::Adjudicate`, #450), mounting a seat rule on
@@ -7228,8 +7228,8 @@ after the two stores meet they hold the same events, and under two adjudicators 
 two reversals with two identities, reversing opposite claims, so no claim to the seat
 stands. The runner half, that a non-adjudicator writes none, is held by
 `happenstance-sync`'s `tests/runner/wrong_runners.rs`: the shipped `Edge` against a
-`MiniEdge` that adjudicates under `Accept` (#450). The marker stays provisional until
-its own change moves it, with SY-10's.
+`MiniEdge` that adjudicates under `Accept` (#450). ADR-0108 froze the marker at phase 14,
+with SY-10's.
 Cases: E2E-39, E2E-42, E2E-45.
 
 *Rejects:* every-peer-adjudicates, which is the reading SY-1 through SY-3 invite
@@ -7309,10 +7309,10 @@ store and gives neither of them a name for what the other is doing.
 **SY-10. Hub-and-spoke and peer-to-peer are both first-class. The runner MUST
 permit a different merge rule in each direction of one edge.**
 
-`[PROVISIONAL — falsified if a hub and a spoke can be shown to need the same
-merge rule in a deployment where the hub holds every log and the spoke holds
-one. Falsification test: implement the hub's rule on a spoke and show the spoke's
-projections stay correct. Renewed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md), with SY-7: `directional_merge_rules_compose` (#137) fails `AdjudicatesOnIngest`, but `runner::Edge`'s pull always accepts, so a hub that drives its own edge toward a spoke cannot adjudicate what it pulls. The named experiment is the adjudication hook mounting the rule, after #441's decorative refused-push check is settled.]`
+`[FROZEN]` — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase 14, with SY-7. `directional_merge_rules_compose` (#137) mounts its merge rules through the shipped hook (#450) and fails
+`AdjudicatesOnIngest`; a hub driving its own edge now adjudicates what it pulls (`a_hub_driven_edge_adjudicates_what_it_pulls`), so the per-direction rule holds whichever side drives,
+`tests/runner/directions.rs` walks both topologies through one `Edge` with no role parameter, and `wrong_runners.rs` fails a runner that adjudicates its own push. #441 is settled: #466 removed the refused-push check no store could fail.
+Reopened by its own falsifier: a hub and a spoke shown to need the same merge rule where the hub holds every log and the spoke holds one; the test is the hub's rule implemented on a spoke with the spoke's projections still correct.
 Rule: `directional_merge_rules_compose` (`happenstance-sync-testkit`, #137, ingest family), its merge rules mounted through the shipped hook (#450); the runner half, a rule judging only the ingest site it is mounted on, is `happenstance-sync`'s `tests/runner/wrong_runners.rs`.
 Cases: E2E-42, E2E-44, E2E-45.
 
@@ -7822,8 +7822,8 @@ over.**
 on `Delivered` as built at #98. Reopened if a convergent projection needs the local position
 for a reason other than ordering: name one that survives being given `EventId` plus the store's own checkpoint.
 Rule: `apply_is_handed_the_origin_identity_not_the_local_position`, and the `compile_fail,E0599`
-fences on `Delivered` and `ApplyFailure` beside their compiling controls; phase 13 adds
-`convergent_projection_cannot_observe_local_position` (`happenstance-sync-testkit`).
+fences on `Delivered` and `ApplyFailure` beside their compiling controls; and, since #457 (#478),
+`convergent_projection_cannot_observe_local_position` (`happenstance-sync-testkit`), which fails `RecordsItsCheckpoint` (ADR-0108).
 Cases: E2E-41.
 
 *Local*, because the other reading is false on its face.
@@ -8324,15 +8324,15 @@ shape for it. ES-39's objection to floors is about completeness. A scattered
 purge on a peer makes it a deleted-from store under ES-38 and ES-40, and SY-32
 does not report that in 1.x.
 
-`[DEFERRED — settled at phase 14 by building the retention case: a peer offline
-for 120 days against a 90-day compaction window, with CF-27's completeness
-instrument (E2E-CASES.md:1679-1684) standing in for the compacted peer. The
-experiment is whether the scalar resume floor, `PeerLimits::retention_floor`,
-detects the offline-too-long peer. ADR-0028 has already decided that the floor
-does not have to describe a scattered purge, which E2E-46 shows no floor can.
-Owning phase: 14, which builds the instrument, and phase 13's two peer adapters
-if it lands first. That reconciles the owner this marker named before phase 16
-(the phase that builds the peers) with the ledger's `freeze-by-14`. Confirmed at phase 13 by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md): neither of phase 13's peers built the instrument, every shipped peer declares `retention_floor: None` and the runner reads none, so the experiment stays phase 14's (#158, #163).]`
+`[FROZEN]` — by ADR-0108 at phase 14. Reopened by a real peer that forgets a prefix of its log, grants `SyncFixture::COMPACTION`, and either cannot state the floor
+it can still resume from or lets a token below it converge on a subset in silence; the experiment is `retention_gap_is_reported_not_silent` mounted on that peer.
+Frozen at phase 14 by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md), because the experiment this marker named ran (#158, #473): a peer 120 days offline against a
+90-day window is refused `FailureClass::Reseed` and its edge stops with `StopCause::RetentionGap`, its log untouched, while a 60-day peer converges, and seven
+wrong peers in `tests/wrong_retention.rs` fail the rule, one of them answering the 120-day peer with a silent subset. It ran on `MemorySyncPeer`'s own compaction,
+not on CF-27's instrument, and every real peer (Neon, the Postgres `StoreSyncPeer`, the Durable Object) declines `COMPACTION` and declares `retention_floor: None`, so the rule skips on all of them.
+This clause carries §6.5's completeness row for `SyncPeer`, a frozen port, with no adapter at that row's far end; ADR-0108's section 3, accepted on 2026-11-16, accepts the axis for this port by name, retired when a real peer grants `COMPACTION` and passes the rule.
+The floor still means resumability, not completeness (ADR-0028), and the harms a pruned replica causes (#483, #484) are the ingest path's.
+Owning phase: 14.
 Rule: `retention_gap_is_reported_not_silent` (#158,
 `happenstance-sync-testkit`).
 Cases: E2E-44, E2E-46, E2E-47.
@@ -8386,7 +8386,7 @@ door SY-1 did not close.
 It MUST NOT delete, rewrite or reorder a local event because a peer declined it.
 
 `[FROZEN]`
-Rule: `a_refused_spoke_retains_its_log` (new, `happenstance-sync-testkit`).
+Rule: `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` (`happenstance-sync`'s `tests/runner/main.rs`), repointed by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) from the never-written a_refused_spoke_retains_its_log (#465): the shipped `Edge` is refused a push and must leave the local log, the watermark and the pending count as they were, and park on the class. No wrong runner is built for it; a rollback runner fails its log assertion.
 Cases: E2E-45.
 
 *Rejects:* the assumption E2E-45 names as untested in the whole catalogue — that a
@@ -9866,13 +9866,13 @@ measurement, and PRESSURE-TEST.md:662-666 is right that it is owed one.
 **CF-27.** The workspace MUST hold a **completeness instrument**: a
 testkit-adjacent store that deliberately holds only a suffix, or an arbitrary
 retained subset, of its own log, and reports what it withholds through its own
-inherent API, never through an `EventStore` method. `[DEFERRED — settled at phase
-14 (SY-27 no longer needs it first: ADR-0027 took whole-log), by building it as a decorator over any
-`EventStore` and running the full suite against it. The outcome that matters is
-the list of rules that pass, which is the list of rules that cannot tell a pruned
-store from a young one. The decision this marker waited on,
-E2E-CASES.md:1663-1669's eleventh open decision, is taken: ADR-0028 chose the
-written refusal, so the report shape is instrument-local and not a port surface.]`
+inherent API, never through an `EventStore` method. `[FROZEN]` — by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) at phase
+14, on `WithholdingStore` (#144, #467), a decorator over any `EventStore` holding a suffix or a scattered retained set, built as this marker asked
+and run through the event-store, concurrency and model families with its pass list recorded; three wrong instruments fail its rule (a range report,
+a last-call-only report, leaky membership). Recorded limit: it masks ingest-side harms (`experiments/retention-reader`'s controls), so an ingest
+claim needs `Fixture::REMOVAL`, not the decorator. Reopened by an instrument whose report misstates what it withholds while the suite passes,
+or by a suite rule that can tell a holed log from a young one. The decision this marker waited on,
+E2E-CASES.md:1663-1669's eleventh open decision, was taken by ADR-0028: the report shape is instrument-local, not a port surface.
 [ADR-0028](../.kb/decisions/0028-what-a-store-may-forget.md) widens the instrument
 from a suffix to an arbitrary retained set, because a suffix-only instrument
 cannot falsify the floor that ES-39 rejects. It also names a `Fixture`
@@ -9942,7 +9942,7 @@ E2E-09's re-entrancy question, which `MemoryEventStore` cannot:
 | **Transport** | In-process, a handle held across awaits — `MemoryEventStore`, rusqlite | One-shot HTTP: no connection, no interactive transaction, no cursor | **Adapter yes, since phase 10b, and the far end answered.** This cell read *"**No.** `happenstance-neon` is a phase-2 skeleton, which falsifies a signature and is not a far end"* until ADR-0061. `happenstance-neon` is now a real adapter run against a live endpoint — no connection, no interactive transaction, no cursor — and it was the only far end in this portfolio to have **failed** a clause rather than passed one: `read_result_is_stable_under_concurrent_append` went red intermittently, and ADR-0061 carried the finding. ADR-0087's read-settlement fence is what it passes with since, for operations sharing one transport, and ES-11 and ES-12 are frozen on that record. That is the axis doing its job, twice. A skeleton could not have produced it, which is the difference this column exists to record | Adapter — **done** |
 | **Async flavour** | `Send` — `impl SendEventStore for MemoryEventStore` (`memory.rs:293`) | `!Send`: `Rc`-shared, single-threaded, futures that are not `Send` | **Fixture yes, adapter yes.** `LocalMemoryEventStore` passes the suite natively and on `wasm32` (CF-28 satisfied, ADR-0008). Since phase 9 `happenstance-cloudflare`, a real `!Send` adapter, runs the event-store suite under `workerd`, and since #130 the Durable Object runs the sync peer suite there as a `RemoteSyncPeer` whose every exchange is a `worker::Request` answered over the `Rc`-shared `CloudflareIngestStore`, both in CI's `workerd` job. Nothing `!Send` implements `ProjectionStore`. This lead read *fixture yes, adapter no*, with "no real `!Send` adapter until phase 9", until #125 | Fixture (CF-28) — **done**; the Cloudflare adapter — **done** for `EventStore` and `SyncPeer` |
 | **Batch shape** (`ProjectionStore`) | A live transaction held across awaits — `LiveHandleProjectionStore` binds a borrowed `GraphWriteHandle<'a>` on the **`Send`** flavour with real bodies (`experiments/live-handle-projection-batch/live_handle.rs:174-223`); `PostgresProjectionStore` binds `Transaction<'static, Postgres>` | A deferred write set buffered and replayed in one call at commit — `SqliteBatch`, `NeonWriteBatch`, `GraphWriteSet` (the last retired with its crate at phase 17, ADR-0078) | **Far end adapter yes, near end no — and the suite that was missing now exists.** Five impls, of which two are `todo!()` throughout — `LadybugProjectionStore` and `PostgresProjectionStore`. `NeonProjectionStore` is real in all four methods, `LiveHandleProjectionStore` in all but `checkpoint`, and since phase 8 `SqliteProjectionStore` is real in **all four**, `begin` through `rollback` (`crates/happenstance-sqlite/src/projection_store.rs:707-870`). It is also the one that runs against something: `crates/happenstance-sqlite/tests/projection.rs` mounts `happenstance_testkit::projection_store_conformance!` against a real temporary file and passes it, so this far end carries a real adapter and not only a shape (`references/adapter-shapes.md:297`). What is empty is the **near** end — nothing holds a live transaction across an await and has run anything — and no rusqlite adapter can take it on the `Send` flavour, because `rusqlite::Transaction<'_>` is itself `!Send` and `commit` is rejected on the batch **parameter** even where the store is wrapped to be `Sync` (`crates/happenstance-sqlite/src/projection_store.rs:19-43`) | A live-transaction adapter at the near end. The projection conformance suite — what this cell used to ask for — landed at phase 8 |
-| **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **Fixture yes, adapter no.** This lead read *No. Planned for phase 14* until #144 (CF-27; ADR-0027's whole-log answer took SY-27 off it). ADR-0028 fixed its report as instrument-local, not a port surface. `WithholdingStore` in the testkit is the fixture: a decorator over any `EventStore` holding a suffix or a scattered retained set, run against the whole suite with its pass list recorded in `crates/happenstance-testkit/tests/completeness_instrument/pass_list.txt`. No adapter removes events outside the port yet | Fixture first; a device adapter second |
+| **Completeness** | A store holding its whole log — everything, everywhere | A store holding only a suffix, or a log with a scattered hole | **Fixture yes, adapter yes.** This lead read *No. Planned for phase 14* until #144 (CF-27; ADR-0027's whole-log answer took SY-27 off it), and *Fixture yes, adapter no* until ADR-0108. ADR-0028 fixed its report as instrument-local, not a port surface. `WithholdingStore` in the testkit is the fixture: a decorator over any `EventStore` holding a suffix or a scattered retained set, run against the whole suite with its pass list recorded in `crates/happenstance-testkit/tests/completeness_instrument/pass_list.txt`. Since #147 the SQLite, Postgres, Neon and Durable Object adapters hold a scattered hole too, made by a raw `DELETE` through `Fixture::REMOVAL`, and pass ES-38's and ES-40's rules over it (#474) | Fixture first; a device adapter second |
 | **Handle multiplicity** | One handle at a time — what every rule needed before CF-16, and what a rule could not ask past, because a factory call could not say whether it bought isolation or sharing | Two or more handles onto one backing store, concurrent | **Fixture yes, adapter yes — pooling still empty.** `Fixture::connect` (CF-16) is the seam; `MemoryFixture` and `LocalFixture` both declare `SECOND_HANDLE` supported, `two_handles_observe_each_others_appends` (CF-19) runs against both, and `CachedHeadFixture` in the testkit's `tests/` fails it. All three hand out refcount clones of one in-process object. Since phase 8 `SqliteFixture` does not: `connect` opens **another `rusqlite::Connection` onto the same file** (`crates/happenstance-sqlite/tests/support/mod.rs:208`), and `connect_many` races up to 64 of them through the concurrency family (`crates/happenstance-testkit/src/concurrency.rs:1349`). What is still unbuilt is a **pool** — handles a store draws from and returns rather than owns — and cross-*process* handles | Fixture (CF-16) — **done**; file-backed second connection — **done**; then a pool-backed adapter |
 | **Durability** | Volatile — `MemoryEventStore` is a `Vec` behind an `RwLock`, and it declines `REOPEN` saying exactly that | Survives a reopen: an acknowledged write is visible to a handle that kept none of the old one's process state | **Fixture yes, adapter yes — fault far end still empty.** Expressible since CF-17: `DurableFixture` supplies `REOPEN`, `acknowledged_writes_survive_a_reopen` runs against it, and `LosingFixture` beside it fails. Since phase 8 `SqliteFixture` supplies it over a **real file**, and `RestampingFixture` is the second failing control — the one that reaches `recorded_time_survives_a_reopen`'s headline assertion instead of dying at its survival anchor. Nothing yet loses a write to a *fault* rather than to an instruction | Fixture (CF-17) — **done**; file-backed adapter — **done**; then a fixture that arms a real fault |
 
@@ -10056,12 +10056,12 @@ than it does.
 | Async flavour | `ProjectionStore` | ADR-0103 | Accepted by name on 2026-11-08: no `!Send` projection adapter exists or is planned before 1.0, and `trait_variant` derives the `Send` flavour as for `EventStore`. A `!Send` projection adapter passing the suite retires it. The verdict's *adapter yes* is an event-store and sync adapter, so `far end` here would be pro forma, and the check cannot tell |
 | Async flavour | `SyncPeer` | far end | The Durable Object passes `sync_peer_conformance!` under `workerd`, locally and deployed, as a `!Send` `RemoteSyncPeer` over `CloudflareIngestStore` (`harness/workerd/src/sync_peer.rs`, CI's `workerd` job, #130). The `Send` flavour, `SendSyncPeer`, is `trait_variant`'s, and `SendPeer` puts the shipped peers on it (#421) |
 | Batch shape | `ProjectionStore` | far end | The replay-at-commit adapters pass. The live-transaction end is `LivePostgresProjectionStore` (ADR-0062); the verdict's *near end no* predates it, and the check does not read the near end |
-| Completeness | `EventStore` | carried by ES-40 | Carried, not accepted: ADR-0013 left this axis to ES-40's marker. Freezing ES-40 fails this row |
-| Completeness | `SyncPeer` | carried by SY-32 | SY-32 is `[DEFERRED]` to phase 14, which builds CF-27's completeness instrument |
+| Completeness | `EventStore` | far end | SQLite in the gate, Postgres and Neon in their live jobs and the Durable Object under `workerd` remove rows outside the port through `Fixture::REMOVAL` and pass `positions_are_not_reused_after_removal` and `condition_over_removed_history_does_not_reject` over the holed log (#147, #474). It was carried by ES-40 until [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) froze it |
+| Completeness | `SyncPeer` | ADR-0108 | SY-32 is `[FROZEN]` under [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) §3, accepted 2026-11-16: its rule runs on `MemorySyncPeer`'s compaction, and every real peer declines `SyncFixture::COMPACTION`, so no peer adapter sits at this port's far end. The axis's *adapter yes* is `EventStore`'s, and `far end` here would be pro forma, so §3 accepts the axis for this port by name, retired when a real peer grants `COMPACTION` and passes the rule |
 | Handle multiplicity | `EventStore` | far end | `SqliteFixture` opens a second `rusqlite::Connection` onto one file. A pool is still unbuilt |
 | Durability | `EventStore` | far end | `SqliteFixture` reopens a real file. The fault half is ES-35's, which is `[PROVISIONAL]` for it |
 | Durability | `ProjectionStore` | far end | `committed_rows_and_checkpoint_survive_a_reopen` (#422) drops every handle and reopens: `SqliteProjectionStore` passes it over a real file in the gate, both Postgres projection stores in `live-postgres`, and `NeonProjectionStore` in `live-neon`. The fault half is as unbuilt here as for `EventStore` |
-| Durability | `SyncPeer` | far end | `ack_never_confirms_a_non_durable_event` passes against three peers whose acknowledged state lives behind a server: `NeonSyncPeer` in `live-neon`, which keeps nothing in process but its HTTP client, the Postgres peer in `live-postgres`, and the Durable Object in `workerd`. The rule reconnects rather than reopens, because `SyncFixture` has no reopen capability yet, so a peer buffering in fixture-wide memory would still pass it (#448) |
+| Durability | `SyncPeer` | far end | `ack_never_confirms_a_non_durable_event` passes against three peers whose acknowledged state lives behind a server: `NeonSyncPeer` in `live-neon`, which keeps nothing in process but its HTTP client, the Postgres peer in `live-postgres`, and the Durable Object in `workerd`. Since #448 (#477) the rule reopens where `SyncFixture::REOPEN` is granted: the Postgres fixture closes its pool and reopens onto the same schema, and Neon's drops its transport and builds a fresh one, each of which must answer `Discarded` before a fresh handle reads back what was acknowledged. `BuffersAcrossHandles`, a peer acknowledging into fixture-wide memory, fails it there (`tests/wrong_reopens.rs`). The Durable Object's served fixture declines `REOPEN` in its own words and is reconnected, not reopened, so a buffering peer would still pass against a declining fixture: that is the stated cost of a declension, by D-448-4 in [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) |
 
 ---
 
@@ -10487,13 +10487,13 @@ between them because its *shape* does not wait on a transport but its
 
 | Section | Prefix | Clauses | `[FROZEN]` | `[PROVISIONAL]` | `[DEFERRED]` | `[NON-NORMATIVE]` |
 |---|---|---|---|---|---|---|
-| §2.1–§2.6 value types | `VT` | 36 | 32 | 3 | 0 | 1 |
+| §2.1–§2.6 value types | `VT` | 36 | 33 | 2 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
-| §3 `EventStore` | `ES` | 43 | 39 | 3 | 1 | 0 |
+| §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 39 | 35 | 3 | 1 | 0 |
-| §6 conformance | `CF` | 43 | 38 | 2 | 2 | 1 |
-| **Total** | | **212** | **187** | **13** | **5** | **7** |
+| §5 `SyncPeer` | `SY` | 39 | 38 | 1 | 0 | 0 |
+| §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
+| **Total** | | **212** | **194** | **9** | **2** | **7** |
 
 ### 7.2 The table
 
@@ -10536,7 +10536,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-33 | FROZEN | unit tests `a_borrowed_and_an_owned_tag_are_one_value`, `a_map_keyed_by_event_… | E2E-40, E2E-51 |
 | VT-34 | FROZEN | `read_from_is_inclusive` | *(none — see clause)* |
 | VT-35 | FROZEN | unit tests `projection_id_refuses_what_vt_14_refuses`, `projection_id_accepts_… | *(none — see clause)* |
-| VT-36 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit… | E2E-35, E2E-42 |
+| VT-36 | FROZEN | `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit… | E2E-35, E2E-42 |
 
 #### `WF` — wire format (§2.7)
 
@@ -10596,9 +10596,9 @@ between them because its *shape* does not wait on a transport but its
 | ES-35 | PROVISIONAL | `acknowledged_writes_survive_a_reopen` | E2E-46 |
 | ES-36 | FROZEN | `interleaved_appends_on_one_handle_elect_one_winner`, `a_live_read_stream_does… | E2E-09 |
 | ES-37 | FROZEN | *(none — see clause)* | E2E-48, E2E-49, E2E-46 |
-| ES-38 | FROZEN | `positions_are_not_reused_after_removal` | E2E-46, E2E-10 |
-| ES-39 | DEFERRED | `a_store_reports_the_history_it_does_not_hold` † | E2E-46, E2E-47, E2E-56 |
-| ES-40 | PROVISIONAL | `condition_over_removed_history_does_not_reject` | E2E-47, E2E-56, E2E-44 |
+| ES-38 | FROZEN | `positions_are_not_reused_after_removal`, `removal_outside_the_port_removes_ex… | E2E-46, E2E-10 |
+| ES-39 | FROZEN | `positions_are_not_reused_after_removal`, `condition_over_removed_history_does… | E2E-46, E2E-47, E2E-56 |
+| ES-40 | FROZEN | `condition_over_removed_history_does_not_reject` | E2E-47, E2E-56, E2E-44 |
 | ES-41 | FROZEN | `contains_event_id_reports_membership`, `contains_event_id_reports_a_held_row_… | E2E-32, E2E-34, E2E-36 |
 | ES-42 | FROZEN | compile-level — the erasure wrapper of ADR-0011's E11 compiles and round-trips… | *(none — see clause)* |
 | ES-43 | FROZEN | `a_busy_append_left_nothing_behind`, `positions_are_unique_under_concurrent_ap… | E2E-08, E2E-07 |
@@ -10653,14 +10653,14 @@ between them because its *shape* does not wait on a transport but its
 |---|---|---|---|
 | SY-1 | FROZEN | `ingest_never_rejects` | E2E-33, E2E-39, E2E-42, E2E-45, E2E-47 |
 | SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event` | E2E-39 |
-| SY-3 | FROZEN | `compensation_is_idempotent_under_redelivery` † | E2E-33, E2E-39 |
+| SY-3 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-39 |
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` | E2E-42 |
 | SY-6 | FROZEN | `wire_condition_with_after_is_refused` † | E2E-37, E2E-38, E2E-56, E2E-14 |
-| SY-7 | PROVISIONAL | `only_the_adjudicator_compensates` | E2E-39, E2E-42, E2E-45 |
+| SY-7 | FROZEN | `only_the_adjudicator_compensates` | E2E-39, E2E-42, E2E-45 |
 | SY-8 | FROZEN | the whole of `happenstance-sync-testkit` — every rule in it takes exactly one … | E2E-33, E2E-35, E2E-36, E2E-42 |
 | SY-9 | FROZEN | `one_adapter_serves_both_roles` † | E2E-42, E2E-45 |
-| SY-10 | PROVISIONAL | `directional_merge_rules_compose` | E2E-42, E2E-44, E2E-45 |
+| SY-10 | FROZEN | `directional_merge_rules_compose` | E2E-42, E2E-44, E2E-45 |
 | SY-11 | FROZEN | `redelivery_of_an_accepted_group_is_a_no_op` | E2E-33, E2E-34, E2E-36 |
 | SY-12 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-34, E2E-36 |
 | SY-13 | FROZEN | `identity_survives_a_tag_reordering_peer` † | E2E-33, E2E-34 |
@@ -10682,9 +10682,9 @@ between them because its *shape* does not wait on a transport but its
 | SY-29 | PROVISIONAL | `ingest_refuses_an_unbounded_peer_query` † | E2E-40 |
 | SY-30 | FROZEN | `push_envelope_preserves_group_boundaries`, `ingest_group_is_atomic_under_a_mi… | E2E-35, E2E-39 |
 | SY-31 | FROZEN | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
-| SY-32 | DEFERRED | `retention_gap_is_reported_not_silent` | E2E-44, E2E-46, E2E-47 |
+| SY-32 | FROZEN | `retention_gap_is_reported_not_silent` | E2E-44, E2E-46, E2E-47 |
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
-| SY-34 | FROZEN | `a_refused_spoke_retains_its_log` † | E2E-45 |
+| SY-34 | FROZEN | `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` † | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
 | SY-36 | FROZEN | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
 | SY-37 | FROZEN | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |
@@ -10721,7 +10721,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-24 | FROZEN | `registry::no_orphan_rules`, at the foot of `crates/happenstance-testkit/src/r… | *all* |
 | CF-25 | FROZEN | `cargo xtask spec-trace` (CF-38), which reads the portfolio table and the matu… | E2E-01, E2E-02, E2E-24, E2E-46, E2E-52 |
 | CF-26 | FROZEN | the portfolio table's `Far end exists` column, checked by `cargo xtask spec-tr… | E2E-01, E2E-24 |
-| CF-27 | DEFERRED | `instrument_report_is_accurate_and_the_suite_cannot_tell`, a meta-test in crat… | E2E-46, E2E-47, E2E-56, E2E-33 |
+| CF-27 | FROZEN | `instrument_report_is_accurate_and_the_suite_cannot_tell`, a meta-test in crat… | E2E-46, E2E-47, E2E-56, E2E-33 |
 | CF-28 | FROZEN | the existing suite, invoked against that `Rc<RefCell<Vec<_>>>`-backed store un… | E2E-52, E2E-09, E2E-30 |
 | CF-29 | FROZEN | `mutation_coverage::every_rule_has_a_mutant` (CF-1) enforces the mutant half m… | *all* |
 | CF-30 | NON-NORMATIVE | *(none — see clause)* | *(none — see clause)* |
