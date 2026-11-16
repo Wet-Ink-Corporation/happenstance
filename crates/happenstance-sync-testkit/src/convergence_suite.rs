@@ -1,5 +1,6 @@
-//! The convergence family: SY-20's check over a declared projection, and
-//! SY-22's proof that the check excludes what it must not fail.
+//! The convergence family: SY-20's check over a declared projection, SY-21's
+//! check that it cannot see the local position, and SY-22's proof that the
+//! check excludes what it must not fail.
 //!
 //! # How a check of convergence reorders without a second peer
 //!
@@ -21,6 +22,18 @@
 //! "agree on per-origin order and disagree everywhere else", and a third,
 //! alternating interleaving would hold a fold to more than the clause says.
 //!
+//! SY-21's check holds the order still and moves the numbering instead. The
+//! same arrivals, origin one's first, are written to two replicas: one
+//! numbered densely from the first position, one from far past it with gaps
+//! between, which the event-store contract permits. `Delivered` hands a fold
+//! no position; the channel to the local position that the port a fold is
+//! given offers is the projection store's checkpoint. The rule compares read
+//! models, not channels, so a fold that lets the local numbering reach its
+//! read model by any route commits two, and the checkpoint is the route the
+//! wrong projection in `tests/` takes. SY-20's interleavings cannot see that
+//! fold: both are numbered densely over the same count of events, so the
+//! checkpoint runs through the same values in each.
+//!
 //! Every event carries one [`RecordedAt`]. `Delivered` does not hand a fold
 //! the time, and a fold that found it another way could order by it only
 //! with ties broken by arrival, which is arrival order again.
@@ -28,7 +41,7 @@
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
-use core::num::NonZeroUsize;
+use core::num::{NonZeroU64, NonZeroUsize};
 
 use happenstance::{Chunk, DomainEvent, run_projection};
 use happenstance_core::{
@@ -51,6 +64,18 @@ const RECORDED: RecordedAt = RecordedAt::from_millis(0);
 /// Two events per commit, so a fold's state crosses a commit boundary in
 /// every case with more than two events.
 const CHUNK: NonZeroUsize = NonZeroUsize::MIN.saturating_add(1);
+/// One event per commit, for SY-21's runs: every event after the first is
+/// applied over a committed checkpoint, so a fold that reads it sees a local
+/// position in every case the fixture contract admits, which is two events
+/// at least.
+const ONE_AT_A_TIME: NonZeroUsize = NonZeroUsize::MIN;
+/// Where SY-21's second replica starts numbering: far from the first
+/// position, so every event's local position differs between the two
+/// replicas.
+const OFFSET_FROM: NonZeroU64 = NonZeroU64::MIN.saturating_add(999);
+/// The gap between its consecutive positions, so the numbering is not only
+/// shifted but gapped.
+const OFFSET_STRIDE: NonZeroU64 = NonZeroU64::MIN.saturating_add(2);
 
 /// One event as its origin wrote it: the identity every replica shares, and
 /// the encoded event.
@@ -105,15 +130,30 @@ fn identify<F: ConvergenceFixture>(
     Ok(authored)
 }
 
-/// The replica that appended `arrivals` in that order.
+/// The replica that appended `arrivals` in that order, numbered densely from
+/// the first position.
 fn replica<'a>(
     arrivals: impl Iterator<Item = &'a Authored>,
     clause: &'static str,
 ) -> Result<MemoryEventStore, Violation> {
+    replica_at(arrivals, NonZeroU64::MIN, NonZeroU64::MIN, clause)
+}
+
+/// The replica that appended `arrivals` in that order, numbering them from
+/// `first` with `stride` between consecutive positions.
+fn replica_at<'a>(
+    arrivals: impl Iterator<Item = &'a Authored>,
+    first: NonZeroU64,
+    stride: NonZeroU64,
+    clause: &'static str,
+) -> Result<MemoryEventStore, Violation> {
     let mut log = Vec::new();
-    for (here, (id, event)) in (1..).zip(arrivals) {
-        let position = SequencePosition::new(here)
-            .ok_or_else(|| Violation::new(clause, "a local position counted from one was zero"))?;
+    let mut here = Some(first.get());
+    for (id, event) in arrivals {
+        let position = here.and_then(SequencePosition::new).ok_or_else(|| {
+            Violation::new(clause, "a local position ran past the end of the key space")
+        })?;
+        here = position.get().checked_add(stride.get());
         // Genuinely duplicated: the same event is appended to both replicas'
         // logs, and each store keeps its own. The payload is a `Bytes`, so
         // the copy is of the envelope, not the data.
@@ -128,6 +168,7 @@ async fn committed<F: ConvergenceFixture>(
     log: &MemoryEventStore,
     expected: usize,
     order: &str,
+    chunk: NonZeroUsize,
     clause: &'static str,
 ) -> Result<Vec<u8>, Violation> {
     let models = fixture.store().await?;
@@ -137,7 +178,7 @@ async fn committed<F: ConvergenceFixture>(
         &models,
         &mut projection,
         fixture.codec(),
-        Chunk::of(CHUNK),
+        Chunk::of(chunk),
     )
     .await
     .map_err(|error| {
@@ -171,8 +212,57 @@ pub(crate) async fn read_models<F: ConvergenceFixture>(
     let one_first = replica(one.iter().chain(&two), clause)?;
     let two_first = replica(two.iter().chain(&one), clause)?;
     Ok([
-        committed(fixture, &one_first, expected, "origin one first", clause).await?,
-        committed(fixture, &two_first, expected, "origin two first", clause).await?,
+        committed(
+            fixture,
+            &one_first,
+            expected,
+            "origin one first",
+            CHUNK,
+            clause,
+        )
+        .await?,
+        committed(
+            fixture,
+            &two_first,
+            expected,
+            "origin two first",
+            CHUNK,
+            clause,
+        )
+        .await?,
+    ])
+}
+
+/// The read models a fresh projection commits over one arrival order, origin
+/// one's events first, under two numberings of it: dense from the first
+/// position, then offset and gapped.
+async fn read_models_numbered_twice<F: ConvergenceFixture>(
+    fixture: &F,
+    clause: &'static str,
+) -> Result<[Vec<u8>; 2], Violation> {
+    let [one, two] = author(fixture, clause)?;
+    let expected = one.len().saturating_add(two.len());
+    let dense = replica(one.iter().chain(&two), clause)?;
+    let offset = replica_at(one.iter().chain(&two), OFFSET_FROM, OFFSET_STRIDE, clause)?;
+    Ok([
+        committed(
+            fixture,
+            &dense,
+            expected,
+            "dense local positions",
+            ONE_AT_A_TIME,
+            clause,
+        )
+        .await?,
+        committed(
+            fixture,
+            &offset,
+            expected,
+            "offset, gapped local positions",
+            ONE_AT_A_TIME,
+            clause,
+        )
+        .await?,
     ])
 }
 
@@ -185,8 +275,8 @@ pub(crate) fn shown(model: &[u8]) -> String {
 ///
 /// This family's single enumeration (CF-22), beside the rules it names. No
 /// mounting macro reads it, because the family has no adapter to mount it
-/// beside: a projection author calls the SY-20 rule over a fixture of their
-/// own, and the SY-22 rule takes nothing.
+/// beside: a projection author calls the SY-20 and SY-21 rules over a fixture
+/// of their own, and the SY-22 rule takes nothing.
 ///
 /// # Examples
 ///
@@ -200,6 +290,7 @@ pub(crate) fn shown(model: &[u8]) -> String {
 ///     names,
 ///     [
 ///         "convergent_projection_is_interleaving_independent",
+///         "convergent_projection_cannot_observe_local_position",
 ///         "non_convergent_projections_are_excluded_not_failed",
 ///     ]
 /// );
@@ -211,21 +302,24 @@ macro_rules! for_each_convergence_rule {
             // --- A declared projection converges (SY-20) ---------------------
             convergent_projection_is_interleaving_independent,
 
+            // --- ... and cannot see the local position (SY-21) ---------------
+            convergent_projection_cannot_observe_local_position,
+
             // --- An undeclared one is excluded, not failed (SY-22) -----------
             non_convergent_projections_are_excluded_not_failed,
         }
     };
 }
 
-/// The convergence rules (SY-20, SY-22).
+/// The convergence rules (SY-20, SY-21, SY-22).
 ///
 /// Each returns `Result<RuleOutcome, Violation>`, as every rule in this crate
-/// does. Neither has a capability to decline, so neither ever reports a skip.
+/// does. None has a capability to decline, so none ever reports a skip.
 pub mod convergence_rules {
     use happenstance::ConvergentProjection;
     use happenstance_testkit::RuleOutcome;
 
-    use super::{read_models, shown};
+    use super::{read_models, read_models_numbered_twice, shown};
     use crate::Violation;
     use crate::convergence_fixture::{ConvergenceFixture, CostLayersFixture, StockOnHandFixture};
     use crate::violation::ensure;
@@ -283,6 +377,71 @@ pub mod convergence_rules {
                  and {} with origin two's first; its answer depends on arrival order",
                 shown(&one_first),
                 shown(&two_first)
+            )
+        })?;
+        Ok(RuleOutcome::Ran)
+    }
+
+    /// **SY-21.** A declared projection cannot observe the local position:
+    /// the same arrivals, numbered twice, commit byte-identical read models.
+    ///
+    /// The fixture's projection is run twice, fresh each time and one event
+    /// per commit, over one arrival order, origin one's events first. The
+    /// first replica numbers the events densely from the first position; the
+    /// second numbers them from far past it, with gaps between. `Delivered`
+    /// already withholds the position from the fold (SY-21's compile-fail
+    /// fences). The rule compares read models, so any channel that lets the
+    /// local numbering reach them fails it; the one the port a fold is given
+    /// offers is its store's checkpoint.
+    ///
+    /// That is a reading of SY-21, not its letter. The clause forbids handing
+    /// the arrival position "in the value it folds over", and its reopening
+    /// condition grants a fold the store's own checkpoint. This rule takes
+    /// the clause to mean that a fold may read its checkpoint but must not
+    /// let it reach the read model: SY-20's property, applied to positions.
+    ///
+    /// Rejects a projection that writes its checkpoint into its read model,
+    /// which SY-20's rule passes, since both of its interleavings number the
+    /// same count of events densely. `tests/wrong_projections.rs` holds it
+    /// against both rules.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-21 if the two read models differ, if either
+    /// origin authored nothing, if a run applied fewer events than it was
+    /// handed or failed, or if the fixture could not open or read a store.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use happenstance_sync_testkit::{StockOnHandFixture, convergence_rules};
+    /// use happenstance_testkit::{RuleOutcome, block_on};
+    ///
+    /// let outcome = block_on(
+    ///     convergence_rules::convergent_projection_cannot_observe_local_position(async || {
+    ///         StockOnHandFixture::new()
+    ///     }),
+    /// )?;
+    /// assert_eq!(outcome, RuleOutcome::Ran);
+    /// # Ok::<(), happenstance_sync_testkit::Violation>(())
+    /// ```
+    pub async fn convergent_projection_cannot_observe_local_position<F>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation>
+    where
+        F: ConvergenceFixture,
+        F::Projection: ConvergentProjection,
+    {
+        const CLAUSE: &str = "SY-21";
+        let fixture = open().await;
+        let [dense, offset] = read_models_numbered_twice(&fixture, CLAUSE).await?;
+        ensure(dense == offset, CLAUSE, || {
+            format!(
+                "a projection declared convergent committed {} over the arrivals numbered \
+                 densely and {} over the same arrivals numbered from elsewhere with gaps; its \
+                 answer depends on where this replica numbered the events",
+                shown(&dense),
+                shown(&offset)
             )
         })?;
         Ok(RuleOutcome::Ran)

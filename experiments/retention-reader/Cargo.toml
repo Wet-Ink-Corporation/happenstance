@@ -1,0 +1,74 @@
+# Deliberately outside the workspace. The empty `[workspace]` table below stops
+# cargo walking up to the repository root and adopting this crate as a member —
+# the same trick `experiments/wire-format/Cargo.toml` documents. No entry in the
+# root `members` list changes, no `crates/**` manifest gains a dependency, and
+# this never runs under `cargo xtask ci`: `affected::is_inert` treats every path
+# under `experiments/` as reaching no package, and the spec-trace filename walk
+# skips the directory.
+#
+# What it is: ES-39's reader experiment (#156). It runs a projection runner and
+# an ingest path over CF-27's completeness instrument (`WithholdingStore`) and
+# over a SQLite file pruned outside the port, and records whether either reader
+# needs a port-level completeness report. README.md carries the criteria, fixed
+# before any run, and the verdict.
+#
+# The lockfile that resolves beside this manifest is this crate's own. It was
+# seeded from the workspace `Cargo.lock`, so every third-party crate resolves at
+# the version the workspace already pins. The workspace `Cargo.lock` is untouched.
+[workspace]
+
+[package]
+name = "retention-reader"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.97.1"
+publish = false
+
+[dependencies]
+# The typed layer: `DomainEvent`, `Json`, `run_projection`, `commit`.
+happenstance = { path = "../../crates/happenstance", default-features = false, features = [
+    "std",
+    "memory",
+    "json",
+] }
+happenstance-core = { path = "../../crates/happenstance-core", default-features = false, features = [
+    "std",
+    "memory",
+] }
+# A normal dependency, not a dev-dependency: `src/holed.rs` names
+# `WithholdingStore`, CF-27's instrument. `block_on` drives every scenario, so
+# there is no `tokio` here.
+happenstance-testkit = { path = "../../crates/happenstance-testkit" }
+# `Edge`, `StoreSyncPeer`, `MemorySyncPeer`, `MemoryIngestStore`.
+happenstance-sync = { path = "../../crates/happenstance-sync", features = ["memory"] }
+# The ingest and write-group impls behind `sync`, and the re-exported `rusqlite`
+# the out-of-port prune uses. A second `rusqlite` would bring a second
+# `libsqlite3-sys`, whose `links = "sqlite3"` key refuses to resolve.
+happenstance-sqlite = { path = "../../crates/happenstance-sqlite", features = ["sync"] }
+serde = { version = "1", features = ["derive"] }
+
+# The workspace's `[workspace.lints]`, copied verbatim, because a crate outside
+# the workspace cannot write `[lints] workspace = true`. `apply-shape` and
+# `polling-cost` copy none; this one does, so the experiment is held to the
+# same lints as the crates it observes.
+[lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+missing_debug_implementations = "warn"
+unreachable_pub = "warn"
+unused_qualifications = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(happenstance_naive_arm)"] }
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+unwrap_used = "deny"
+todo = "deny"
+must_use_candidate = "allow"
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+private_intra_doc_links = "warn"
+

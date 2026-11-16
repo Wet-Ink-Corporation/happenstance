@@ -7,6 +7,7 @@
 //! provoke a failure or name a responder. Each names the wrong runner it
 //! rejects. Nothing sleeps: the run loop's waits go to a recording fake.
 
+mod adjudication;
 mod backoff;
 mod classes;
 mod directions;
@@ -14,7 +15,10 @@ mod drive;
 mod groups;
 mod incarnation;
 mod probe;
+mod retention;
+mod unchanged;
 mod watermark;
+mod wrong_runners;
 
 use happenstance_core::{
     Event, EventId, EventStore, RecordedAt, SequencePosition, SequencedEvent, StoreId,

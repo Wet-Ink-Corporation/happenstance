@@ -3,18 +3,27 @@
 //! Its own file for the reason `ingest/error.rs` is one: the runner's control
 //! flow reads better without the error's shape interleaved with it.
 
+use core::convert::Infallible;
 use core::fmt;
 
+use super::adjudicate::{Accept, Adjudicate};
 use super::incarnation::{IncarnationChanged, StopCause};
 use crate::classify::{Classify, FailureClass};
 use crate::ingest::{IngestError, IngestStore};
 use crate::peer::SyncPeer;
 use crate::write_group::WriteGroupStore;
 
-/// The error [`Edge::step`](super::Edge::step) returns for a peer `P` and a
-/// store `S`.
-pub type StepFailure<P, S> =
-    StepError<<P as SyncPeer>::Error, <S as WriteGroupStore>::Error, <S as IngestStore>::Error>;
+/// The error [`Edge::step`](super::Edge::step) returns for a peer `P`, a
+/// store `S` and the edge's merge rule `A`.
+///
+/// `A` defaults to [`Accept`], whose error is [`Infallible`], so
+/// `StepFailure<P, S>` still names the error of an edge that judges nothing.
+pub type StepFailure<P, S, A = Accept> = StepError<
+    <P as SyncPeer>::Error,
+    <S as WriteGroupStore>::Error,
+    <S as IngestStore>::Error,
+    <A as Adjudicate>::Error,
+>;
 
 /// Which part of a step failed, and the class the failure stated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -41,12 +50,17 @@ impl fmt::Display for Failure {
             FailureClass::Split => "split",
             FailureClass::Park => "park",
             FailureClass::Stop => "stop",
+            FailureClass::Reseed => "reseed",
         };
         write!(f, "a {class}-class failure in the {} phase", self.phase)
     }
 }
 
-/// The four parts of a step, in the order a step runs them.
+/// The parts of a step.
+///
+/// A step runs them pull, adjudicate, ingest, read, push.
+// `Adjudicate` is declared last, out of run order, so the variants before it
+// keep the discriminants they had in 0.6.0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum Phase {
@@ -58,6 +72,9 @@ pub enum Phase {
     Read,
     /// Pushing to the far side.
     Push,
+    /// Judging the pulled batch by the edge's merge rule, before it lands
+    /// (SY-7).
+    Adjudicate,
 }
 
 impl fmt::Display for Phase {
@@ -67,6 +84,7 @@ impl fmt::Display for Phase {
             Self::Ingest => "ingest",
             Self::Read => "read",
             Self::Push => "push",
+            Self::Adjudicate => "adjudicate",
         })
     }
 }
@@ -74,14 +92,17 @@ impl fmt::Display for Phase {
 /// Why [`Edge::step`](super::Edge::step) failed: the phase, and the failure it
 /// met.
 ///
-/// `P` is the peer's error, `R` the local store's group-read error and `I` its
-/// ingest error. They are separate because a store may implement
-/// [`WriteGroupStore`] and [`IngestStore`] with different error types. No bounds sit
-/// on the enum, so it is `Send` exactly when the three are, and a `!Send`
-/// adapter's error stays legal (ADR-0009).
+/// `P` is the peer's error, `R` the local store's group-read error, `I` its
+/// ingest error and `A` the edge's merge rule's error. They are separate
+/// because a store may implement [`WriteGroupStore`] and [`IngestStore`] with
+/// different error types. No bounds sit on the enum, so it is `Send` exactly
+/// when the four are, and a `!Send` adapter's error stays legal (ADR-0009).
+///
+/// `A` defaults to [`Infallible`], the error of [`Accept`], so
+/// `StepError<P, R, I>` still names the error of an edge that judges nothing.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum StepError<P, R, I> {
+pub enum StepError<P, R, I, A = Infallible> {
     /// The edge was already stopped, for the cause named; nothing was done.
     #[error("the edge is stopped: {0}")]
     Stopped(StopCause),
@@ -104,9 +125,13 @@ pub enum StepError<P, R, I> {
     /// The far side refused or failed the push; the local log is unchanged.
     #[error("the push to the far side failed")]
     Push(#[source] P),
+    /// The edge's merge rule could not judge the pulled batch; nothing in it
+    /// was written, and the pull token did not advance.
+    #[error("the edge's merge rule could not judge the pulled batch")]
+    Adjudicate(#[source] A),
 }
 
-impl<P: Classify, R: Classify, I: Classify> StepError<P, R, I> {
+impl<P: Classify, R: Classify, I: Classify, A: Classify> StepError<P, R, I, A> {
     /// The phase that failed and the class its failure stated.
     #[must_use]
     pub fn failure(&self) -> Failure {
@@ -118,15 +143,39 @@ impl<P: Classify, R: Classify, I: Classify> StepError<P, R, I> {
             Self::Ingest(error) => Failure::new(Phase::Ingest, error.class()),
             Self::Read(error) => Failure::new(Phase::Read, error.class()),
             Self::Push(error) => Failure::new(Phase::Push, error.class()),
+            Self::Adjudicate(error) => Failure::new(Phase::Adjudicate, error.class()),
         }
     }
 }
 
 /// The class of the failure inside, so a step's error is handled like a peer's
-/// (ADR-0026 §2.4). A stopped edge, and a changed incarnation, answer
-/// [`Stop`](FailureClass::Stop); a parked edge answers the class that parked it.
-impl<P: Classify, R: Classify, I: Classify> Classify for StepError<P, R, I> {
+/// (ADR-0026 §2.4). A changed incarnation answers [`Stop`](FailureClass::Stop);
+/// an edge stopped by a retention gap answers [`Reseed`](FailureClass::Reseed)
+/// (SY-32); any other stopped edge answers the class it stopped on; a parked
+/// edge answers the class that parked it.
+impl<P: Classify, R: Classify, I: Classify, A: Classify> Classify for StepError<P, R, I, A> {
     fn class(&self) -> FailureClass {
         self.failure().class
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use alloc::string::ToString;
+
+    use super::{Failure, Phase};
+    use crate::classify::FailureClass;
+
+    /// The fifth class reads as its remedy, not as a stop (SY-32). Rejects a
+    /// `Display` that folds `Reseed` into "stop", which would tell an
+    /// operator to fix configuration that is not broken.
+    #[test]
+    fn a_reseed_failure_names_its_class() {
+        let failure = Failure::new(Phase::Pull, FailureClass::Reseed);
+
+        assert_eq!(
+            failure.to_string(),
+            "a reseed-class failure in the pull phase"
+        );
     }
 }

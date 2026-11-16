@@ -33,8 +33,210 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-11-16
+
+Phase 14: what a store may forget, and what a peer does about it. The sync
+runner gains its adjudication hook, `runner::Adjudicate`: a merge rule mounted
+on an edge or on a `StoreSyncPeer` that decides each incoming group's
+compensation, which the runner lands with the group in one write (SY-7, SY-10).
+A far side that has forgotten history an edge has not reached now refuses with
+a fifth failure class, `Reseed`, and the edge stops on
+`StopCause::RetentionGap` rather than converging on a subset in silence
+(SY-32); `MemorySyncPeer` can compact to stand in for such a peer.
+`RemoteSyncPeer` refuses an over-limit push before sending it.
+`happenstance-testkit` gains CF-27's completeness instrument,
+`WithholdingStore`, a removal capability on `Fixture`, and ES-38's and ES-40's
+rules over history removed outside the port, which all four real adapters'
+fixtures run. ES-39 freezes as the refusal: the port does not report
+completeness (`experiments/retention-reader`). Seven clauses are `[FROZEN]`
+(ADR-0108), and 38 of the 39 `SY` clauses are now frozen.
+
+**This is a breaking release from `0.6.x`, and the breaks are behaviour, not
+signatures.** Nothing on the wire or in any schema changes, so peers need not
+upgrade together and no store migrates. If you replicate,
+`SyncError::BelowRetentionFloor` is class `Reseed`, not `Stop`, so the runner
+stops on `StopCause::RetentionGap` where it stopped on `StopCause::Failure`;
+`MemorySyncPeer::with_limits` no longer echoes a `retention_floor` it was
+handed; and `RemoteSyncPeer::push` refuses a batch its declared limits do not
+admit with a new `RemoteError` variant, where it used to send it and surface
+the far side's refusal through `RemoteError::Exchange`. An adapter author
+takes new rules in both testkits, and a sync peer fixture must state its new
+`REOPEN` capability, or the emitted declension check fails. Every new type
+parameter is defaulted and every enum that grows was `#[non_exhaustive]`, so
+code written against `0.6.0` compiles unchanged. `happenstance`,
+`happenstance-core` and the four adapters change no public item. The
+[`0.7.0` trace](#070-trace) at the end of this section lists every break with
+the decision behind it. All nine crates move to `0.7.0` together.
+
 ### Added
 
+- `happenstance-sync`: the runner's adjudication hook (#450). A merge rule is
+  a `runner::Adjudicate` (with `runner::SendAdjudicate` for the `Send`
+  flavour): asked once per incoming group, with the groups before it in the
+  same batch, for the compensation the group lands with. It decides and never
+  writes; the runner lands each group and its compensation in one write
+  (SY-2). `runner::Accept`, which judges nothing, is the default everywhere.
+  A rule is mounted at one of an edge's two ingest sites, and that is the
+  direction it judges (SY-10): `Edge::with_adjudicator` for what an edge
+  pulls, so a hub that drives its own edge adjudicates what it pulls, and
+  `StoreSyncPeer::with_adjudicator` for what a far side is pushed, served
+  through the new `serve_sync_adjudicated`. A rule that cannot decide fails
+  the step in the new `Phase::Adjudicate`, as `StepError::Adjudicate` or
+  `StorePeerError::Adjudicate`, with nothing written. **Additive only**: the
+  new type parameters are defaulted (`Edge<R, A = Accept>`,
+  `StoreSyncPeer<S, I, A = Accept>`, `StepError<P, R, I, A = Infallible>`,
+  `StepFailure<P, S, A = Accept>`, `StorePeerError<R, W, A = Infallible>`,
+  `ServeError<R, W, A = Infallible>`), `serve_sync` keeps its two, and code
+  naming any of them as `0.6.0` did compiles unchanged. `Infallible` now
+  implements `Classify`.
+- `happenstance-sync-testkit`: `only_the_adjudicator_compensates` (SY-7) and
+  `directional_merge_rules_compose` (SY-10) mount their merge rules through
+  the shipped `Adjudicate` hook and `Accept`, rather than a private enum of
+  their own. No rule's verdict changes against any store (#450).
+- `happenstance-sync-testkit`:
+  `convergence_rules::convergent_projection_cannot_observe_local_position`
+  (SY-21), the rule SY-21's Rule line has named since phase 18 (#457). It runs
+  a projection declared `happenstance::ConvergentProjection` over one arrival
+  order numbered twice, densely from the first position and offset with gaps,
+  one event per commit, and requires byte-identical read models. `Delivered`
+  already withholds the position. The rule compares read models, so any
+  channel that lets the local numbering reach them fails it; the one the port
+  a fold is given offers is its store's checkpoint. SY-21's text forbids the
+  position only in the value a fold folds over, so the rule takes a reading:
+  a fold may read its checkpoint but must not let it reach the read model.
+  `tests/wrong_projections.rs` fails a fold that writes its checkpoint into
+  its read model, which SY-20's rule passes, and shows that every fold SY-20's
+  rule fails passes this one. Joins `for_each_convergence_rule!`. The
+  convergence family has no mounting macro, so no adapter or fixture goes red;
+  a projection author calls the rule over a `ConvergenceFixture` of their own.
+- `happenstance-testkit`: `WithholdingStore` and `WithholdError`, CF-27's
+  completeness instrument (#144). A decorator over any `EventStore` that holds
+  a suffix or a scattered retained set of the inner store's log: a withheld
+  event is never read, `head` skips it, `contains_event_id` denies it, and an
+  append condition only it would violate passes (ES-40). It reports what it
+  withholds through its own `withheld()`, never through an `EventStore` method
+  (ADR-0028). Built to reject a projection runner or ingest path that infers
+  completeness from a port value. The whole suite runs against it with its
+  prior history withheld, and the outcome of every rule is recorded in
+  `tests/completeness_instrument/pass_list.txt`, asserted by
+  `instrument_report_is_accurate_and_the_suite_cannot_tell` beside three wrong
+  instruments it rejects. Additive: no rule joins any family, so no adapter
+  goes red.
+- `happenstance-sync`: a retention gap is reported, not silent (SY-32, #158).
+  A fifth failure class, `FailureClass::Reseed`, for a far side that has
+  forgotten history an edge's resume token has not reached. The runner never
+  compares a token with `PeerLimits::retention_floor` itself (tokens are
+  opaque, and an `EventId` orders authorship within one origin, not
+  forwarding): the peer refuses, and a pull or push failing with `Reseed`
+  stops the edge with the new `StopCause::RetentionGap(runner::RetentionGap)`,
+  carrying the far side's floor as it read at the refusal (a `Reseed` from
+  any other phase stops on `StopCause::Failure`). `SyncStatus::retention_gap()`
+  reads it back, derived from `state`, and `Edge::run` returns it without
+  waiting. `MemorySyncPeer` stands in for a compacting peer:
+  `compact_recorded_before(RecordedAt)` drops the longest prefix of its log
+  recorded before the cutoff, `limits().retention_floor` then names the newest
+  event forgotten, a pull from a token below it, **or from the start**, is
+  refused with the new `MemoryPeerError::BelowRetentionFloor` (class
+  `Reseed`, handing the token back), and `floor_token()` is the explicit way
+  to accept the gap. Compaction forgets identities, so a re-push appends.
+  **Additive only**: `FailureClass`, `StopCause` and `MemoryPeerError` are
+  `#[non_exhaustive]`, and the wire is unchanged. Cloudflare's HTTP mapping
+  carries `Reseed` as 400, which reads back as `Stop`: safe, not yet reported
+  as a gap.
+- **Breaking (CF-32): `happenstance-sync-testkit`:
+  `retention_gap_is_reported_not_silent` (SY-32) joins the peer family.** It pushes a shore log one group per day on a test
+  clock, keeps a stale token from day 10 and a recent one from day 70, has the
+  fixture compact on a 90-day window on day 130, and holds the peer to a floor
+  naming an event it forgot, a `Reseed` refusal of the stale token and of a
+  pull from the start, and a recent token that resumes with exactly what came
+  after it. `SyncFixture` gains `COMPACTION`, declined by default in
+  `UNSTATED_COMPACTION`'s words, and a provided `compact_recorded_before`;
+  `MemorySyncFixture` and `KvCappedFixture` support it. **Every other fixture
+  compiles unchanged and reports the rule skipped.** A runner that fails on
+  any skip goes red: this workspace's `workerd` harness did, and now tolerates
+  this rule's skip with `UNSTATED_COMPACTION`'s reason and no other (D10)
+  until its Durable Object can compact.
+  `tests/wrong_retention.rs` carries seven wrong peers it rejects.
+- **Breaking (CF-32): `happenstance-testkit`: a removal capability on
+  `Fixture`** (#147). The
+  defaulted `const REMOVAL: Capability`, declined in `UNSTATED_REMOVAL`'s
+  words on `MID_BATCH_FAULT`'s precedent, and the provided
+  `remove_outside_port(&self, &[SequencePosition]) -> impl Future<Output = Removed>`,
+  through which a fixture deletes events from its store outside the port, as
+  a retention job's raw `DELETE` does (ADR-0028). `Removed { Deleted, Nothing }`
+  is what the method reports; the provided body answers `Nothing`. A new rule,
+  `removal_outside_the_port_removes_exactly_the_named_events`, is its guard: a
+  fixture that declares the capability must remove exactly the named events,
+  interior and tail, from a handle the rule already holds, leave every survivor
+  byte-identical, and stop reporting the removed identities as held. Four
+  wrong fixtures in the testkit's own tests fail it (a forgotten override, an
+  empty one, `DELETE … WHERE position >= ?`, and a rebuild from the
+  survivors). A fixture that says nothing skips the rule with the testkit's
+  reason and CF-18's emitted check accepts the silence, so no existing
+  adapter's CI changes colour. `MemoryFixture` declines it in its own words: it
+  allocates from its log's length, so a removal would reuse positions. This is
+  what ES-38's and ES-40's rules (#151, #154) will stand on against the real
+  adapters.
+- `happenstance-sqlite`, `happenstance-postgres`, `happenstance-neon`,
+  `happenstance-cloudflare`: the conformance fixture grants `REMOVAL` with a
+  raw `DELETE` on the adapter's own storage, and a smoke test records that the
+  `StoreId` survives a removal and the next append lands above the removed
+  tail. No API change. The Cloudflare fixture's documentation says that a
+  Durable Object wiped by `delete_all()` is a different store, with a new
+  `StoreId` and positions restarting under it (VT-6, ADR-0086), not a removal.
+- **Breaking (CF-32): `happenstance-testkit`: a new event-store rule,
+  `positions_are_not_reused_after_removal`** (ES-38, #151), run by every fixture
+  that grants `REMOVAL`. It removes the tail outside the port, then
+  everything, and requires each next append to land above every position the
+  store has ever assigned, `head` to name an event the store still holds (or
+  be `None` once it holds none), and the removed identity to stay unheld. It
+  detects an event table keyed by `INTEGER PRIMARY KEY` without
+  `AUTOINCREMENT`, which hands a deleted tail's position out again (ES-38's
+  named wrong implementation, measured on real SQLite in
+  `happenstance-sqlite`'s migration test), a `head` read from the allocator
+  rather than the rows, and a purge that rewinds the allocator with `TRUNCATE
+  … RESTART IDENTITY`. A fixture that declines `REMOVAL` skips it with its own
+  reason, so no adapter that says nothing goes red. CF-27's instrument now
+  grants `REMOVAL` by forwarding to `withhold`, and the rule passes there by
+  delegation.
+- **Breaking (CF-32): `happenstance-testkit`: a new event-store rule,
+  `condition_over_removed_history_does_not_reject`** (ES-40, #154), run by every
+  fixture that grants `REMOVAL`. It removes the only event a condition
+  matches, outside the port, and requires the conditional append to be
+  admitted (ADR-0028's vacuous pass), while conditions over the events on
+  either side of the hole still refuse. It detects a soft delete whose
+  condition path still sees the removed rows, a store that refuses every
+  condition once it knows it has been pruned (E2E-47's fail-closed outcome,
+  which ADR-0028 rejects for 1.x), and a store that stops evaluating
+  conditions once it has lost history. A fixture that declines `REMOVAL` skips
+  it with its own reason. It passes on CF-27's instrument and on
+  `happenstance-sqlite`.
+- `happenstance-core`: `AppendCondition`'s documentation names the rule that
+  checks its vacuous pass over removed history. Documentation only.
+- **Breaking (CF-32): `happenstance-sync-testkit`: a reopen capability on
+  `SyncFixture`** (#448). The defaulted `const REOPEN: Capability`, declined in the new
+  `UNSTATED_SYNC_REOPEN`'s words, and the provided
+  `reopen(&self) -> impl Future<Output = Reopened>`, which answers
+  `Reopened::Nothing`: `ProjectionFixture::REOPEN`'s shape, governed by CF-17
+  in the same words. `ack_never_confirms_a_non_durable_event` (SY-31) now
+  reopens a fixture that declares the capability, after the acking handle is
+  dropped and before a fresh one reads back, and a reopen that answers
+  `Nothing` is a violation naming `SyncFixture::reopen`. It detects a peer
+  that keeps what it acknowledged in memory every handle shares, which a
+  handle swap alone cannot see; `tests/wrong_reopens.rs` carries it, and
+  records that the same peer passes under a fixture that declines. A fixture
+  that declines runs the rule as before. `sync_peer_conformance!` now also
+  emits `every_declined_capability_is_stated_by_this_fixture`
+  (`sync_declensions_are_stated`, CF-18), which **fails a fixture that leaves
+  `REOPEN` at the default declension**: the projection port's precedent, and
+  the one change here an adapter outside the workspace must answer, with a
+  one-line constant. Every fixture in the workspace states it.
+- `happenstance-postgres`, `happenstance-neon`: the sync peer fixtures grant
+  `REOPEN`. Postgres closes the fixture's pool and opens a new one onto the
+  same schema; Neon drops its transport, client and read ledger and builds a
+  new `LiveTransport` over the same `NeonConfig`. Test code only. The
+  Cloudflare, in-memory, KV-capped, `!Send`, remote and store fixtures decline
+  it in their own words. No API change.
 - **`examples/two-devices-one-seat`: two devices, one seat, three files that
   agree.** A central store and two devices, each a `SqliteEventStore` on its
   own file, synced through `happenstance-sync`'s runner over `RemoteSyncPeer`,
@@ -43,12 +245,105 @@ not the same as what a user needed to be told.
   with one ordinary conditional append that refunds the sale that reached it
   last (SY-2), and every place converges on the same log and the same read
   model, read back after every handle is dropped. Central adjudicates by the
-  application's convention because the runner's adjudication hook is not built
-  yet (#450). Registered in `xtask/src/proof.rs`, so the gate runs it.
+  application's convention: the example was written before the runner's
+  adjudication hook (#450, above) was built. Registered in
+  `xtask/src/proof.rs`, so the gate runs it.
 - **A how-to page, [Sync a device to a central store](docs/sync-a-device.md).**
   One edge per device, a `StoreSyncPeer` behind `serve_sync` on the far side,
   what a failed step keeps, where the watermark is kept, and what happens when
   both sides wrote.
+
+### Changed
+
+- **Seven specification clauses are `[FROZEN]`** (#163,
+  [ADR-0108](.kb/decisions/0108-phase-14s-clauses-are-frozen.md), accepted
+  2026-11-16). No code changed. ES-39 freezes as the
+  refusal: the port does not report completeness, and a caller must not infer it
+  from any port value (`experiments/retention-reader`, #156); ES-40 (a condition
+  over removed history passes vacuously), CF-27 (the completeness instrument),
+  SY-7 and SY-10 (the adjudication hook, #450), and VT-36 (a runner `Split` on
+  `TagsPerBatch` through the deployed Durable Object, #475). From `1.0.0`,
+  loosening any of them is a major release. SY-32 (a retention gap is reported,
+  not silent) freezes too, with the record accepting that no real peer compacts yet. The rule
+  lines of ES-38, SY-3, SY-21 and SY-34 now name rules that exist.
+
+- `happenstance-sync-testkit`: `directional_merge_rules_compose` (SY-10) no
+  longer plays a refused push in its hub-and-spoke walk, a check no store
+  could fail: the store is never told of a refusal, and no port the runner
+  holds can roll it back. The walk now runs in the shipped `Edge::step`'s
+  order, pull then push, and SY-34's refusal is held by `happenstance-sync`'s
+  runner tests. No rule's verdict changes against any store (#441).
+- **Breaking (behaviour): `happenstance-sync`: `SyncError::BelowRetentionFloor`
+  states class `Reseed`, not `Stop`**: its remedy is a re-seed or an accepted gap, not
+  configuration (#158).
+- **Breaking (behaviour): `happenstance-sync`: `MemorySyncPeer::with_limits`
+  no longer reports a `retention_floor` it was handed.** The floor its own compaction sets replaces
+  it, `None` until then, because a floor a peer declares and does not enforce
+  is the silent failure SY-32 forbids (#158).
+- **Breaking (behaviour): `happenstance-sync`: `RemoteSyncPeer::push` (and so
+  `SendPeer`'s over it) refuses a batch its declared `PeerLimits` do not admit **before** it encodes
+  or sends anything (#452). It used to send it and let the far side refuse
+  it. The refusal is one of three new `RemoteError` variants, mirroring
+  `StorePeerError`'s and checked in the same order: `EventTooLarge` (`Park`),
+  then `TooManyEvents` and `BatchTooLarge` (`Split`). It compiles unchanged,
+  since `RemoteError` is `#[non_exhaustive]`, and the classes a runner acts on
+  are the ones the far side's refusal already carried; code that matched the
+  far side's refusal inside `RemoteError::Exchange` now sees the new variant. A client that declares
+  wider limits than its far side still sends, and still reads the far side's
+  refusal through `RemoteError::Exchange`. `StoreSyncPeer`'s refusals are
+  unchanged: both halves now share one check. The workspace's own remote
+  fixture declares that far-side refusal beside the local one, so SY-36's
+  rule still sees a far side's class cross `serve_sync`.
+### `0.7.0` trace
+
+Every break `0.7.0` carries, each with the decision that caused it, written on
+2026-11-16 against `phase-14` at `2c19afd1` merged with `main` (#468, #470). It
+has **hand** rows only. Each was found by reading every entry above for a
+changed signature, a removed or renamed item, a changed value or a changed
+refusal, and by diffing the nine crates' `src/` against `v0.6.0` for changed
+`pub` lines: none is removed, and every one that changes adds a defaulted type
+parameter or a variant to a `#[non_exhaustive]` enum. `happenstance`,
+`happenstance-core` and the four adapters have no change in `src/` beyond one
+doc comment and test fixtures.
+
+**Not run here:** `cargo semver-checks` is not installed on the machine that
+wrote this table. Before tagging, run `cargo semver-checks check-release
+--workspace --baseline-version 0.6.0 --release-type minor` on `phase-14` →
+`main`'s merge commit. Any lint it reports that no row below covers becomes a
+**T** row.
+
+| # | Crate | Break | Source | Decided by | Entry above |
+|---|---|---|---|---|---|
+| H1 | `happenstance-sync` | `SyncError::BelowRetentionFloor` classifies as `FailureClass::Reseed`, was `Stop`, so an edge it stops ends on `StopCause::RetentionGap` where it ended on `StopCause::Failure`, and `Edge::run` returns at once (behaviour) | hand | SY-32, [ADR-0108](.kb/decisions/0108-phase-14s-clauses-are-frozen.md) (#158) | Changed |
+| H2 | `happenstance-sync` | `MemorySyncPeer::with_limits` no longer reports the `retention_floor` it was handed: `limits().retention_floor` is `None` until the peer's own compaction sets it (behaviour) | hand | SY-32 (#158) | Changed |
+| H3 | `happenstance-sync` | `RemoteSyncPeer::push`, and `SendPeer` over it, refuses a batch its declared `PeerLimits` do not admit before sending, with `RemoteError::EventTooLarge`, `TooManyEvents` or `BatchTooLarge`, where the far side's refusal arrived inside `RemoteError::Exchange`; the class is unchanged (behaviour) | hand | SY-36, SY-18 (#452) | Changed |
+| H4 | `happenstance-sync-testkit` | `sync_peer_conformance!` emits `every_declined_capability_is_stated_by_this_fixture`, which fails a `SyncFixture` that leaves the new `REOPEN` at its default declension, and on `wasm32` names `::wasm_bindgen_test` as the ingest family's copy does; a fixture that grants `REOPEN` has `ack_never_confirms_a_non_durable_event` (SY-31) reopen it (behaviour; CF-32) | hand | CF-18, CF-17 (#448) | Added |
+| H5 | `happenstance-sync-testkit` | the peer family gains `retention_gap_is_reported_not_silent` (SY-32), and `for_each_convergence_rule!` gains `convergent_projection_cannot_observe_local_position` (SY-21); the first skips on a fixture that leaves `COMPACTION` declined, so only a runner that fails on a skip goes red, as this workspace's `workerd` harness did (behaviour; CF-32) | hand | ADR-0108 (#158, #457) | Added |
+| H6 | `happenstance-testkit` | the event-store family gains `removal_outside_the_port_removes_exactly_the_named_events`, `positions_are_not_reused_after_removal` (ES-38) and `condition_over_removed_history_does_not_reject` (ES-40), gated on the new `Fixture::REMOVAL`; a fixture that says nothing skips all three and the declension check accepts the silence, so only a runner that fails on a skip goes red (behaviour; CF-32) | hand | [ADR-0028](.kb/decisions/0028-what-a-store-may-forget.md), ADR-0108 (#147, #151, #154) | Added |
+
+**Not breaks, recorded so the absence is a decision:** `FailureClass::Reseed`,
+`StopCause::RetentionGap`, `Phase::Adjudicate`, `StepError::Adjudicate`,
+`StorePeerError::Adjudicate` (which `ServeError::Peer` carries),
+`MemoryPeerError::BelowRetentionFloor` and the three `RemoteError` variants are
+new variants on `#[non_exhaustive]` enums; what changes for a caller is which
+errors produce them, and H1 and H3 are those. `Edge<R, A = Accept>`,
+`StoreSyncPeer<S, I, A = Accept>`, `StepError<P, R, I, A = Infallible>`,
+`StepFailure<P, S, A = Accept>`, `StorePeerError<R, W, A = Infallible>` and
+`ServeError<R, W, A = Infallible>` default their new parameter, and `Edge::new`
+and `StoreSyncPeer::new` still return the `Accept` form, so inference is
+unchanged. `Infallible: Classify` is a new impl no downstream crate could have
+written. `Fixture::REMOVAL` and `remove_outside_port`, and `SyncFixture::REOPEN`,
+`COMPACTION`, `reopen` and `compact_recorded_before`, have defaults, so a
+fixture compiles unchanged; H4 – H6 are what they fail. `Removed`,
+`WithholdingStore`, `WithholdError`, `RetentionGap`, `Accept`, `Adjudicate`,
+`SendAdjudicate` and `serve_sync_adjudicated` are new items.
+`directional_merge_rules_compose` (#441) and the SY-7 and SY-10 rules' move onto
+the shipped hook (#450) change no rule's verdict. The seven clauses ADR-0108
+froze bind from `1.0.0`; freezing one changes no behaviour. Cloudflare's HTTP
+mapping carries `Reseed` as 400, which reads back as `Stop`: safe, and not yet
+reported as a gap.
+
+**Pending:** none.
 
 ## [0.6.0] — 2026-11-09
 
@@ -6055,7 +6350,8 @@ time.
   optional on the wire: an append condition now has to name what it is
   guarding, and a document that omits it is rejected rather than decoded.
 
-[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Wet-Ink-Corporation/happenstance/compare/v0.4.6...v0.5.0

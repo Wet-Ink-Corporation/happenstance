@@ -74,6 +74,11 @@
 //! subject; `/sync-reset` empties the object between them, as a restore to
 //! nothing would.
 //!
+//! [`sync_mount`] declares the limits of the object's second mount,
+//! `/sync-wide/pull` and `/sync-wide/push`, over the same log: wide enough
+//! that a push can carry more than Cloudflare's tags-per-call ceiling, which
+//! no push under `/sync/`'s `PeerLimits::minimum` can (VT-36).
+//!
 //! [`probe`] is the other half of the job: the platform's SQLite walls, measured
 //! on the runtime that imposes them (`experiments/durable-object-limits`).
 //!
@@ -91,5 +96,6 @@ mod object;
 pub mod probe;
 pub mod remint;
 pub mod restart;
+pub mod sync_mount;
 pub mod sync_peer;
 pub mod write_group;

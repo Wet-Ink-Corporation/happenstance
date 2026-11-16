@@ -129,12 +129,13 @@ pub mod rules {
     use happenstance_sync::{
         Ack, Classify, EventGroup, PeerLimits, PushBatch, ReplicatedEvent, SyncPeer, Waiting,
     };
-    use happenstance_testkit::RuleOutcome;
+    use happenstance_testkit::{Reopened, RuleOutcome};
 
     use crate::kv_capped::turnstile_seat_map;
     use crate::violation::{Violation, ensure};
     use crate::{MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, SyncFixture};
 
+    mod retention;
     mod whole_log;
 
     /// The most pulls a rule makes before it decides the peer will never say
@@ -671,19 +672,24 @@ pub mod rules {
     /// it, and nothing re-sends it.
     ///
     /// The rule pushes one batch of two groups from two origins, at origin
-    /// positions 3 and 7 and 2, drops the handle that pushed, connects a fresh
-    /// one onto the same fixture and pulls everything. Then every pushed event
-    /// at or below the confirmed mark for its origin is held, byte for byte,
-    /// and every confirmed mark names an event the fresh handle holds.
-    /// `confirmed` is read as a high-water mark, never as everything up to: no
-    /// position below a mark that the rule did not push is assumed held.
+    /// positions 3 and 7 and 2, drops the handle that pushed, reopens the
+    /// fixture when it can, connects a fresh handle onto it and pulls
+    /// everything. Then every pushed event at or below the confirmed mark for
+    /// its origin is held, byte for byte, and every confirmed mark names an
+    /// event the fresh handle holds. `confirmed` is read as a high-water mark,
+    /// never as everything up to: no position below a mark that the rule did
+    /// not push is assumed held.
     ///
     /// "Not durable" is observed as "gone once the acking handle is dropped",
-    /// which is the strongest crash a [`SyncFixture`] can express today: one
-    /// fixture is one backing peer, and each `connect` one handle onto it. A
-    /// peer that buffers in fixture-wide memory and loses it to a process crash
-    /// passes here, until the fixture contract gains a reopen capability with
-    /// the first durable peer adapter.
+    /// and, when the fixture declares [`SyncFixture::REOPEN`], as "gone once
+    /// the fixture is reopened", the process crash CF-17 lets a fixture stage.
+    /// The reopen must answer [`Reopened::Discarded`]; a fixture that declares
+    /// the capability and keeps the provided `reopen` is a violation here. A
+    /// fixture that declines it is run as before, and a peer that buffers in
+    /// memory every handle shares, and would lose it to a crash, passes: that
+    /// is what the declension costs, and its reason is the fixture's to state.
+    ///
+    /// [`Reopened::Discarded`]: happenstance_testkit::Reopened::Discarded
     ///
     /// A peer whose ack confirms none of the pushed events has given the rule
     /// nothing to check, so the rule reports
@@ -698,11 +704,14 @@ pub mod rules {
     /// A write-behind cache that acknowledges a push on admission and commits
     /// it later, so a handle dropped in between has confirmed what the peer
     /// never held. `tests/wrong_peers.rs` carries it, and the peer that
-    /// confirms nothing, which this rule must skip.
+    /// confirms nothing, which this rule must skip. `tests/wrong_reopens.rs`
+    /// carries the same cache in memory every handle shares, which only a
+    /// reopen can show.
     ///
     /// # Errors
     ///
     /// A [`Violation`] of SY-31 if the peer refuses the push or a pull, if a
+    /// fixture declaring [`SyncFixture::REOPEN`] reopened nothing, if a
     /// confirmed event is not held by a fresh handle, or if a confirmed mark
     /// names no event the fresh handle holds.
     pub async fn ack_never_confirms_a_non_durable_event<F: SyncFixture>(
@@ -729,6 +738,19 @@ pub mod rules {
             // The acking handle is dropped here: what it confirmed must
             // outlive it.
         };
+        if F::REOPEN.is_supported() {
+            ensure(
+                fixture.reopen().await == Reopened::Discarded,
+                CLAUSE,
+                || {
+                    String::from(
+                        "the fixture declares REOPEN supported and its reopen answered \
+                         `Nothing`: `SyncFixture::reopen` is not overridden, or its override \
+                         reopened nothing, so the crash this rule stages never happened",
+                    )
+                },
+            )?;
+        }
 
         let fresh = fixture.connect().await;
         let held: Vec<ReplicatedEvent> = pull_everything(&fresh, CLAUSE)
@@ -1020,6 +1042,70 @@ pub mod rules {
             handed_back.into_iter().flat_map(|group| group.events),
             CLAUSE,
         )?;
+        Ok(RuleOutcome::Ran)
+    }
+
+    /// SY-32: a peer that has forgotten history reports the floor, and
+    /// refuses a resume token below it with class
+    /// [`Reseed`](happenstance_sync::FailureClass::Reseed), so a peer that was
+    /// offline longer than its retention window is told it cannot converge
+    /// rather than converging on a strict subset in silence.
+    ///
+    /// The rule plays the vessel (SY-8). A shore origin's log is pushed one
+    /// group per day, on a test clock: days 0 and 10, then a pull to the end
+    /// whose token is the vessel that goes offline on day 10; days 20, 50 and
+    /// 70, then a pull from that token to the end whose token is a vessel that
+    /// last synced on day 70; then days 100 and 125. On day 130 the fixture
+    /// compacts on a 90-day window, forgetting days 0 to 20. Then:
+    ///
+    /// * the peer's [`retention_floor`](happenstance_sync::PeerLimits::retention_floor)
+    ///   names one of the events it was asked to forget;
+    /// * a pull from the day-10 token is refused with class `Reseed`;
+    /// * so is a pull from the start: a peer that has compacted cannot hand a
+    ///   strict subset to an edge that lost its token, or to a runner that
+    ///   drops its token on a stop;
+    /// * a pull from the day-70 token hands back exactly the events of days 100
+    ///   and 125, compared whole (SY-35), each once.
+    ///
+    /// A fixture that declines [`COMPACTION`](crate::SyncFixture::COMPACTION)
+    /// is reported [`Skipped`](RuleOutcome::Skipped) with its stated reason.
+    ///
+    /// # Rejects
+    ///
+    /// A peer that compacts and answers the stale token anyway: one that
+    /// drains its log without an offset, so the old index lands on a later
+    /// group, and one that declares a floor and answers a stale token from
+    /// it, and one that serves a pull from the start from its floor. Each
+    /// converges on a strict subset in silence. Also a peer that refuses and
+    /// declares no floor or its oldest retained event as one, one that refuses
+    /// as `Transient`, which a runner retries for ever, and one that refuses
+    /// every token once compacted. `tests/wrong_retention.rs` carries all seven.
+    ///
+    /// # Does not reject
+    ///
+    /// A floor naming the wrong forgotten event: any event the rule asked the
+    /// peer to forget passes, and the reference peer's unit tests pin which
+    /// one. Nor a scattered purge, which SY-32 does not report in 1.x.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-32 if the peer refuses a push or a resumable
+    /// pull, declares no floor or a floor it was not asked to forget, answers
+    /// the stale token or a pull from the start, refuses either with a class
+    /// other than `Reseed`, or hands
+    /// back anything but the events written after the recent token.
+    pub async fn retention_gap_is_reported_not_silent<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        let fixture = open().await;
+        if let Some(reason) = F::COMPACTION.reason() {
+            return Ok(RuleOutcome::Skipped {
+                capability: "COMPACTION",
+                reason,
+            });
+        }
+        let peer = fixture.connect().await;
+        retention::reported_not_silent(&fixture, &peer).await?;
         Ok(RuleOutcome::Ran)
     }
 
@@ -1754,6 +1840,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- A round trip preserves the whole log (SY-27, SY-28) --------
             round_trip_preserves_the_whole_log,
+
+            // --- A retention gap is reported, not silent (SY-32) ------------
+            retention_gap_is_reported_not_silent,
         }
     };
 }

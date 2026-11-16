@@ -42,7 +42,7 @@ use happenstance_neon::event_store::NeonEventStore;
 use happenstance_neon::{NeonConfig, SqlRequest, SqlStatement, SqlTransport, migration};
 #[cfg(all(feature = "projection-store", feature = "conformance"))]
 use happenstance_testkit::Reopened;
-use happenstance_testkit::{Armed, Capability, Fixture, Settled};
+use happenstance_testkit::{Armed, Capability, Fixture, Removed, Settled};
 use tokio::sync::OnceCell;
 
 pub(crate) mod transport;
@@ -387,6 +387,97 @@ impl Fixture for NeonFixture {
         // would make `acknowledged_writes_survive_a_reopen` pass by making it
         // vacuous, which is the trap `happenstance-sqlite`'s fixture documents at
         // the equivalent line.
+    }
+
+    /// Supported: a raw `DELETE` on this instance's `event` table reaches the
+    /// store's own storage, which is what a retention job does.
+    ///
+    /// # Same store, and the allocator survives it
+    ///
+    /// The migration is `happenstance-postgres`'s, templated, so positions come
+    /// from a sequence that never rewinds on `DELETE`, and `store_meta` keeps
+    /// the `StoreId`. Never `TRUNCATE … RESTART IDENTITY`, which rewinds the
+    /// sequence it owns. A Neon branch reset rewinds the whole database under
+    /// the **same** `StoreId`, which is a different store (VT-6) and the open
+    /// question `kb-open-question-postgres-neon-store-id-no-restore-001`
+    /// records, not a removal.
+    const REMOVAL: Capability = Capability::SUPPORTED;
+
+    /// Deletes the named rows in one statement, one round trip, schema
+    /// qualified because this transport has no `search_path`.
+    ///
+    /// The positions travel as one text parameter in Postgres array syntax,
+    /// cast to `bigint[]` on the server, which is how this adapter's own
+    /// statements pass a number: as text with a cast.
+    ///
+    /// # Panics
+    ///
+    /// On any failure to reach the endpoint, and when the endpoint reports a
+    /// row count other than the number of distinct positions named: the rule
+    /// names only positions it appended, so either is a broken test
+    /// environment.
+    // The path is spelled out rather than imported, so that the lines above
+    // keep the numbers the knowledge base cites.
+    async fn remove_outside_port(
+        &self,
+        positions: &[happenstance_core::SequencePosition],
+    ) -> Removed {
+        self.migrate().await;
+        let mut distinct: Vec<u64> = positions.iter().map(|position| position.get()).collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+        let array = format!(
+            "{{{}}}",
+            distinct
+                .iter()
+                .map(u64::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        let statement = SqlStatement::with_params(
+            format!(
+                "DELETE FROM {} WHERE position = ANY($1::bigint[])",
+                self.config.qualified_event()
+            ),
+            vec![serde_json::Value::String(array)],
+        );
+
+        let transport = HyperTransport::shared();
+        let response = transport
+            .round_trip(SqlRequest::single(statement))
+            .await
+            .unwrap_or_else(|error| {
+                panic!(
+                    "a broken test environment, not a non-conformant adapter: the removal \
+                     could not reach {} ({error})",
+                    transport.host()
+                )
+            });
+        assert!(
+            response.is_success(),
+            "a broken test environment: the removal failed in schema `{}` (HTTP {}) — {}",
+            self.schema(),
+            response.status,
+            String::from_utf8_lossy(&response.body)
+                .chars()
+                .take(400)
+                .collect::<String>()
+        );
+        let removed = happenstance_neon::wire::ResponseBody::parse(&response.body)
+            .unwrap_or_else(|error| {
+                panic!("the removal answered a body that does not parse ({error})")
+            })
+            .result_sets()
+            .first()
+            .and_then(|result| result.row_count);
+        assert_eq!(
+            removed.and_then(|count| usize::try_from(count).ok()),
+            Some(distinct.len()),
+            "the rule names only positions this store holds, so the DELETE removes \
+             one row for each of {distinct:?} in schema `{}`",
+            self.schema()
+        );
+        Removed::Deleted
     }
 }
 

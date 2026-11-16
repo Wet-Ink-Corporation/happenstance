@@ -21,7 +21,7 @@ What is not finished:
   `todo!()` bodies are blocked on `happenstance-core` having no write path that
   preserves a foreign `EventId`. Phase 13.
 - **Retention** has no answer: ES-39, CF-27 and SY-32 are `[DEFERRED]`, and one
-  of ADR-0028's two answers adds a method to `EventStore`. Phase 14.
+  of ADR-0028's two answers adds a method to `EventStore`. Phase 14. *Since it, all frozen (ADR-0108): no method.*
 - **The typed layer's runner** was still behind `unstable-projection`, with a synchronous
   `apply`, no failure-policy seam (PS-27) and no fan-out runner (PS-30). *Since phase 18 all
   four are answered: no gate (#132), an async `apply` (ADR-0074), `on_error` and `run_fan_out`.*

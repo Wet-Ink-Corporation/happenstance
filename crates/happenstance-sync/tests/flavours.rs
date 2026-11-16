@@ -48,8 +48,8 @@ use happenstance_sync::write_group::{GroupOrderError, GroupPageBuilder};
 use happenstance_sync::{
     Classify, EventGroup, FailureClass, GroupPage, IngestError, IngestGroup, IngestStore, Ingested,
     MemoryIngestStore, MemoryPeerError, MemoryResume, MemorySyncPeer, PeerLimits, Pulled,
-    PushBatch, RemoteSyncPeer, ReplicatedEvent, SendPeer, ServeError, StoreSyncPeer, SyncPeer,
-    Waiting, Watermark, WriteGroupStore, serve_sync,
+    PushBatch, RemoteError, RemoteSyncPeer, ReplicatedEvent, SendPeer, ServeError, StoreSyncPeer,
+    SyncPeer, Waiting, Watermark, WriteGroupStore, serve_sync,
 };
 
 /// The failure [`exchange`] reports: any of the three ports' own errors.
@@ -476,6 +476,49 @@ async fn an_edge_steps_over_a_not_send_store_and_peer() {
     assert_eq!(edge.status().confirmed, Some(local));
 }
 
+/// A merge rule that holds an `Rc`, as a Durable Object's rule reading its
+/// own SQLite would, and answers every group with one compensation.
+struct LocalRule(Rc<Event>);
+
+impl happenstance_sync::runner::Adjudicate for LocalRule {
+    type Error = core::convert::Infallible;
+
+    async fn compensation(
+        &self,
+        _group: &EventGroup,
+        _earlier: &[EventGroup],
+    ) -> Result<Vec<Event>, Self::Error> {
+        Ok(vec![(*self.0).clone()])
+    }
+}
+
+/// The adjudication hook over a store, a peer and a rule that each hold an
+/// `Rc` (SY-17): tighten the rule's bound on `Edge::step` to
+/// `SendAdjudicate` and this stops compiling, with `error[E0277]`.
+#[tokio::test]
+async fn an_edge_steps_under_a_not_send_rule() {
+    let origin = StoreId::from_bytes([7; 16]);
+    let peer = LocalPeer {
+        inner: Rc::new(MemorySyncPeer::new(origin)),
+    };
+    peer.inner
+        .seed(EventGroup::new(None, vec![replicated(origin, 1)]))
+        .expect("an unpoisoned peer accepts a seed");
+    let store = LocalStore::new(StoreId::from_bytes([9; 16]));
+    let rule = LocalRule(Rc::new(
+        Event::new("Compensated", "{}").expect("a valid event type"),
+    ));
+    let mut edge = happenstance_sync::runner::Edge::new().with_adjudicator(rule);
+
+    let stepped = edge
+        .step(&peer, &store)
+        .await
+        .expect("an in-memory step does not fail");
+
+    assert_eq!(stepped.ingested.appended, 1, "the far side's event landed");
+    assert_eq!(stepped.ingested.compensated, 1, "with the rule's answer");
+}
+
 /// A sleep that holds an `Rc`, as a Durable Object's alarm handle would: the
 /// third `!Send` party to a run.
 struct LocalSleep(Rc<RefCell<Vec<core::time::Duration>>>);
@@ -694,6 +737,85 @@ async fn a_spawned_edge_steps_from_generic_code() {
     assert_eq!(spawned, Ok((1, Some(local))), "the step ran in the task");
 }
 
+/// A merge rule of the `Send` flavour that answers every group with one
+/// compensation.
+#[derive(Debug, Clone)]
+struct CompensateEach(Event);
+
+impl happenstance_sync::runner::SendAdjudicate for CompensateEach {
+    type Error = core::convert::Infallible;
+
+    async fn compensation(
+        &self,
+        _group: &EventGroup,
+        _earlier: &[EventGroup],
+    ) -> Result<Vec<Event>, Self::Error> {
+        Ok(vec![self.0.clone()])
+    }
+}
+
+/// [`Edge::step`](happenstance_sync::runner::Edge::step) on an edge with a
+/// merge rule, inside `tokio::spawn`, from a function that knows the peer,
+/// the store and the rule only by their `Send` flavours. Rejects a hook whose
+/// future, or whose place in the step, makes a hooked edge unspawnable.
+fn adjudicated_edge_spawns_from_generic<P, S, A>(
+    peer: Arc<P>,
+    store: Arc<S>,
+    rule: A,
+) -> tokio::task::JoinHandle<Result<Ingested, String>>
+where
+    P: happenstance_sync::SendSyncPeer + Send + Sync + 'static,
+    P::Resume: Send + Sync,
+    S: happenstance_sync::SendWriteGroupStore
+        + happenstance_sync::SendIngestStore
+        + Send
+        + Sync
+        + 'static,
+    A: happenstance_sync::runner::SendAdjudicate + Send + Sync + 'static,
+{
+    tokio::spawn(async move {
+        let mut edge = happenstance_sync::runner::Edge::new().with_adjudicator(rule);
+        let stepped = edge
+            .step(&*peer, &*store)
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(stepped.ingested)
+    })
+}
+
+/// A hooked edge spawned from generic code over a store peer that is
+/// hooked too, through [`SendPeer`]: both ingest sites carry a rule, and
+/// each lands its answer.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_spawned_hooked_edge_steps_a_hooked_store_peer_from_generic_code() {
+    let sides = TwoSides::new().await;
+    let compensated = Event::new("Compensated", "{}").expect("a valid event type");
+    let far = sides
+        .far()
+        .with_adjudicator(CompensateEach(compensated.clone()));
+    let peer = Arc::new(SendPeer::new(far));
+
+    let ingested = adjudicated_edge_spawns_from_generic(
+        peer,
+        Arc::clone(&sides.device),
+        CompensateEach(compensated),
+    )
+    .await
+    .expect("the spawned task does not panic")
+    .expect("an in-memory step does not fail");
+
+    assert_eq!(ingested.appended, 1, "the hub's event reached the device");
+    assert_eq!(ingested.compensated, 1, "with the device's answer");
+    let hub_log = sides.hub.snapshot();
+    assert!(
+        hub_log
+            .iter()
+            .any(|row| row.event_type().as_str() == "Compensated"
+                && row.id.store() == sides.hub_id()),
+        "the hub answered the device's push under its own identity: {hub_log:?}"
+    );
+}
+
 /// A sleep of the `Send` flavour that returns at once: nothing in
 /// [`a_spawned_edge_runs_from_generic_code`] fails, so it is never awaited.
 struct Immediate;
@@ -857,6 +979,11 @@ impl TwoSides {
         StoreSyncPeer::new(handle.clone(), handle)
     }
 
+    /// The hub's own identity.
+    fn hub_id(&self) -> StoreId {
+        self.hub_event.store()
+    }
+
     /// Whether each side now holds the other's event.
     async fn both_crossed(&self) -> (bool, bool) {
         let to_device = EventStore::contains_event_id(&*self.device, self.hub_event)
@@ -907,6 +1034,43 @@ async fn a_spawned_edge_steps_a_remote_peer_from_generic_code() {
     let (_, confirmed) = stepped.expect("an in-memory step does not fail");
     assert_eq!(confirmed, head, "the step confirmed the device's head");
     assert_eq!(sides.both_crossed().await, (true, true));
+}
+
+/// [`SendPeer`] refuses what the [`RemoteSyncPeer`] inside it refuses: a push
+/// carrying an event over the declared `max_event_bytes` comes back
+/// [`EventTooLarge`](RemoteError::EventTooLarge) and the far log stays empty.
+///
+/// Rejects a `SendPeer` that bypasses the client's check and sends through the
+/// exchange itself (#452).
+#[tokio::test]
+async fn the_send_flavour_refuses_an_oversized_event_before_sending() {
+    let far_store = Arc::new(MemoryIngestStore::new());
+    let handle = Shared(Arc::clone(&far_store));
+    // Two handles onto one store: the clone is an `Arc` bump.
+    let far = StoreSyncPeer::new(handle.clone(), handle);
+    let limits = far.limits();
+    let max = limits.max_event_bytes;
+    let peer = SendPeer::new(RemoteSyncPeer::new(Loopback { far }, limits));
+    let mut event = replicated(StoreId::from_bytes([3; 16]), 1);
+    event.event =
+        Event::new("CourseCapacityChanged", vec![0_u8; max + 1]).expect("a valid event type");
+    let batch = PushBatch::new(vec![EventGroup::new(None, vec![event])]);
+
+    let refused = SyncPeer::push(&peer, &batch)
+        .await
+        .expect_err("one byte over max_event_bytes");
+
+    assert!(
+        matches!(refused, RemoteError::EventTooLarge { len, limit, .. }
+            if len == max + 1 && limit == max),
+        "{refused:?}"
+    );
+    assert_eq!(refused.class(), FailureClass::Park);
+    assert_eq!(
+        far_store.snapshot(),
+        Vec::new(),
+        "nothing reached the far log"
+    );
 }
 
 /// A [`RemoteSyncPeer`] run by [`edge_runs_from_generic`], the loop's

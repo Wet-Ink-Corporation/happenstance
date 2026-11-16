@@ -1,0 +1,134 @@
+# CF-27's recorded pass list (#144).
+#
+# Every rule of the event-store, concurrency and model families, run against
+# `PrunedMemoryFixture`: a memory store behind a `WithholdingStore` that
+# withholds the twelve events seeded before each rule begins, whose types and
+# tags are the ones the rules' append conditions name. A rule that `ran`
+# is a rule that cannot tell a pruned store from a young one, which is the
+# outcome CF-27 specifies. A rule that `skipped` names the capability the
+# fixture declines; the reason lives in the fixture's code, not here.
+#
+# Why whole-history pruning and not a scattered survivor set: every rule
+# assumes it starts on a fresh store, and many read `Query::all()`, so a
+# survivor from before the rule would fail them for a reason that has nothing
+# to do with pruning. Holes inside a rule's own history need the rule's
+# cooperation: ES-38's and ES-40's rules (#151, #154) supply it.
+# The fixture grants `REMOVAL` by forwarding to `withhold`, so the removal
+# rules run here; ES-38's passes by delegation.
+#
+# Asserted by exact equality in
+# `instrument_report_is_accurate_and_the_suite_cannot_tell`. A rule added to
+# any family fails that test until its line is added here, in the same change,
+# and the failure message prints the replacement. Regenerate with
+# `--all-features`, or the model family's lines are missing from it.
+#
+# Format: `<family> ran <rule>` or `<family> skipped <rule> <CAPABILITY>`, where
+# a rule gated on several capabilities names them all, comma-separated.
+
+event-store ran two_fixture_instances_observe_none_of_each_others_appends
+event-store ran two_handles_observe_each_others_appends
+event-store skipped acknowledged_writes_survive_a_reopen REOPEN
+event-store ran query_all_matches_every_event
+event-store ran query_item_types_are_or
+event-store ran query_item_tags_are_and
+event-store ran query_item_tags_match_supersets
+event-store ran query_item_rejects_partial_tag_overlap
+event-store ran query_item_combines_types_and_tags_with_and
+event-store ran query_items_are_or
+event-store ran untagged_events_match_query_all
+event-store ran duplicate_items_do_not_duplicate_events
+event-store ran query_item_order_does_not_change_the_result_set
+event-store ran query_matching_nothing_yields_empty
+event-store ran query_union_is_item_concatenation
+event-store ran read_from_is_inclusive
+event-store ran read_backwards_reverses_order
+event-store ran read_limit_truncates
+event-store ran read_backwards_from_with_limit
+event-store ran read_defaults_to_ascending_order
+event-store ran reading_an_empty_store_yields_nothing
+event-store ran read_limit_applies_after_filtering
+event-store ran read_backwards_limit_applies_after_filtering
+event-store ran read_from_composes_with_multi_item_query
+event-store ran read_from_composes_with_limit
+event-store ran read_to_is_inclusive
+event-store ran read_from_and_to_bound_a_closed_window
+event-store ran read_to_under_backwards_bounds_the_older_end
+event-store ran read_to_composes_with_multi_item_query
+event-store ran read_limit_zero_yields_nothing
+event-store ran limit_applies_across_items_not_per_item
+event-store ran read_to_composes_with_limit
+event-store ran read_from_a_gap_position
+event-store ran positions_are_unique
+event-store ran positions_are_strictly_monotonic
+event-store ran head_of_an_empty_store_is_none
+event-store ran head_is_the_highest_visible_position
+event-store ran head_advances_across_two_handles
+event-store ran append_stamps_identity_and_time
+event-store ran append_stamps_a_local_event_id
+event-store ran event_ids_are_unique_within_a_store
+event-store ran appending_equal_events_yields_two_events
+event-store ran event_id_is_not_matchable_by_query
+event-store skipped reopened_store_does_not_reissue_an_event_id REOPEN
+event-store ran append_stamps_a_recorded_time
+event-store skipped recorded_time_survives_a_reopen REOPEN
+event-store ran contains_event_id_reports_membership
+event-store skipped contains_event_id_reports_a_held_row_above_the_frontier HELD_ABOVE_FRONTIER
+event-store ran append_returns_last_written_position
+event-store ran append_is_atomic
+event-store skipped append_is_atomic_under_a_mid_batch_fault MID_BATCH_FAULT
+event-store skipped arming_a_mid_batch_fault_makes_the_append_fail MID_BATCH_FAULT
+event-store ran append_rejects_empty_batch
+event-store ran empty_batch_is_refused_before_the_condition_is_evaluated
+event-store ran append_preserves_event_payload
+event-store ran batch_positions_follow_slice_order
+event-store ran batch_is_not_evaluated_against_its_own_condition
+event-store ran dropped_append_future_leaves_no_partial_batch
+event-store ran reissued_conditional_batch_lands_once
+event-store ran reissued_unconditional_batch_lands_twice
+event-store ran reissued_batch_conditioned_on_other_events_lands_twice
+event-store ran append_preserves_an_empty_payload
+event-store ran metadata_distinguishes_absent_from_empty
+event-store ran store_accepts_a_max_length_identifier
+event-store ran store_accepts_non_ascii_identifiers
+event-store ran store_accepts_the_guaranteed_minimum_payload
+event-store ran store_accepts_the_guaranteed_minimum_tag_count
+event-store ran store_evaluates_a_query_at_the_guaranteed_minimum_item_count
+event-store ran store_accepts_the_guaranteed_minimum_batch_size
+event-store ran store_accepts_the_guaranteed_minimum_tags_per_batch
+event-store ran tags_differing_only_by_unicode_normalisation_are_distinct
+event-store ran tags_may_repeat_a_key
+event-store ran append_preserves_event_type_and_tags_byte_for_byte
+event-store skipped append_reports_exceeded_store_limits MAX_EVENT_DATA_LEN, MAX_TAGS_PER_EVENT, MAX_EVENTS_PER_BATCH, MAX_METADATA_LEN, MAX_TAGS_PER_BATCH
+event-store ran condition_without_after_rejects_any_match
+event-store ran condition_without_after_allows_non_match
+event-store ran condition_matches_on_every_tag_in_an_item
+event-store ran condition_matching_every_tag_rejects_the_append
+event-store ran condition_after_ignores_events_at_the_boundary
+event-store ran condition_after_rejects_events_beyond_the_boundary
+event-store ran condition_after_ignores_non_matching_events
+event-store ran condition_matches_on_tags
+event-store ran condition_with_an_unheld_tag_does_not_reject
+event-store ran condition_against_an_empty_store_admits_the_append
+event-store ran condition_after_beyond_head_admits_the_append
+event-store ran condition_after_beyond_the_last_matching_position_admits_the_append
+event-store ran condition_rejection_leaves_store_unchanged
+event-store ran condition_rejection_is_reported_as_condition_violated
+event-store ran condition_guards_carry_independent_boundaries
+event-store ran condition_with_one_guard_behaves_as_today
+event-store ran racing_conditional_appends_elect_one_winner
+event-store ran interleaved_appends_on_one_handle_elect_one_winner
+event-store ran a_live_read_stream_does_not_block_an_append
+event-store ran read_result_is_stable_under_concurrent_append
+event-store ran query_items_share_one_snapshot
+event-store skipped arming_a_read_fault_makes_the_stream_yield_an_error READ_FAULT
+event-store ran nothing_below_an_observed_position_appears_later
+event-store ran removal_outside_the_port_removes_exactly_the_named_events
+event-store ran positions_are_not_reused_after_removal
+event-store ran condition_over_removed_history_does_not_reject
+concurrency ran exactly_one_of_n_contenders_commits
+concurrency ran k_disjoint_boundaries_never_conflict
+concurrency ran positions_are_unique_under_concurrent_appends
+concurrency ran append_returns_the_callers_own_last_position
+concurrency ran a_busy_append_left_nothing_behind
+concurrency ran a_concurrent_reader_never_sees_a_partial_batch
+model ran ops_agree_with_the_model

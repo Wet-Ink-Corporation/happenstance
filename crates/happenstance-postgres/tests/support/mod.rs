@@ -65,7 +65,7 @@ use happenstance_postgres::sqlx::{Executor, PgPool};
 #[cfg(all(feature = "projection-store", feature = "conformance"))]
 use happenstance_testkit::Reopened;
 use happenstance_testkit::concurrency::CONTENDERS;
-use happenstance_testkit::{Armed, Capability, Fixture, Settled};
+use happenstance_testkit::{Armed, Capability, Fixture, Removed, Settled};
 use testcontainers::ReuseDirective;
 use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::AsyncRunner;
@@ -725,6 +725,67 @@ impl Fixture for PostgresFixture {
         // pool would not discard by construction, so the honest implementation
         // of "discard handle state" is to do nothing and let the next
         // `connect()` open a genuinely new pool.
+    }
+
+    /// Supported: a raw `DELETE` on this instance's `event` table reaches the
+    /// store's own storage, which is what a retention job does.
+    ///
+    /// # Same store, and the allocator survives it
+    ///
+    /// Positions come from `event_position_seq`, and a sequence never rewinds
+    /// on `DELETE`, so a removed position is never handed out again.
+    /// `store_meta` is not touched, so the `StoreId` survives too.
+    ///
+    /// Never `TRUNCATE … RESTART IDENTITY`: the sequence is `OWNED BY
+    /// event.position`, so `RESTART IDENTITY` would rewind it. That, `setval`,
+    /// a `pg_restore` and a Neon branch reset all rewind the allocator under
+    /// the **same** `StoreId`, which is a different store (VT-6) and the open
+    /// question `kb-open-question-postgres-neon-store-id-no-restore-001`
+    /// records, not a removal.
+    const REMOVAL: Capability = Capability::SUPPORTED;
+
+    /// Deletes the named rows in one statement on this instance's pool, whose
+    /// `search_path` is the instance's schema.
+    ///
+    /// One table, because tags are a `text[]` column on `event` rather than a
+    /// table of their own. A rule that removes from a write group names the
+    /// whole group, so the group's guard on its first row goes with it.
+    ///
+    /// # Panics
+    ///
+    /// On any failure to reach the server, and when the number of rows deleted
+    /// is not the number of distinct positions named: the rule names only
+    /// positions it appended, so either is a broken test environment.
+    // The path is spelled out rather than imported, so that the lines above
+    // keep the numbers the knowledge base cites.
+    async fn remove_outside_port(
+        &self,
+        positions: &[happenstance_core::SequencePosition],
+    ) -> Removed {
+        let mut distinct: Vec<i64> = positions
+            .iter()
+            .map(|position| i64::try_from(position.get()).expect("a position fits bigint"))
+            .collect();
+        distinct.sort_unstable();
+        distinct.dedup();
+
+        let pool = self.pool().await;
+        let removed = sqlx::query("DELETE FROM event WHERE position = ANY($1)")
+            .bind(&distinct)
+            .execute(&pool)
+            .await
+            .unwrap_or_else(|error| {
+                panic!("a broken test environment, not a non-conformant adapter: {error}")
+            })
+            .rows_affected();
+        assert_eq!(
+            usize::try_from(removed).ok(),
+            Some(distinct.len()),
+            "the rule names only positions this store holds, so the DELETE \
+             removes one row for each of {distinct:?} in schema `{}`",
+            self.schema
+        );
+        Removed::Deleted
     }
 }
 

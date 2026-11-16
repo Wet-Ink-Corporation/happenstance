@@ -140,25 +140,43 @@ pub(super) async fn fresh_pool() -> PgPool {
 /// connection and nothing applied: for a test that arranges a schema an older
 /// build left.
 ///
-/// The schema is `hsi_<pid>_<n>`, a prefix neither of `tests/support`'s
-/// fixtures uses. The pool is small and built on the calling test's runtime,
-/// never in a `static`, which avoids the cross-runtime hazard
-/// `PostgresEventStore::new` documents.
+/// [`fresh_schema_name`] and [`pool_onto`], in one call.
 ///
 /// # Panics
 ///
 /// On any failure to reach or prepare the server, naming the environment.
 pub(super) async fn empty_pool() -> PgPool {
+    pool_onto(&fresh_schema_name()).await
+}
+
+/// A schema name no other fixture in this process uses, and nothing created.
+///
+/// `hsi_<pid>_<n>`, a prefix neither of `tests/support`'s fixtures uses.
+pub(super) fn fresh_schema_name() -> String {
     static NEXT: AtomicU64 = AtomicU64::new(1);
-    let schema = format!(
+    format!(
         "hsi_{}_{}",
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
-    );
+    )
+}
+
+/// A new pool onto `schema`, with `search_path` set on every connection, and
+/// the schema created if it is not there yet.
+///
+/// Called again on a schema it already created, it opens a second pool onto
+/// the same tables: what a fixture's reopen does. The pool is small and built
+/// on the calling test's runtime, never in a `static`, which avoids the
+/// cross-runtime hazard `PostgresEventStore::new` documents.
+///
+/// # Panics
+///
+/// On any failure to reach or prepare the server, naming the environment.
+pub(super) async fn pool_onto(schema: &str) -> PgPool {
     let url = server_url().await;
 
     // Owned by the hook, which runs once per connection the pool opens.
-    let search_path = schema.clone();
+    let search_path = schema.to_owned();
     let pool = PgPoolOptions::new()
         // Six: the most any test holds at once is four, in the claim test
         // that holds a transaction and a lock beside a blocked ingest and

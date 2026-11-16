@@ -360,8 +360,8 @@ is on, and a clone of it is a second handle onto the same file. Neither line
 below is compiled on this page:
 
 ```text
-happenstance-sqlite = { version = "0.6", features = ["sync"] }
-happenstance-sync = "0.6"
+happenstance-sqlite = { version = "0.7", features = ["sync"] }
+happenstance-sync = "0.7"
 ```
 
 ```text
@@ -389,11 +389,16 @@ The conflict is answered afterwards, by an ordinary append that compensates
 written by one peer only
 ([SY-7](../spec/SPECIFICATION.md#51-the-bound-decision-ingest-never-rejects)).
 
-`StoreSyncPeer` writes no compensation, and the runner's hook for one is not
-built yet ([#450](https://github.com/Wet-Ink-Corporation/happenstance/issues/450)).
-Until it is, choose the one peer that decides, usually central, and have it
-run a decision over the history it holds after a sync, with `commit` like any
-other. The compensation is an event, so it syncs back to every device.
+`StoreSyncPeer` writes no compensation unless you give it a merge rule. From
+`0.7` the runner has a hook for one
+([#450](https://github.com/Wet-Ink-Corporation/happenstance/issues/450)): a
+`runner::Adjudicate`, mounted with `Edge::with_adjudicator` for what an edge
+pulls, or with `StoreSyncPeer::with_adjudicator`, served through
+`serve_sync_adjudicated`, for what a far side is pushed. The runner lands each
+incoming group and its compensation in one write. Without a rule, choose the
+one peer that decides, usually central, and have it run a decision over the
+history it holds after a sync, with `commit` like any other. Either way the
+compensation is an event, so it syncs back to every device.
 
 [`examples/two-devices-one-seat`](../examples/two-devices-one-seat/src/overview.md)
 is that arrangement end to end on three SQLite files: both devices sell the

@@ -6,6 +6,7 @@
 
 use core::num::NonZeroU64;
 
+use super::adjudicate::Adjudicate;
 use super::backoff::{Backoff, Sleep};
 use super::{Edge, EdgeState, StepFailure, Stepped};
 use crate::classify::{Classify, FailureClass};
@@ -13,7 +14,7 @@ use crate::ingest::IngestStore;
 use crate::peer::{SyncPeer, Waiting};
 use crate::write_group::WriteGroupStore;
 
-impl<R> Edge<R> {
+impl<R, A: Adjudicate> Edge<R, A> {
     /// Steps until the edge is synced, or quiet, or halts: a caller-owned
     /// loop, driven on whatever runtime the caller has. Nothing is spawned.
     ///
@@ -94,7 +95,7 @@ impl<R> Edge<R> {
         store: &S,
         backoff: &mut Backoff,
         sleep: &Z,
-    ) -> Result<(), StepFailure<P, S>>
+    ) -> Result<(), StepFailure<P, S, A>>
     where
         P: SyncPeer<Resume = R>,
         S: WriteGroupStore + IngestStore,
@@ -137,7 +138,9 @@ impl<R> Edge<R> {
                         // The step parked or stopped the edge for these, so
                         // the state check above has already returned; kept
                         // total all the same.
-                        FailureClass::Park | FailureClass::Stop => return Err(error),
+                        FailureClass::Park | FailureClass::Stop | FailureClass::Reseed => {
+                            return Err(error);
+                        }
                     }
                 }
             };

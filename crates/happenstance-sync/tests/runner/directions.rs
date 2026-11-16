@@ -1,13 +1,15 @@
 //! SY-10 at the runner's grain: one [`Edge`], a different merge rule in each
 //! direction, over both topologies.
 //!
-//! The edge carries no merge rule of its own. What it pulls it ingests as
+//! The spoke's edge carries no merge rule: under the default
+//! [`Accept`](happenstance_sync::runner::Accept) it ingests what it pulls as
 //! sent, with no compensation, which is a spoke's rule. What it pushes is
-//! judged by the far side's push handler, which is the hub's to choose. So the
-//! two directions of one edge already take different rules, and the edge
-//! needs no role parameter to allow it (SY-9). [`Hub`] is that far side: a
-//! [`StoreSyncPeer`] whose push adjudicates first, standing in for the hook
-//! SY-7 plans, and which can decline a push (SY-33).
+//! judged by the far side, which is the hub's to choose. So the two directions
+//! of one edge take different rules, and the edge needs no role parameter to
+//! allow it (SY-9). [`Hub`] is that far side: a [`StoreSyncPeer`] given the
+//! hub's [`HubRule`] through the shipped hook (#450), which can decline a push
+//! (SY-33). The edge-side mount, a hub driving its own edge, is
+//! `adjudication.rs`'s.
 //!
 //! The testkit's `directional_merge_rules_compose` holds a store to its half:
 //! it writes what each direction hands it and nothing of its own. These tests
@@ -20,12 +22,12 @@ use happenstance_core::{
     AppendCondition, Event, EventId, EventStore, MemoryStoreError, Query, QueryItem, ReadOptions,
     RecordedAt, SequencePosition, SequencedEvent, StoreId, Tag, Tags, collect,
 };
-use happenstance_sync::runner::{Edge, StepError};
+use happenstance_sync::runner::{Adjudicate, Edge, StepError};
 use happenstance_sync::write_group::GroupOrderError;
 use happenstance_sync::{
-    Ack, Classify, EventGroup, FailureClass, IngestError, IngestGroup, IngestStore,
-    MemoryIngestStore, PeerLimits, Pulled, PushBatch, ReplicatedEvent, StorePeerError, StoreResume,
-    StoreSyncPeer, SyncPeer,
+    Ack, Classify, EventGroup, FailureClass, IngestGroup, IngestStore, MemoryIngestStore,
+    PeerLimits, Pulled, PushBatch, ReplicatedEvent, StorePeerError, StoreResume, StoreSyncPeer,
+    SyncPeer,
 };
 
 use super::probe::Shared;
@@ -37,63 +39,39 @@ const PEER: StoreId = StoreId::from_bytes([0x6B; 16]);
 /// and the spoke never meets.
 const OTHER_SPOKE: StoreId = StoreId::from_bytes([0x7B; 16]);
 
-/// How the [`Hub`] fails.
+/// How the [`HubRule`] fails: its read of the hub's log did.
 #[derive(Debug, thiserror::Error)]
-enum HubError {
-    #[error(transparent)]
-    Peer(#[from] StorePeerError<GroupOrderError, MemoryStoreError>),
-    /// The device's token had expired: refreshed before the next step, so
-    /// the same push can succeed later.
-    #[error("the hub declined this device's push")]
-    Declined,
-    #[error("the hub could not read its log to adjudicate")]
-    Read(#[source] MemoryStoreError),
-    #[error("the hub could not write its adjudication")]
-    Adjudicate(#[source] IngestError<MemoryStoreError>),
-}
+#[error("the hub could not read its log to adjudicate")]
+struct HubRuleError(#[source] MemoryStoreError);
 
-impl Classify for HubError {
+impl Classify for HubRuleError {
     fn class(&self) -> FailureClass {
-        match self {
-            Self::Peer(error) => error.class(),
-            Self::Declined => FailureClass::Transient,
-            Self::Read(error) => error.class(),
-            Self::Adjudicate(error) => error.class(),
-        }
+        self.0.class()
     }
 }
 
-/// A hub: a [`StoreSyncPeer`] over its store, whose push handler adjudicates
-/// each pushed group whose guard the hub's log breaks before the push lands,
-/// and which declines pushes while `declining` is set.
+/// The hub's rule for what spokes push: where a pushed group claims a seat
+/// the hub already holds another claim on, the group lands with the hub's
+/// reversal, in one write (SY-2).
+///
+/// Judged by the fact family (SY-35), from what the hub holds, and not from a
+/// travelling guard: a local append records none, because its condition is
+/// position-relative (SY-6), so a spoke's own claim reaches the hub without
+/// one. It decides and never writes; the store peer lands the answer.
 #[derive(Debug)]
-struct Hub {
+struct HubRule {
     store: Shared,
-    peer: StoreSyncPeer<Shared, Shared>,
     reversal: Event,
-    declining: Cell<bool>,
 }
 
-impl Hub {
-    fn new(id: StoreId) -> Self {
-        let store = Shared::new(id);
-        Self {
-            peer: StoreSyncPeer::new(store.clone(), store.clone()),
-            store,
-            reversal: seat_event("ClaimReversed", b"reversed-by-the-hub"),
-            declining: Cell::new(false),
-        }
-    }
+impl Adjudicate for HubRule {
+    type Error = HubRuleError;
 
-    /// The hub's rule for one pushed group: where the group claims a seat
-    /// the hub already holds another claim on, the group lands with the hub's
-    /// reversal, in one write (SY-2).
-    ///
-    /// Judged by the fact family (SY-35), from what the hub holds, and not
-    /// from a travelling guard: a local append records none, because its
-    /// condition is position-relative (SY-6), so a spoke's own claim reaches
-    /// the hub without one.
-    async fn adjudicate(&self, group: &EventGroup) -> Result<(), HubError> {
+    async fn compensation(
+        &self,
+        group: &EventGroup,
+        earlier: &[EventGroup],
+    ) -> Result<Vec<Event>, HubRuleError> {
         let pushed: Vec<EventId> = group.events.iter().map(|event| event.id).collect();
         let mut contested = false;
         for event in &group.events {
@@ -103,18 +81,62 @@ impl Hub {
             let query = family(event.event.tags());
             let held = collect(self.store.0.read(&query, ReadOptions::new()))
                 .await
-                .map_err(HubError::Read)?;
-            contested |= held.iter().any(|row| !pushed.contains(&row.id));
+                .map_err(HubRuleError)?;
+            contested |= held.iter().any(|row| !pushed.contains(&row.id))
+                || earlier
+                    .iter()
+                    .flat_map(|before| before.events.iter())
+                    .any(|before| query.matches(before.event.event_type(), before.event.tags()));
         }
-        if !contested {
-            return Ok(());
+        Ok(if contested {
+            vec![self.reversal.clone()]
+        } else {
+            Vec::new()
+        })
+    }
+}
+
+/// How the [`Hub`] fails.
+#[derive(Debug, thiserror::Error)]
+enum HubError {
+    #[error(transparent)]
+    Peer(#[from] StorePeerError<GroupOrderError, MemoryStoreError, HubRuleError>),
+    /// The device's token had expired: refreshed before the next step, so
+    /// the same push can succeed later.
+    #[error("the hub declined this device's push")]
+    Declined,
+}
+
+impl Classify for HubError {
+    fn class(&self) -> FailureClass {
+        match self {
+            Self::Peer(error) => error.class(),
+            Self::Declined => FailureClass::Transient,
         }
-        let group = IngestGroup::new(&group.events, slice::from_ref(&self.reversal))
-            .with_guard(group.guard.as_ref());
-        IngestStore::ingest(&self.store, &[group])
-            .await
-            .map_err(HubError::Adjudicate)?;
-        Ok(())
+    }
+}
+
+/// A hub: a [`StoreSyncPeer`] over its store carrying the [`HubRule`], which
+/// declines pushes while `declining` is set.
+#[derive(Debug)]
+struct Hub {
+    store: Shared,
+    peer: StoreSyncPeer<Shared, Shared, HubRule>,
+    declining: Cell<bool>,
+}
+
+impl Hub {
+    fn new(id: StoreId) -> Self {
+        let store = Shared::new(id);
+        let rule = HubRule {
+            store: store.clone(),
+            reversal: seat_event("ClaimReversed", b"reversed-by-the-hub"),
+        };
+        Self {
+            peer: StoreSyncPeer::new(store.clone(), store.clone()).with_adjudicator(rule),
+            store,
+            declining: Cell::new(false),
+        }
     }
 }
 
@@ -126,14 +148,11 @@ impl SyncPeer for Hub {
         Ok(self.peer.pull(from).await?)
     }
 
-    /// Adjudicates, then lets the store peer land the rest and acknowledge:
-    /// a group the hub answered is a skip there.
+    /// Declines while `declining` is set; otherwise the store peer judges
+    /// the push by the hub's rule, lands it and acknowledges.
     async fn push(&self, batch: &PushBatch) -> Result<Ack, HubError> {
         if self.declining.get() {
             return Err(HubError::Declined);
-        }
-        for group in &batch.groups {
-            self.adjudicate(group).await?;
         }
         Ok(self.peer.push(batch).await?)
     }

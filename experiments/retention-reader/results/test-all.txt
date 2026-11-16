@@ -1,0 +1,45 @@
+$ cargo test --locked --manifest-path <repo>/experiments/retention-reader/Cargo.toml -- --test-threads=1
+   Compiling retention-reader v0.0.0 (<repo>/experiments/retention-reader)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.30s
+     Running unittests src/lib.rs (<target>/debug/deps/retention_reader-58459c7f07ddf2f8)
+
+running 8 tests
+test group_read::tests::a_backward_read_is_refused ... ok
+test group_read::tests::a_cut_group_of_local_events_is_refused ... ok
+test group_read::tests::a_group_of_two_events_is_refused ... ok
+test holed::tests::holed_read_groups_cuts_a_partially_withheld_group_keeping_first ... ok
+test holed::tests::holed_read_groups_hides_withheld_events_and_pages_past_all_withheld_pages ... ok
+test prune::tests::prune_outside_port_deletes_rows_and_the_store_reopens_conformant ... ok
+test seams::tests::seams_of_a_holed_store_match_a_young_store_in_shape ... ok
+test shared::tests::shared_is_a_second_handle_onto_one_log ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/it/main.rs (<target>/debug/deps/it-b2752f2ec61fd023)
+
+running 15 tests
+test floor::a_floor_misdescribes_a_scattered_purge ... ok
+test r1_runner::a_source_switch_resumes_against_the_wrong_store ... ok
+test r1_runner::pruning_ahead_of_the_checkpoint_is_never_delivered ... ok
+test r1_runner::pruning_behind_the_checkpoint_changes_nothing ... ok
+test r1_runner::rebuild_over_a_scattered_purge_is_smaller_and_says_nothing ... ok
+test r2_ingest_destination::a_fresh_edge_pushing_into_a_pruned_hub_stops ... ok
+test r2_ingest_destination::a_restored_edge_resurrects_pruned_foreign_events ... ok
+test r2_ingest_destination::a_restored_edge_stops_on_a_pruned_own_event ... ok
+test r2_ingest_destination::control_a_fresh_edge_pushing_into_an_unpruned_hub_is_a_no_op ... ok
+test r2_ingest_destination::instrument_control_false_rewind_is_masked ... ok
+test r2_ingest_destination::instrument_control_resurrection_is_masked ... ok
+test r2_ingest_source::a_purge_that_cuts_a_write_group_ships_the_remainder ... ok
+test r2_ingest_source::a_spoke_pulling_a_scattered_hub_holds_the_retained_set_and_reports_synced ... ok
+test r2_ingest_source::withholding_after_a_pull_leaves_the_spoke_with_more_than_the_hub ... ok
+test r3_decision::a_decision_over_a_holed_log_admits_what_the_full_log_refuses ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+   Doc-tests retention_reader
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+exit status: 0

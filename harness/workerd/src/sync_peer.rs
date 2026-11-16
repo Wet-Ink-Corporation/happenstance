@@ -23,11 +23,27 @@
 //!
 //! # No declension check
 //!
-//! `sync_peer_conformance!` emits none. A rule may still answer `skipped` with
+//! `sync_peer_conformance!` emits one since #448, over `SyncFixture::REOPEN`,
+//! and this runner does not mount the macro, so it runs none. The fixture
+//! states its declension anyway, with its own reason rather than the default's
+//! ([`fixture::WorkerdSyncFixture`]'s `REOPEN`): each connect already
+//! re-derives its store from the object's state, and restarting the object is
+//! beyond a runner inside one request. So SY-31's rule runs without a reopen,
+//! as it did before the capability existed. A rule may still answer `skipped` with
 //! the reason the suite writes for it (`NO_SECOND_PAGE`, `NO_CONFIRMATION`),
-//! and the runner fails any skip: under `PeerLimits::minimum` this peer shows
-//! a page boundary and confirms what it acknowledges, so every rule must
-//! answer `ran`.
+//! and the runner fails every skip but one: under `PeerLimits::minimum` this
+//! peer shows a page boundary and confirms what it acknowledges, so every rule
+//! must answer `ran`, except SY-32's.
+//!
+//! # The one tolerated skip (D10, #158)
+//!
+//! `retention_gap_is_reported_not_silent` skips here, with
+//! `UNSTATED_COMPACTION`'s reason and no other. The object serves a
+//! `StoreSyncPeer`, and a store peer cannot read a retention floor through
+//! the port (ADR-0028), so its fixture declines `COMPACTION`; giving the
+//! Durable Object a compaction to offer is follow-up F1. The runner accepts
+//! that skip for that rule with that exact text, and the host test below
+//! holds the runner's copy of the text to the testkit's const.
 
 use happenstance_cloudflare::worker::State;
 use happenstance_cloudflare::worker::worker_sys::DurableObjectState;
@@ -71,5 +87,32 @@ mod tests {
         assert_eq!(distinct.len(), names.len(), "no name appears twice");
         assert_eq!(names, enumerated);
         assert!(names.contains(&"round_trip_preserves_the_whole_log"));
+    }
+
+    /// The one skip the runner tolerates is SY-32's, for the reason the suite
+    /// writes when a fixture declines compaction, and the runner names that
+    /// reason word for word: a reworded reason, or a fixture that starts
+    /// declining for another one, turns this red on the host before the
+    /// `workerd` job sees it (D10).
+    #[test]
+    fn the_one_tolerated_skip_is_compaction_in_the_suites_words() {
+        use happenstance_sync_testkit::{SyncFixture as _, UNSTATED_COMPACTION};
+
+        use super::fixture::WorkerdSyncFixture;
+
+        assert_eq!(
+            WorkerdSyncFixture::COMPACTION.reason(),
+            Some(UNSTATED_COMPACTION),
+            "the object's fixture declines compaction in the suite's words"
+        );
+        let runner = include_str!("../test/sync-peer.test.ts");
+        assert!(
+            runner.contains(UNSTATED_COMPACTION),
+            "test/sync-peer.test.ts tolerates the skip only with this exact reason"
+        );
+        assert!(
+            rule_names().contains(&"retention_gap_is_reported_not_silent"),
+            "the tolerated rule is in the enumeration"
+        );
     }
 }

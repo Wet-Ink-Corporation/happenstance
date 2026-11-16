@@ -36,6 +36,7 @@ use core::fmt;
 use happenstance_core::StoreId;
 
 use super::error::{Failure, Phase};
+use super::retention::RetentionGap;
 use crate::classify::FailureClass;
 
 /// The far side answered as a store other than the one this edge has synced
@@ -86,19 +87,27 @@ impl fmt::Display for IncarnationChanged {
 #[non_exhaustive]
 pub enum StopCause {
     /// A failure of class [`Stop`](FailureClass::Stop): authorisation or
-    /// configuration.
+    /// configuration. Or of class [`Reseed`](FailureClass::Reseed) stated by
+    /// the local store or the edge's rule, which is no retention gap: only
+    /// the far side can have forgotten history.
     Failure(Failure),
     /// The far side answered as a different store incarnation.
     Incarnation(IncarnationChanged),
+    /// The far side can no longer resume this edge's token: it has forgotten
+    /// history the token has not reached (SY-32).
+    RetentionGap(RetentionGap),
 }
 
 impl StopCause {
-    /// As a [`Failure`]: the phase, and class [`Stop`](FailureClass::Stop).
+    /// As a [`Failure`]: the phase, and the class the edge stopped on:
+    /// [`Stop`](FailureClass::Stop) for a changed incarnation,
+    /// [`Reseed`](FailureClass::Reseed) for a retention gap.
     #[must_use]
     pub const fn failure(&self) -> Failure {
         match self {
             Self::Failure(failure) => *failure,
             Self::Incarnation(change) => change.failure(),
+            Self::RetentionGap(gap) => gap.failure(),
         }
     }
 }
@@ -108,6 +117,7 @@ impl fmt::Display for StopCause {
         match self {
             Self::Failure(failure) => failure.fmt(f),
             Self::Incarnation(change) => change.fmt(f),
+            Self::RetentionGap(gap) => gap.fmt(f),
         }
     }
 }

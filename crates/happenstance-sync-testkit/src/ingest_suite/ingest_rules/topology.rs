@@ -3,13 +3,18 @@
 //!
 //! # Why the rule plays the runner
 //!
-//! SY-7's reason, one clause on. A merge rule is runner configuration, and the
-//! shipped runner has no adjudication hook yet (#136 left it planned), so the
-//! rule plays a runner that holds one [`MergeRule`] per direction. What is left
-//! to the store is the part it controls: it writes what the runner hands it
-//! and nothing of its own. A store that judges on ingest carries one merge rule
+//! SY-7's reason, one clause on. A merge rule is runner configuration, and
+//! the shipped runner takes one per ingest site through its adjudication
+//! hook (#450): `Edge::with_adjudicator` for what an edge pulls, and
+//! `StoreSyncPeer::with_adjudicator` for what a far side is pushed. The rule
+//! plays a runner that mounts one [`MergeRule`] per direction through that
+//! same hook, the shipped [`Accept`] or the [`SeatRule`] beside this file, so
+//! it hands each store exactly what the shipped runner would. What is left to
+//! the store is the part it controls: it writes what the runner hands it and
+//! nothing of its own. A store that judges on ingest carries one merge rule
 //! into every direction of every edge it sits on, and the runner cannot then
-//! permit a different one.
+//! permit a different one. That the shipped runner mounts each rule only
+//! where it was given is `happenstance-sync`'s `tests/runner/wrong_runners.rs`.
 //!
 //! # Which claims travel with a guard
 //!
@@ -27,6 +32,25 @@
 //! [`HUB_AND_SPOKE`] and [`PEER_TO_PEER`] are values of one type, played by the
 //! same steps over the same store type. Hub-ness is a property of an edge's
 //! directions (SY-9), never of the store or of the runner's code.
+//!
+//! # Where a refusal is held
+//!
+//! Not here. A push the far end declines (SY-33) is the far peer's answer to
+//! `SyncPeer::push`, and the near store is never told of it: it sees no call
+//! that differs from an accepted push. Nor can the runner undo anything
+//! through the store, because every port it holds only adds events, so the
+//! rollback SY-34 forbids cannot be written through them. A store-side check
+//! at the refusal could only re-test what ran before it, and no store could
+//! fail it. The runner's half is held where a peer exists, in two of
+//! `happenstance-sync`'s runner tests:
+//! `tests/runner/directions.rs`'s
+//! `hub_and_spoke_the_hub_adjudicates_the_push_and_the_spoke_takes_the_pull_unjudged`,
+//! whose declined step keeps the spoke's own claim, and `tests/runner/main.rs`'s
+//! `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class`.
+//!
+//! So the walk plays no refusal, and runs in `Edge::step`'s order, pull before
+//! push. Its push carries only the spoke's own claim: the shipped runner's push
+//! also relays the other spoke's claim, which the hub skips as already held.
 
 use alloc::format;
 use alloc::string::String;
@@ -37,8 +61,10 @@ use happenstance_core::{
     AppendCondition, Event, EventId, EventStore, EventType, Query, QueryItem, RecordedAt,
     SequencePosition, SequencedEvent, StoreId, Tag, Tags,
 };
-use happenstance_sync::{IngestGroup, IngestStore, Ingested, ReplicatedEvent};
+use happenstance_sync::runner::{Accept, Adjudicate};
+use happenstance_sync::{EventGroup, IngestGroup, IngestStore, Ingested, ReplicatedEvent};
 
+use super::seat_rule::SeatRule;
 use super::{ensure_counts, ensure_foreign, holds, ingest, opaque, read_all};
 use crate::IngestFixture;
 use crate::violation::{Violation, ensure};
@@ -60,16 +86,16 @@ const SEAT: &str = "seat:s10";
 /// One event by type and bytes: how this module compares facts.
 type Fact = (String, Vec<u8>);
 
-/// What one direction of an edge does with a claim it carries.
+/// Which hook one direction of an edge mounts for a claim it carries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum MergeRule {
-    /// Judge the claim by its fact family against what the receiving store
-    /// holds, and hand it a reversal where another claim on the seat is
-    /// already there: the hub's rule for what spokes push (SY-7).
+    /// [`SeatRule`]: judge the claim by its fact family against what the
+    /// receiving store holds, and hand it a reversal where another claim on
+    /// the seat is already there: the hub's rule for what spokes push (SY-7).
     Adjudicate,
-    /// Take the claim as sent, judged by nobody: a spoke's rule for what the
-    /// hub sends, and both directions of an edge whose family has no
-    /// adjudicator on it.
+    /// The shipped [`Accept`]: take the claim as sent, judged by nobody: a
+    /// spoke's rule for what the hub sends, and both directions of an edge
+    /// whose family has no adjudicator on it.
     Accept,
 }
 
@@ -115,18 +141,11 @@ pub(super) struct Edge<S> {
     pub(super) far: End<S>,
 }
 
-/// Whether the far end takes a push or declines it (SY-33).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Answer {
-    Refused,
-    Taken,
-}
-
 /// The hub-and-spoke walk, under `directions`. The hub holds another spoke's
 /// claim on the seat, ingested under its origin's guard. The spoke appends
-/// its own under the guard "no claim on this seat". Its push is refused, and
-/// neither log may change (SY-34). It pulls the other spoke's claim, guard and
-/// all, then re-pushes and is taken, and pulls whatever the hub answered with.
+/// its own under the guard "no claim on this seat". It pulls the other
+/// spoke's claim, guard and all, and takes it unjudged; it pushes its own and
+/// the hub adjudicates it; and it pulls the reversal the hub answered with.
 ///
 /// Each step's counts are checked against what the runner handed the
 /// receiving store: one claim, and a reversal only where that direction
@@ -135,8 +154,8 @@ enum Answer {
 /// # Errors
 ///
 /// A [`Violation`] of SY-10 if the fixture gives both stores one identity, if
-/// either cannot say who it is, if an ingest or an append is refused or
-/// miscounted, or if the refused push changed either log.
+/// either cannot say who it is, or if an ingest or an append is refused or
+/// miscounted.
 pub(super) async fn hub_and_spoke<F: IngestFixture>(
     open: &impl AsyncFn() -> F,
     directions: Directions,
@@ -158,9 +177,8 @@ pub(super) async fn hub_and_spoke<F: IngestFixture>(
     .await?;
 
     let own = own_claim(&mut edge.near, b"claimed-by-the-spoke", &guard).await?;
-    push(directions.push, &edge, &own, Answer::Refused).await?;
     pull(directions.pull, &edge, &guard).await?;
-    push(directions.push, &edge, &own, Answer::Taken).await?;
+    push(directions.push, &edge, &own).await?;
     pull(directions.pull, &edge, &guard).await?;
     Ok(edge)
 }
@@ -180,7 +198,7 @@ pub(super) async fn peer_to_peer<F: IngestFixture>(
     let mut edge = open_edge(open, b"reversed-by-the-first", b"reversed-by-the-second").await?;
     let near = own_claim(&mut edge.near, b"claimed-by-the-first", &guard).await?;
     own_claim(&mut edge.far, b"claimed-by-the-second", &guard).await?;
-    push(directions.push, &edge, &near, Answer::Taken).await?;
+    push(directions.push, &edge, &near).await?;
     pull(directions.pull, &edge, &guard).await?;
     Ok(edge)
 }
@@ -328,35 +346,13 @@ async fn own_claim<S: EventStore + IngestStore>(
 }
 
 /// The near end pushes its own `claim` to the far end, unguarded, which takes
-/// it under `rule` or refuses it (SY-33). A refusal must leave both logs
-/// holding exactly the facts they held before it: the runner leaves the near
-/// log alone (SY-34), and the far end took nothing.
+/// it under `rule`.
 async fn push<S: EventStore + IngestStore>(
     rule: MergeRule,
     edge: &Edge<S>,
     claim: &ReplicatedEvent,
-    answer: Answer,
 ) -> Result<(), Violation> {
-    if answer == Answer::Taken {
-        return carry(rule, &edge.far, claim, None, "the near end's pushed claim").await;
-    }
-    let before = both_facts(edge).await?;
-    // The far end declines, so the runner hands neither store anything.
-    let after = both_facts(edge).await?;
-    ensure(after == before, SY_10, || {
-        format!(
-            "a refused push changed the logs: near then far, they held {before:?} by type and \
-             bytes before it and {after:?} after"
-        )
-    })
-}
-
-/// Both ends' facts, near then far.
-async fn both_facts<S: EventStore>(edge: &Edge<S>) -> Result<[Vec<Fact>; 2], Violation> {
-    Ok([
-        facts(&read_all(&edge.near.store, SY_10).await?),
-        facts(&read_all(&edge.far.store, SY_10).await?),
-    ])
+    carry(rule, &edge.far, claim, None, "the near end's pushed claim").await
 }
 
 /// The near end pulls every fact the far end holds and it does not, one group
@@ -402,13 +398,9 @@ async fn pull<S: EventStore + IngestStore>(
     Ok(())
 }
 
-/// The runner's step for one claim crossing into `to` under `rule`. The
-/// `guard` the claim travels with, if any, rides on its group (SY-30) as
-/// evidence, never an instruction (SY-6). Under [`MergeRule::Adjudicate`]
-/// the runner judges by fact family (SY-35), from what `to` holds: another
-/// claim on the seat earns a reversal. Under [`MergeRule::Accept`] it hands
-/// nothing. The store evaluates nothing (SY-1) and must count exactly what it
-/// was handed.
+/// The runner's step for one claim crossing into `to` under `rule`, mounted
+/// through the shipped hook: [`MergeRule::Adjudicate`] mounts [`SeatRule`]
+/// over `to`'s store, and [`MergeRule::Accept`] the shipped [`Accept`].
 async fn carry<S: EventStore + IngestStore>(
     rule: MergeRule,
     to: &End<S>,
@@ -416,29 +408,39 @@ async fn carry<S: EventStore + IngestStore>(
     guard: Option<&AppendCondition>,
     what: &str,
 ) -> Result<(), Violation> {
-    let contested = rule == MergeRule::Adjudicate && contested(&to.store, claim).await?;
-    let compensation = if contested {
-        slice::from_ref(&to.reversal)
-    } else {
-        &[]
-    };
-    let group = IngestGroup::new(slice::from_ref(claim), compensation).with_guard(guard);
-    let took: Ingested = ingest(&to.store, &[group], SY_10).await?;
-    ensure_counts(took, (1, 0, usize::from(contested)), what, SY_10)
+    match rule {
+        MergeRule::Adjudicate => {
+            let family = seat_family()?;
+            let seat = SeatRule::new(&to.store, &family, &to.reversal);
+            carry_under(&seat, to, claim, guard, what).await
+        }
+        MergeRule::Accept => carry_under(&Accept, to, claim, guard, what).await,
+    }
 }
 
-/// Whether `store` holds a claim on the seat other than `claim`, by type,
-/// tags and bytes, never decoded.
-async fn contested<S: EventStore>(store: &S, claim: &ReplicatedEvent) -> Result<bool, Violation> {
-    let family = seat_family()?;
-    let incoming: Fact = (
-        String::from(claim.event.event_type().as_str()),
-        claim.event.data().to_vec(),
-    );
-    Ok(read_all(store, SY_10)
-        .await?
-        .iter()
-        .any(|row| family.matches(row.event_type(), row.tags()) && fact(row) != incoming))
+/// One claim crossing into `to` as a runner mounting `rule` lands it: one
+/// group, judged with nothing before it in its batch, landing with the
+/// compensation the rule answered in the same write (SY-2). The `guard` the
+/// claim travels with, if any, rides on its group (SY-30) as evidence, never
+/// an instruction (SY-6). The store evaluates nothing (SY-1) and must count
+/// exactly what it was handed.
+async fn carry_under<S: EventStore + IngestStore, A: Adjudicate>(
+    rule: &A,
+    to: &End<S>,
+    claim: &ReplicatedEvent,
+    guard: Option<&AppendCondition>,
+    what: &str,
+) -> Result<(), Violation> {
+    // The group as it travels, owned because the hook judges a wire group;
+    // the walk keeps `claim` for the steps after this one.
+    let travelling = EventGroup::new(guard.cloned(), Vec::from([claim.clone()]));
+    let compensation = rule
+        .compensation(&travelling, &[])
+        .await
+        .map_err(|error| Violation::new(SY_10, format!("{what}: {error}")))?;
+    let group = IngestGroup::new(&travelling.events, &compensation).with_guard(guard);
+    let took: Ingested = ingest(&to.store, &[group], SY_10).await?;
+    ensure_counts(took, (1, 0, compensation.len()), what, SY_10)
 }
 
 /// `log`'s events by type and bytes, sorted, so two logs that hold the same

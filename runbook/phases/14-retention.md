@@ -38,7 +38,7 @@ indistinguishable from a young one at every value in §2.
       refusal, with an additive reservation. Deletion is out of scope for
       `EventStore` through 1.x, ES-38 is what a deleted-from store may look like, and
       ES-40's vacuous pass is specified. Nothing here adds a required method.
-- [ ] #144 · **The completeness instrument** (CF-27). A testkit decorator over any
+- [x] #144 · **The completeness instrument** (CF-27). A testkit decorator over any
       `EventStore` that holds an **arbitrary retained set** of its log, a suffix
       or a scattered subset, so that a runner or an ingest path can be run against
       a holed log and its behaviour recorded. It reports what it
@@ -49,46 +49,46 @@ indistinguishable from a young one at every value in §2.
       said the opposite of what the refusal specifies), asserts two things:
       the suite passes, so indistinguishability at the port is the specified
       outcome, and the instrument's report is accurate.
-- [ ] #147 · **A removal capability on `Fixture`**, defaulted to declined on
+- [x] #147 · **A removal capability on `Fixture`**, defaulted to declined on
       `MID_BATCH_FAULT`'s precedent. Through it, a fixture removes events outside
       the port with a raw `DELETE` on SQLite, Cloudflare, Postgres and Neon; the
       name is this phase's. Cloudflare's decline reason, or its support, must say
       whether a Durable Object wiped by `delete_all()` is the same store (VT-6).
-- [ ] #151 · `positions_are_not_reused_after_removal` (ES-38), against the instrument
+- [x] #151 · `positions_are_not_reused_after_removal` (ES-38), against the instrument
       and against every real adapter through that capability. Its named wrong
       implementation is a SQLite table declared `INTEGER PRIMARY KEY` without
       `AUTOINCREMENT`, which reuses the deleted tail's highest rowid.
-- [ ] #154 · `condition_over_removed_history_does_not_reject` (ES-40), an asserted and
+- [x] #154 · `condition_over_removed_history_does_not_reject` (ES-40), an asserted and
       documented outcome: the condition passes vacuously. ~~A condition over
       destroyed history must refuse rather than pass.~~ ADR-0028 rejected that
       third outcome for 1.x.
-- [ ] #156 · **The reader experiment** (ES-39). Write an ingest path and a projection
+- [x] #156 · **The reader experiment** (ES-39). Write an ingest path and a projection
       runner against the instrument, and record whether either needs a port-level
       report. If one does, add it as a **provided** `EventStore` method whose
       default answers `Unknown`, never `Complete`, in ES-4's spelling (see
       `experiments/provided-method-spike/`), with the rule
       `a_store_reports_the_history_it_does_not_hold`. If neither does, freeze ES-39
       as the refusal.
-- [ ] #158 · Retention across the peer set (SY-32): the scalar floor means the lowest
+- [x] #158 · Retention across the peer set (SY-32): the scalar floor means the lowest
       resume point a peer can satisfy, not completeness. Build the 120-day-offline
       against 90-day-window case and show the gap is reported, not silent.
 - [x] Redaction (E2E-49). **Answered by ADR-0028**: a tag cannot be redacted
       through the port, and a crypto-shred of `data` moves no position.
-- [ ] #163 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-14` row
-      in [the 1.0 dispositions](../ledgers.md). All four are *decided* at phase 17,
+- [x] #163 · **The clauses phase 16 gave this phase to freeze.** Each `freeze-by-14` row
+      in [the 1.0 dispositions](../ledgers.md). **Accepted 2026-11-16 as [ADR-0108](../../.kb/decisions/0108-phase-14s-clauses-are-frozen.md)**; each freeze is the owner's. All four are *decided* at phase 17,
       in ADR-0028, and *built and frozen* here against the suffix store:
       - **ES-39** — the rules of ADR-0028's written refusal (ES-38's and ES-40's),
-        or `a_store_reports_the_history_it_does_not_hold` if the reader experiment
+        or `a_store_reports_the_history_it_does_not_hold` if the reader experiment (verdict: refusal, #482; **frozen as the refusal**)
         adds the provided method. If this phase slips past 1.0, the row may become
         renew-past-1.0, because firing it is additive.
       - **ES-40** — frozen with its rule against the instrument. ADR-0028 kept the
-        *MAY admit*, so nothing flipped in `0.4.0`.
+        *MAY admit*, so nothing flipped in `0.4.0`. **Frozen** on #474; the completeness verdict reads adapter yes.
       - **SY-32** — the 120-day-offline case, with the instrument standing in for
         the compacted peer, against the floor ADR-0028 narrowed to resumability.
-        The marker's owner text was reconciled with the ledger at phase 17.
+        The marker's owner text was reconciled with the ledger at phase 17. **Frozen** under ADR-0108 §3's CF-25 acceptance, accepted 2026-11-16 (#473).
       - **CF-27** — the instrument itself, as a decorator over any `EventStore`
         run through the full suite, with the rule
-        `instrument_report_is_accurate_and_the_suite_cannot_tell`. If phase 13 built
+        `instrument_report_is_accurate_and_the_suite_cannot_tell` (**frozen**, #467). If phase 13 built
         the filtered-subset store for SY-27, this phase extends that one rather
         than writing a second. It did not: ADR-0027 (2026-10-14) took whole-log
         replication, so SY-27 no longer needs the instrument and this phase builds it
@@ -109,18 +109,18 @@ what it withholds.
 
 - [x] ADR-0028 written, and it either adds a port surface or refuses the area in
       writing. It refuses, at phase 17.
-- [ ] ~~The suffix store exists and at least two rules fail against it.~~
+- [x] ~~The suffix store exists and at least two rules fail against it.~~
       **Restated at phase 17:** the completeness instrument exists, the full
       suite's pass list against it is recorded, and its inherent report is
       accurate. ES-38's `positions_are_not_reused_after_removal` and ES-40's
       `condition_over_removed_history_does_not_reject` run against it and against
       every fixture that grants the removal capability, and ES-38's rule rejects
       its named wrong implementation.
-- [ ] ES-39, CF-27 and SY-32 are no longer `[DEFERRED]`.
-- [ ] Every `freeze-by-14` clause in [`ledgers.md`](../ledgers.md)'s 1.0
-      dispositions — ES-39, ES-40, SY-32 and CF-27 — is `[FROZEN]`, or
+- [x] ES-39, CF-27 and SY-32 are no longer `[DEFERRED]`. All three frozen by ADR-0108, accepted 2026-11-16.
+- [x] Every `freeze-by-14` clause in [`ledgers.md`](../ledgers.md)'s 1.0
+      dispositions — ES-39, ES-40, SY-32 and CF-27, and since ADR-0107 SY-7, SY-10 and VT-36 — is `[FROZEN]`, or
       re-dispositioned by a record that says why.
-- [ ] The specification is reconciled against this phase's changes (session
+- [x] The specification is reconciled against this phase's changes (session
       protocol step 6), and `cargo xtask spec-trace` passes.
 
 **Cases this makes writable.** E2E-44, E2E-46, E2E-47, E2E-48, E2E-49.
@@ -128,3 +128,24 @@ what it withholds.
 **Estimate.** 5 days.
 
 **Session log**
+
+- **2026-11-16** — #163: the phase's freeze, proposed as
+  [ADR-0108](../../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) on
+  `claude/project-thread-xxl8lr-163`, one commit per clause, held for the owner. Frozen: ES-39
+  (the refusal, on `experiments/retention-reader`'s verdict; harms #483, #484, #485 filed outside
+  `EventStore`), ES-40 (the completeness axis's verdict moved to adapter yes), CF-27, SY-7 and
+  SY-10 (#450's hook; #441 settled by #466), and VT-36 (deployed runs 43721323137 and
+  43746838635). SY-32 not frozen: its rule skips on every real peer and the CF-25 Completeness /
+  `SyncPeer` row needs an accepted record, which §3 offers. ES-38's, SY-3's, SY-21's and SY-34's
+  Rule lines and the Durability / `SyncPeer` ledger cell repaired; SY-33's left declared (#465).
+- **2026-11-16** — the owner accepted ADR-0108 as drafted (wi-a1a7b315fa), and SY-32 froze under
+  its §3 acceptance. Every `freeze-by-14` row is now discharged.
+- **2026-11-16** — the exit. Every work item and exit criterion is ticked on evidence merged
+  into `phase-14`: #467 (#144, the instrument and its pass list), #471 (#147), #474 (#151,
+  #154; ES-38's rule rejects `INTEGER PRIMARY KEY` without `AUTOINCREMENT` in
+  `happenstance-sqlite`'s migration test), #482 (#156, the refusal), #473 (#158), #486
+  (#163, ADR-0108), with #466, #469, #475, #476, #477, #478 and #481 beside them. The
+  specification was reconciled by #486, and `cargo xtask spec-trace` passes on the release
+  branch. The `0.7.0` release commit, `claude/project-thread-xxl8lr-070`, rolls
+  `[Unreleased]` into `[0.7.0] — 2026-11-16`. The issues stay open until `phase-14` →
+  `main` merges, because a PR into an integration branch closes nothing.

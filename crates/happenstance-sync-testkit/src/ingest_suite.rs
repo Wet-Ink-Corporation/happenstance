@@ -132,6 +132,8 @@ pub mod ingest_rules {
     mod adjudication;
     // SY-10's two topologies and the per-direction runner the rule plays.
     mod topology;
+    // The seat family's merge rule, through the shipped hook both mount.
+    mod seat_rule;
     // SY-14's call at VT-24's floor, and the first delivery scattered over it.
     mod bulk;
 
@@ -423,7 +425,8 @@ pub mod ingest_rules {
     /// identical fact as though it were the first again; one that decodes a
     /// payload to reach its dedupe key, and skips bytes it cannot parse; and
     /// one that writes a group's compensation again when the group was a
-    /// re-delivery. `tests/wrong_ingest_stores.rs` carries all three.
+    /// re-delivery. `tests/wrong_ingest_stores.rs` carries all three. SY-3's `Rule:` line
+    /// names this rule since ADR-0108: its redelivery half is SY-3's assertion.
     ///
     /// # Errors
     ///
@@ -1301,11 +1304,14 @@ pub mod ingest_rules {
     /// # Does not reject
     ///
     /// **Every peer adjudicating**, the wrong implementation SY-7 names. That
-    /// is a runner configuration, and no runner in `happenstance-sync` authors
-    /// a compensation yet, so the rule plays the runner and always honours the
-    /// assignment. The configuration SY-7 forbids is run by the clause's
-    /// falsification test, in this crate's own tests, where two adjudicators
-    /// answer one conflict twice and reverse opposite claims.
+    /// is a runner configuration, so the rule plays the runner, mounting the
+    /// shipped `runner::Adjudicate` hook on the adjudicator and
+    /// `runner::Accept` on the other, and always honours the assignment. A
+    /// runner that adjudicates under `Accept` is rejected in
+    /// `happenstance-sync`'s `tests/runner/wrong_runners.rs` (#450). The
+    /// configuration SY-7 forbids is run by the clause's falsification test,
+    /// in this crate's own tests, where two adjudicators answer one conflict
+    /// twice and reverse opposite claims.
     ///
     /// # Errors
     ///
@@ -1335,14 +1341,14 @@ pub mod ingest_rules {
     /// under (SY-30). The hub adjudicates by fact family (SY-35), never by a
     /// guard.
     ///
-    /// * **Hub and spoke.** The hub holds another spoke's claim, ingested
-    ///   under its origin's guard. The spoke appends its own, and its push is
-    ///   refused (SY-33): neither log may change. It pulls the other claim,
+    /// * **Hub and spoke**, in the shipped `Edge::step`'s order, pull before
+    ///   push. The hub holds another spoke's claim, ingested under its
+    ///   origin's guard. The spoke appends its own. It pulls the other claim,
     ///   whose guard its own log breaks, and takes it unjudged: one event, no
-    ///   reversal. Its push is re-offered and the hub adjudicates it, writing
-    ///   the claim with its reversal (SY-7). The spoke pulls the reversal. Both logs
-    ///   end with the two claims and the hub's one reversal, and the spoke
-    ///   still holds its own claim under its own identity (SY-34, E2E-45).
+    ///   reversal. It pushes its own and the hub adjudicates it, writing the
+    ///   claim with its reversal (SY-7). The spoke pulls the reversal. Both
+    ///   logs end with the two claims and the hub's one reversal, and the
+    ///   spoke still holds its own claim under its own identity (E2E-45).
     /// * **Peer to peer.** Each peer appends its own claim. Neither
     ///   adjudicates the family on this edge, so each takes the other's claim
     ///   unjudged. Both logs end with the two claims and no reversal.
@@ -1358,16 +1364,34 @@ pub mod ingest_rules {
     /// which is SY-10's falsifier, and writes a reversal no direction asked
     /// for. `tests/wrong_ingest_stores.rs` carries it.
     ///
+    /// And a store that gives up its own fact when a peer's claim on the same
+    /// seat arrives, as an upsert keyed by the fact family does: it re-mints
+    /// its own claim under a new identity, so every log still compares equal
+    /// by type and bytes, and only the check that each end still holds its
+    /// own claim under its own identity sees it. `tests/wrong_ingest_stores.rs`
+    /// carries it too.
+    ///
     /// # Does not reject
     ///
-    /// **A runner that forces one rule on both directions.** No runner in
-    /// `happenstance-sync` takes a merge rule yet, so the rule plays the
-    /// runner and always honours each direction's. That configuration, the
-    /// hub's rule on the spoke, is the clause's falsification test, in this
-    /// crate's own tests: it leaves no claim to the seat standing. The shipped
-    /// `Edge`'s half is checked in `happenstance-sync`'s
-    /// `tests/runner/directions.rs`: its pull never adjudicates, and the far
-    /// side's push handler can.
+    /// **A runner that forces one rule on both directions.** The rule plays
+    /// the runner, mounting each direction's merge rule through the shipped
+    /// `runner::Adjudicate` hook, and always honours each direction's. That
+    /// configuration, the hub's rule on the spoke, is the clause's
+    /// falsification test, in this crate's own tests: it leaves no claim to
+    /// the seat standing. The shipped runner's half is checked in
+    /// `happenstance-sync`'s `tests/runner/wrong_runners.rs` (#450): an edge
+    /// judges only what it pulls, by the rule it was given, and never what it
+    /// pushes; a `StoreSyncPeer` judges what it is pushed.
+    ///
+    /// **A spoke rolled back on a refused push (SY-34).** The walk plays no
+    /// refusal (SY-33), because the store is never told of one: a declined
+    /// push is the far peer's answer to `SyncPeer::push`, and every port the
+    /// runner holds over the store only adds events, so the rollback cannot be
+    /// written through them and no store could fail a check at the refusal.
+    /// The runner's half is held in `happenstance-sync`'s runner tests:
+    /// `tests/runner/directions.rs`, whose declined step keeps the spoke's own
+    /// claim, and `tests/runner/main.rs`'s
+    /// `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class`.
     ///
     /// # Errors
     ///

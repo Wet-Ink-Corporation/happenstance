@@ -3,7 +3,7 @@
 //! # Why the class is on the error
 //!
 //! [`SyncPeer::Error`](crate::SyncPeer::Error) is bounded on [`Classify`], so
-//! every error a peer reports says which of four remedies applies. The
+//! every error a peer reports says which of five remedies applies. The
 //! alternative that lost was a method on the peer,
 //! `fn classify(&self, error: &Self::Error) -> FailureClass`. It works only
 //! while the peer is in hand, and an error does not stay beside its peer: a
@@ -24,12 +24,14 @@
 //! Object's `Rc`-holding error implements it unchanged. A `Send` bound here
 //! would undo the measurement on [`SyncPeer::Error`](crate::SyncPeer::Error).
 
+use core::convert::Infallible;
+
 use crate::peer::SyncError;
 
-/// The remedy a failure calls for. One of four, and open to a fifth.
+/// The remedy a failure calls for. One of five, the fifth added by SY-32.
 ///
 /// `#[non_exhaustive]`, so outside this crate a `match` needs a wildcard arm and
-/// a fifth class is not a breaking change. The price is that a runner decides
+/// a sixth class is not a breaking change. The price is that a runner decides
 /// what an unknown class means; that is #244's, with the rest of what a runner
 /// does per class.
 ///
@@ -50,6 +52,15 @@ pub enum FailureClass {
     Park,
     /// Authorisation or configuration: halt this edge and report it.
     Stop,
+    /// The far side can no longer resume this edge: it has forgotten history
+    /// the edge's token has not reached (SY-32). Retrying fails the same way
+    /// for ever, and pulling from the start would converge on a strict subset
+    /// in silence. Halt the edge and report the gap; an operator either
+    /// re-seeds this side from a peer that still holds the history, or
+    /// accepts the gap explicitly.
+    ///
+    /// Declared last, so the four before it keep their discriminants.
+    Reseed,
 }
 
 /// An error that states its [`FailureClass`].
@@ -95,9 +106,21 @@ impl Classify for SyncError {
         match self {
             Self::BatchTooLarge { .. } => FailureClass::Split,
             // A gap below the floor needs a re-seed or an accepted loss, which a
-            // retry cannot supply; an unknown peer is configuration.
-            Self::BelowRetentionFloor { .. } | Self::UnknownPeer { .. } => FailureClass::Stop,
+            // retry cannot supply and configuration cannot fix (SY-32).
+            Self::BelowRetentionFloor { .. } => FailureClass::Reseed,
+            // An unknown peer is configuration.
+            Self::UnknownPeer { .. } => FailureClass::Stop,
         }
+    }
+}
+
+/// A failure that cannot happen has no class to state, and needs none: no
+/// value of it exists. It is here so a stage that never fails, such as the
+/// [`Accept`](crate::runner::Accept) rule, still meets a `Classify` bound, and
+/// so the errors that carry such a stage default to it.
+impl Classify for Infallible {
+    fn class(&self) -> FailureClass {
+        match *self {}
     }
 }
 
@@ -123,7 +146,7 @@ mod tests {
         );
         assert_eq!(
             SyncError::BelowRetentionFloor { floor }.class(),
-            FailureClass::Stop
+            FailureClass::Reseed
         );
         assert_eq!(
             SyncError::UnknownPeer {

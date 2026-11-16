@@ -17,9 +17,10 @@
 
 use std::cell::Cell;
 use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use happenstance_core::{EventId, SequencePosition, StoreId};
+use happenstance_core::{EventId, RecordedAt, SequencePosition, StoreId};
 use happenstance_sync::{
     Ack, Classify, EventGroup, FailureClass, MemoryPeerError, MemoryResume, MemorySyncPeer,
     PeerLimits, Pulled, PushBatch, ReplicatedEvent, SendSyncPeer, Waiting, Watermark,
@@ -27,9 +28,9 @@ use happenstance_sync::{
 use happenstance_sync_testkit::{
     BYTE_LOG_REFUSED_REASON, COUNT_LOG_REFUSED_REASON, LOG_REFUSED, NO_CONFIRMATION,
     NO_CONFIRMATION_REASON, NO_SECOND_PAGE, NO_SECOND_PAGE_REASON, RefusalsOf, SyncFixture,
-    oversized_push_refusal, rules,
+    Violation, oversized_push_refusal, rules,
 };
-use happenstance_testkit::{RuleOutcome, block_on};
+use happenstance_testkit::{Capability, RuleOutcome, block_on};
 
 /// The one mistake a [`WrongPeer`] makes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -244,7 +245,9 @@ struct WrongPeer {
 /// Everything `peer` holds, from the start of its log.
 async fn held_by(peer: &MemorySyncPeer) -> Result<Vec<EventGroup>, MemoryPeerError> {
     let mut groups = Vec::new();
-    let mut resume = None;
+    // From the floor, not the start: a compacted reference peer refuses the
+    // start (SY-32), and what it retains is all there is to hold.
+    let mut resume = Some(peer.floor_token()?);
     loop {
         let pulled = peer.pull(resume.as_ref()).await?;
         if pulled.batch.groups.is_empty() {
@@ -598,6 +601,24 @@ impl SyncFixture for WrongFixture {
         }
         oversized_push_refusal(peer).await
     }
+
+    /// The reference peer's compaction, so SY-32's rule runs here too.
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    async fn compact_recorded_before(
+        &self,
+        _peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        compact(&self.inner, cutoff)
+    }
+}
+
+/// The reference peer's compaction, its failure reported as SY-32's.
+fn compact(peer: &MemorySyncPeer, cutoff: RecordedAt) -> Result<(), Violation> {
+    peer.compact_recorded_before(cutoff)
+        .map(drop)
+        .map_err(|error| Violation::new("SY-32", error.to_string()))
 }
 
 /// How many events one [`PagingPeer`] pull carries.
@@ -625,9 +646,14 @@ struct PageCursor {
 /// backing store pages by row, and it is a different type from [`WrongPeer`]
 /// because its resume token has to carry the offset the reference peer's has no
 /// room for.
+///
+/// Its cursor's group is absolute, counted from the start of the log as it was
+/// ever written, so it compacts correctly (SY-32): its mistake is SY-2's alone.
 #[derive(Debug)]
 struct PagingPeer {
     inner: Arc<MemorySyncPeer>,
+    /// How many groups compaction has dropped from the front of `inner`.
+    dropped: Arc<AtomicUsize>,
 }
 
 impl SendSyncPeer for PagingPeer {
@@ -636,12 +662,32 @@ impl SendSyncPeer for PagingPeer {
 
     async fn pull(&self, from: Option<&Self::Resume>) -> Result<Pulled<Self::Resume>, Self::Error> {
         let held = held_by(&self.inner).await?;
-        let mut at = from.copied().unwrap_or_default();
+        // Relaxed: one test thread writes it, between pulls, and nothing else
+        // is ordered by it.
+        let dropped = self.dropped.load(Ordering::Relaxed);
+        let mut at = match from {
+            Some(at) if at.group >= dropped => *at,
+            None if dropped == 0 => PageCursor::default(),
+            _ => {
+                return Err(MemoryPeerError::BelowRetentionFloor {
+                    floor: self
+                        .inner
+                        .limits()
+                        .retention_floor
+                        .expect("a peer that dropped groups has a floor"),
+                    // Not the refused cursor: the reference error holds a
+                    // `MemoryResume`, and this peer's token is a
+                    // `PageCursor` it cannot carry. The class, which is all
+                    // a rule reads here, is the same.
+                    from: None,
+                });
+            }
+        };
         let mut room = PAGE_EVENTS;
         let mut page = Vec::new();
 
         while room > 0 {
-            let Some(group) = held.get(at.group) else {
+            let Some(group) = held.get(at.group - dropped) else {
                 break;
             };
             let rest = group.events.get(at.event..).unwrap_or_default();
@@ -672,6 +718,16 @@ impl SendSyncPeer for PagingPeer {
 #[derive(Debug)]
 struct PagingFixture {
     inner: Arc<MemorySyncPeer>,
+    dropped: Arc<AtomicUsize>,
+}
+
+impl PagingFixture {
+    fn new() -> Self {
+        Self {
+            inner: Arc::new(MemorySyncPeer::new(StoreId::from_bytes([0x78; 16]))),
+            dropped: Arc::new(AtomicUsize::new(0)),
+        }
+    }
 }
 
 impl SyncFixture for PagingFixture {
@@ -680,6 +736,7 @@ impl SyncFixture for PagingFixture {
     async fn connect(&self) -> Self::Peer {
         PagingPeer {
             inner: Arc::clone(&self.inner),
+            dropped: Arc::clone(&self.dropped),
         }
     }
 
@@ -687,6 +744,28 @@ impl SyncFixture for PagingFixture {
     /// pages, and its push and its errors are the reference peer's own.
     async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
         oversized_push_refusal(peer).await
+    }
+
+    /// The reference peer's compaction, counting what it dropped so this
+    /// peer's absolute cursor keeps its meaning.
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    async fn compact_recorded_before(
+        &self,
+        _peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        let count = || {
+            self.inner
+                .group_count()
+                .map_err(|error| Violation::new("SY-32", error.to_string()))
+        };
+        let before = count()?;
+        compact(&self.inner, cutoff)?;
+        let after = count()?;
+        // Relaxed: see `PagingPeer::pull`.
+        self.dropped.fetch_add(before - after, Ordering::Relaxed);
+        Ok(())
     }
 }
 
@@ -797,9 +876,7 @@ fn compensation_is_atomic_fails_a_peer_that_flattens_groups() {
 #[test]
 fn compensation_is_atomic_fails_a_peer_that_ends_a_pull_inside_a_group() {
     fails_exactly_these(
-        &verdicts(async || PagingFixture {
-            inner: Arc::new(MemorySyncPeer::new(StoreId::from_bytes([0x78; 16]))),
-        }),
+        &verdicts(async || PagingFixture::new()),
         &[
             ("compensation_is_atomic_with_the_losing_event", "SY-2"),
             ("push_envelope_preserves_group_boundaries", "SY-30"),
@@ -856,12 +933,16 @@ fn ack_never_confirms_a_non_durable_event_skips_a_peer_that_confirms_nothing() {
     }
 }
 
+/// One class for every failure is `Transient` for a pull below the floor
+/// too, which SY-32's rule rejects as well: a runner retries that for ever.
 #[test]
 fn every_refusal_states_its_class_fails_a_peer_with_one_class() {
-    fails_exactly(
+    fails_exactly_these(
         &verdicts(async || WrongFixture::new(Mistake::OneClassForEverything)),
-        "every_refusal_states_its_class",
-        "SY-36",
+        &[
+            ("every_refusal_states_its_class", "SY-36"),
+            ("retention_gap_is_reported_not_silent", "SY-32"),
+        ],
     );
 }
 

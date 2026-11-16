@@ -6,7 +6,8 @@
 //! `READ_YOUR_OWN_WRITES` supported would fail here, which is what holds such a
 //! fixture's run bit-identical to the run before the hook existed (H-12).
 
-use happenstance_testkit::{Armed, Capability, Fixture, Settled};
+use happenstance_core::SequencePosition;
+use happenstance_testkit::{Armed, Capability, Fixture, Removed, Settled};
 
 use crate::harness::Subject;
 
@@ -28,6 +29,7 @@ impl<F: Fixture> Fixture for NeverAsked<F> {
     const MAX_METADATA_LEN: Option<usize> = F::MAX_METADATA_LEN;
     const MAX_TAGS_PER_BATCH: Option<usize> = F::MAX_TAGS_PER_BATCH;
     const HELD_ABOVE_FRONTIER: Capability = F::HELD_ABOVE_FRONTIER;
+    const REMOVAL: Capability = F::REMOVAL;
 
     fn connect(&self) -> impl Future<Output = Self::Store> {
         self.0.connect()
@@ -47,6 +49,10 @@ impl<F: Fixture> Fixture for NeverAsked<F> {
 
     fn arm_held_above_frontier(&self) -> impl Future<Output = Armed> {
         self.0.arm_held_above_frontier()
+    }
+
+    fn remove_outside_port(&self, positions: &[SequencePosition]) -> impl Future<Output = Removed> {
+        self.0.remove_outside_port(positions)
     }
 
     async fn settle_frontier(&self) -> Settled {

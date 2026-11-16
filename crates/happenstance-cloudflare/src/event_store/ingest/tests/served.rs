@@ -17,7 +17,9 @@ use happenstance_sync::{
     Classify, EventGroup, Exchange, FailureClass, PeerLimits, PushBatch, RemoteError,
     RemoteSyncPeer, ReplicatedEvent, StoreSyncPeer, SyncPeer,
 };
-use happenstance_sync_testkit::{RefusalsOf, SyncFixture, oversized_push_refusal};
+use happenstance_sync_testkit::{
+    Refusal, RefusalsOf, SyncFixture, batch_over_the_limit, oversized_push_refusal,
+};
 use wasm_bindgen_test::wasm_bindgen_test;
 use worker::js_sys::Uint8Array;
 use worker::{Method, Request, RequestInit, Response};
@@ -304,28 +306,90 @@ async fn a_foreign_token_answers_400_and_reads_back_as_stop() {
     assert_eq!(refused.class(), FailureClass::Stop);
 }
 
+/// The fixture's two refusals are the client's and the far side's, so SY-36's
+/// rule still sees a `StoreSyncPeer` refusal cross `serve_sync_request`, leave
+/// as a 413 by `status_for` and come back as `Split` through `class_for`, now
+/// that the client refuses its own over-limit pushes (#452).
+///
+/// **Wrong fixture it rejects:** a second refusal whose client declares the far
+/// side's limits, which would be refused locally and test the client twice.
+#[wasm_bindgen_test]
+async fn the_fixture_declares_a_local_and_a_far_side_refusal() {
+    let fixture = ServedFixture { opened: open() };
+    let peer = fixture.connect().await;
+
+    let refusals = fixture.refusals(&peer).await.expect("the batches build");
+
+    let outcomes: Vec<_> = refusals.iter().map(|refusal| &refusal.outcome).collect();
+    assert!(
+        matches!(
+            outcomes[..],
+            [
+                Err(RemoteError::BatchTooLarge { .. }),
+                Err(RemoteError::Exchange(RequestError::Refused {
+                    status: 413,
+                    class: FailureClass::Split,
+                    ..
+                })),
+            ]
+        ),
+        "{outcomes:?}"
+    );
+}
+
 /// One fresh object per fixture; each `connect` is a new client over a new
 /// server-side peer onto it.
 struct ServedFixture {
     opened: super::support::Opened,
 }
 
+impl ServedFixture {
+    /// A client declaring `declared` for a far side whose own limits are
+    /// [`PeerLimits::minimum`].
+    fn client(&self, declared: PeerLimits) -> RemoteSyncPeer<RequestExchange> {
+        let store = super::support::connect(&self.opened.host);
+        let far = StoreSyncPeer::with_limits(store.clone(), store, PeerLimits::minimum());
+        RemoteSyncPeer::new(RequestExchange { far }, declared)
+    }
+}
+
 impl SyncFixture for ServedFixture {
     type Peer = RemoteSyncPeer<RequestExchange>;
 
+    /// Declined: every `connect` already builds its store afresh from the
+    /// object's state, so the handle swap the rule makes is all a reopen on
+    /// this shim could add, and the isolate restart the capability stands for
+    /// is not something the shim can perform.
+    const REOPEN: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+        "each connect builds a new client over a store re-derived from the object's state, so \
+         the handle swap SY-31's rule already makes is all a reopen on this shim could do; \
+         restarting the isolate, the crash the capability stands for, is beyond the shim, and \
+         harness/workerd runs the family on a real object",
+    );
+
     fn connect(&self) -> impl Future<Output = Self::Peer> {
-        let store = super::support::connect(&self.opened.host);
-        let far = StoreSyncPeer::with_limits(store.clone(), store, PeerLimits::minimum());
-        core::future::ready(RemoteSyncPeer::new(
-            RequestExchange { far },
-            PeerLimits::minimum(),
-        ))
+        core::future::ready(self.client(PeerLimits::minimum()))
     }
 
-    /// The store peer's oversized-push refusal, carried back through the
-    /// status with its class intact.
-    fn refusals(&self, peer: &Self::Peer) -> impl Future<Output = RefusalsOf<Self::Peer>> {
-        oversized_push_refusal(peer)
+    /// Two oversized pushes, both `Split`. The first, over the limits this
+    /// client declares, is refused by the client before it sends (#452), so it
+    /// never reaches the object. The second comes from a client declaring
+    /// twice the far side's `max_batch_bytes`, so it is sent: its body is under
+    /// the binding's cap, `serve_sync` hands it to the `StoreSyncPeer`, and
+    /// that refusal comes back as a 413 read as `Split` by `class_for`. The
+    /// body-over-the-cap tests above cover a different 413, the binding's own,
+    /// which refuses before `serve_sync` runs.
+    async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
+        let mut refusals = oversized_push_refusal(peer).await?;
+        let mut wider = PeerLimits::minimum();
+        wider.max_batch_bytes = 2 * PeerLimits::minimum().max_batch_bytes;
+        let oversized = batch_over_the_limit(&PeerLimits::minimum())?;
+        refusals.push(Refusal {
+            provoked_by: "a push the client's wider limits admit and the far side refuses",
+            declared: FailureClass::Split,
+            outcome: self.client(wider).push(&oversized).await.map(drop),
+        });
+        Ok(refusals)
     }
 }
 

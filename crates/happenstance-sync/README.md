@@ -9,7 +9,7 @@ explains event sourcing and dynamic consistency boundaries from the beginning,
 with programs you can run.
 
 > **Status: published, and built against real peers.** Phase 13 built the runner
-> and the network peers on top of the port, and they ship in `0.6.0`:
+> and the network peers on top of the port, and they ship from `0.6.0`:
 >
 > - **the runner** (#244): `runner::Edge` drives one edge, a step at a time or
 >   through `Edge::run`, a loop the caller drives on its own runtime with a
@@ -26,16 +26,21 @@ with programs you can run.
 >   pass `happenstance-sync-testkit`'s peer suite, and a native SQLite store
 >   round-trips through all three with its payload bytes identical.
 >
-> Still to come: a peer set above the single edge, an `Exchange` over a real
-> network in a published crate, and the adjudication hook SY-7 and SY-10 wait
-> on (#450).
+> Still to come: a peer set above the single edge, and an `Exchange` over a
+> real network in a published crate. The adjudication hook SY-7 and SY-10
+> waited on ships in `0.7.0` (#450): `runner::Adjudicate`, mounted on an edge or a
+> `StoreSyncPeer`, and ADR-0108 froze both on it. So does SY-32's
+> retention case (#158): a far side that has forgotten history an edge's token
+> has not reached refuses it with the fifth failure class, `Reseed`, and the
+> edge stops with `StopCause::RetentionGap` rather than converging on a subset
+> in silence. ADR-0108 froze it, accepting that no real peer compacts yet.
 >
 > A `[FROZEN]` `SY` clause of the
 > [specification](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/spec/SPECIFICATION.md)
 > binds this crate's semver as an `ES` clause binds `happenstance-core`'s.
-> Thirty-five of the thirty-nine `SY` clauses are `[FROZEN]`. SY-7, SY-10 and
-> SY-29 are `[PROVISIONAL]`, binding until the falsifier each names, and SY-32
-> is `[DEFERRED]` (ADR-0107). The version moves in lockstep with the rest of the
+> Thirty-eight of the thirty-nine `SY` clauses are `[FROZEN]`. SY-29 is
+> `[PROVISIONAL]`, binding until the falsifier it names (ADR-0107; ADR-0108
+> froze the rest at phase 14). The version moves in lockstep with the rest of the
 > workspace.
 
 ## Which stores implement the port
