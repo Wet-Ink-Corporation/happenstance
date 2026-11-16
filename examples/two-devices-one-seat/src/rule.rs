@@ -20,9 +20,9 @@
 //! The rule hands back plain [`Event`]s, built from the domain event's type,
 //! tags and JSON bytes. An event `commit` writes also carries the typed
 //! layer's codec tag in its metadata, and the typed layer has no public way to
-//! build one outside `commit`. A payload without the tag decodes under the
-//! reader's own codec, which is JSON in every place here, so the refund reads
-//! back the same everywhere.
+//! build one outside `commit` (tracked in #492). A payload without the tag
+//! decodes under the reader's own codec, which is JSON in every place here,
+//! so the refund reads back the same everywhere.
 
 use happenstance::{
     Boundary, CodecError, DomainEvent, Event, InvalidEventType, InvalidQuery, Json, Query,
@@ -86,7 +86,10 @@ impl Adjudicate for CentralRule {
         earlier: &[EventGroup],
     ) -> Result<Vec<Event>, RuleError> {
         let (ledger, query) = self.held().await?;
-        let before = decode(&query, earlier.iter().flat_map(|group| &group.events))?;
+        let before = earlier
+            .iter()
+            .map(|group| decode(&query, &group.events))
+            .collect::<Result<Vec<_>, _>>()?;
         let arriving = decode(&query, &group.events)?;
         adjudicate(ledger, before, arriving)
             .iter()

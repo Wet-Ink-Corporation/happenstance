@@ -59,10 +59,16 @@ pub fn sell_seat(ledger: &ShowLedger, at: Place, buyer: &str) -> Result<Vec<BoxO
 /// `SaleRefunded` for each sale in `arriving` that lands past capacity, and
 /// nothing otherwise.
 ///
-/// `ledger` is the history central holds. `earlier` is what lands before
-/// `arriving` in the same push, which central does not hold yet either. The
-/// landing order is that history, then `earlier`, then `arriving`: the first
-/// sales to reach central keep their seats.
+/// `ledger` is the history central holds. `earlier` is the groups that land
+/// before `arriving` in the same push, one `Vec` per group, which central
+/// does not hold yet either. The landing order is that history, then
+/// `earlier`, then `arriving`: the first sales to reach central keep their
+/// seats.
+///
+/// Each earlier group is folded together with the refunds it earns itself,
+/// because that is how the runner lands it: a group and its answer in one
+/// write. So a later group's reason counts only the sales still holding a
+/// seat when it lands.
 ///
 /// An event central already holds is not folded twice, and a sale it already
 /// holds is never refunded here, because it was judged when it first landed.
@@ -74,17 +80,23 @@ pub fn sell_seat(ledger: &ShowLedger, at: Place, buyer: &str) -> Result<Vec<BoxO
 #[must_use]
 pub fn adjudicate(
     mut ledger: ShowLedger,
-    earlier: impl IntoIterator<Item = BoxOffice>,
+    earlier: impl IntoIterator<Item = Vec<BoxOffice>>,
     arriving: impl IntoIterator<Item = BoxOffice>,
 ) -> Vec<BoxOffice> {
-    for event in earlier {
-        land(&mut ledger, event);
+    for group in earlier {
+        for refund in judge(&mut ledger, group) {
+            land(&mut ledger, refund);
+        }
     }
+    judge(&mut ledger, arriving)
+}
+
+/// Folds `group` into `ledger` and answers it: one refund for each sale the
+/// group landed past capacity.
+fn judge(ledger: &mut ShowLedger, group: impl IntoIterator<Item = BoxOffice>) -> Vec<BoxOffice> {
     let mut landed_now = Vec::new();
-    for event in arriving {
-        // Cloned because the id is needed twice: once in the ledger the
-        // event moves into, once to know which refunds this group earns.
-        if let Some(sale) = land(&mut ledger, event) {
+    for event in group {
+        if let Some(sale) = land(ledger, event) {
             landed_now.push(sale);
         }
     }
@@ -116,6 +128,8 @@ fn land(ledger: &mut ShowLedger, event: BoxOffice) -> Option<SaleId> {
         BoxOffice::ShowScheduled { .. } => (ledger.capacity.is_some(), None),
         BoxOffice::SeatSold { sale, .. } => (
             ledger.sales.iter().any(|known| known.sale == *sale),
+            // Cloned because the id is needed twice: once in the ledger the
+            // event moves into, once to know which refunds its group earns.
             Some(sale.clone()),
         ),
         BoxOffice::SaleRefunded { sale, .. } => (ledger.refunds.contains_key(sale), None),

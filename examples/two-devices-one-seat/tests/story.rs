@@ -236,6 +236,8 @@ mod story {
         // central's log and one of them no longer holds a seat.
         assert_eq!(central.sales().count(), 4, "ingest never refuses (SY-1)");
         assert_eq!(central.capacity(), Some(CAPACITY));
+        assert_eq!(central.held(), CAPACITY, "the oversold sale was refunded");
+        assert_eq!(central.refunded().count(), 1, "exactly one refund");
     }
 
     /// Central's rule, asked again about everything central holds, answers

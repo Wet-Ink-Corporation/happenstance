@@ -401,7 +401,8 @@ compensation. The rule is asked about each pushed group before the push
 lands, reads what it needs from its own handle onto central, and returns the
 compensation; it writes nothing itself. The runner lands each group and its
 compensation in one write, and the compensation is an event, so it syncs
-back to every device.
+back to every device. Not compiled on this page: `CentralRule` is the
+example's:
 
 ```text
 let far = StoreSyncPeer::new(central.clone(), central.clone())

@@ -80,7 +80,7 @@ central store sees both events and appends the correction, which then syncs
 back to everyone. Only one place should write corrections for a given fact
 ([SY-7](../spec/SPECIFICATION.md)).
 
-**Status:** works today, from `0.7`. The central store adjudicates as it
+**Status:** works today; from `0.7` the central store adjudicates as it
 syncs, through a merge rule (`runner::Adjudicate`) mounted on the peer the
 devices push to, and each correction lands in the same write as the event it
 answers. The

@@ -54,5 +54,8 @@ example, `docs/sync-a-device.md` and `docs/choose-a-topology.md`.
 - Changed expectation: `both_devices_sell_the_last_seat_and_central_holds_both` asserted
   `held() == 4`; with the refund landing in the same write as the second sale, seats held is 3 and
   the SY-1 claim is now `sales().count() == 4`. Flagged to the owner.
+- Review F1: red `a_second_oversold_group_counts_the_first_ones_refund` (`left: [3]`,
+  `right: [2]`): earlier groups were folded without their own refunds. `adjudicate` now takes
+  `earlier` one group at a time and folds each with its own answer. Green.
 - `cargo xtask affected --base origin/main` passed; `narrative`, `lint-pages`, `spec-trace`,
   `lint-constitution`, `proof-artefact` passed.

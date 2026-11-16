@@ -64,7 +64,7 @@ fn the_oversell(show: &ShowId) -> Vec<BoxOffice> {
     log.iter().cloned().for_each(|e| central.apply(e));
     let phone = on(Place::Phone);
     log.extend(phone.iter().cloned());
-    log.extend(adjudicate(central, [], phone));
+    log.extend(adjudicate(central, Vec::new(), phone));
     log
 }
 
