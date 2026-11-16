@@ -1,8 +1,8 @@
 ---
 id: kb-decision-0108
-title: Phase 14's clauses are frozen, SY-32 is held for a CF-25 acceptance, and five frozen lines are repaired
+title: Phase 14's clauses are frozen, SY-32 with a CF-25 acceptance, and five frozen lines are repaired
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0108
 reversibility: low
@@ -10,17 +10,16 @@ phase: 14
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed 2026-11-16 for #163; every freeze in it is the owner's call. Six clauses freeze on rules
+  Accepted 2026-11-16 for #163 by the owner, all as drafted, SY-32 included. Six clauses freeze on rules
   that run on phase-14 and the wrong implementations they fail: ES-39 as ADR-0028 decision 9's
   refusal, on experiments/retention-reader's verdict (#482); ES-40 on
   condition_over_removed_history_does_not_reject (#474), with the completeness axis's verdict moved
   to adapter yes because four real adapters remove rows outside the port and pass it; CF-27 on
   WithholdingStore (#467); SY-7 and SY-10 on the runner's adjudication hook (#469, #450, with #441
   settled by #466); and VT-36 on the runner's Split on TagsPerBatch through the deployed object
-  (#475), green on two deployed runs. SY-32 is not frozen: its experiment ran on MemorySyncPeer and
-  every real peer declines COMPACTION, so freezing it fails the CF-25 Completeness / SyncPeer row
-  unless an accepted record takes the risk by name. It moves to provisional, keeps freeze-by-14,
-  and section 3 is that acceptance, effective only if the owner accepts this record. ES-38's,
+  (#475), green on two deployed runs. SY-32 freezes too: its experiment ran on MemorySyncPeer and
+  every real peer declines COMPACTION, so the CF-25 Completeness / SyncPeer row has no adapter at
+  its far end, and section 3 accepts that risk by name, in effect on this record's acceptance. ES-38's,
   SY-3's, SY-21's and SY-34's Rule lines and the Durability / SyncPeer ledger cell are repaired.
 depends_on:
   - kb-decision-0013
@@ -50,9 +49,10 @@ source_paths:
 last_reviewed: 2026-11-16
 ---
 
-# Phase 14's clauses are frozen, SY-32 is held for a CF-25 acceptance, and five frozen lines are repaired
+# Phase 14's clauses are frozen, SY-32 with a CF-25 acceptance, and five frozen lines are repaired
 
-**Proposed on 2026-11-16 for #163.** Every freeze in it is the owner's call, and each one is its
+**Accepted on 2026-11-16 for #163.** The owner accepted it as drafted (wi-a1a7b315fa): the six
+freezes, §3's acceptance and so SY-32's freeze, and open points A–D as recommended. Each freeze is its
 own commit on `claude/project-thread-xxl8lr-163`. Declining one means reverting that commit and
 re-reconciling the census totals (§1.3, §7.1) and the sync docs, which the last commit writes
 assuming the others; the fallback for each is the `freeze-by-14` row it had. No long-form record exists; this
@@ -176,9 +176,9 @@ None changes a MUST.
   `SyncFixture::REOPEN` is granted, Postgres and Neon, and fails `BuffersAcrossHandles` there; the
   Durable Object's fixture declines and is reconnected, which is the stated cost of a declension.
 
-## 3. Held: SY-32, and the risk acceptance it needs
+## 3. SY-32, frozen with the risk acceptance it needs
 
-**SY-32 is not frozen by this record's commits.** #473 built what its marker asked:
+**SY-32 froze in the commit that recorded this acceptance.** #473 built what its marker asked:
 `FailureClass::Reseed`, `StopCause::RetentionGap`, `MemorySyncPeer::compact_recorded_before` with a
 computed `retention_floor` and `floor_token()`, and `retention_gap_is_reported_not_silent` behind
 `SyncFixture::COMPACTION`, which fails seven wrong peers in `tests/wrong_retention.rs`, among them
@@ -194,17 +194,17 @@ of a freeze:
   record names the axis and the port. The verdict section 1.2 moves is the axis's, and reading it as
   this port's far end would be pro forma, which ADR-0103 declined for the same reason.
 
-So the marker moves `[DEFERRED]` to `[PROVISIONAL]`, because its experiment ran, and keeps
-`freeze-by-14`. **The acceptance, effective only on this record's acceptance:** the completeness
+So the proposal moved the marker to `[PROVISIONAL]` and offered this acceptance; on the owner's
+acceptance it is `[FROZEN]`. **The acceptance, in effect since 2026-11-16:** the completeness
 axis is accepted for `SyncPeer` without an adapter at its far end. SY-32's floor means resumability,
 not completeness (ADR-0028), so a peer is never asked to describe a scattered purge, and the harms a
 pruned replica causes (#483, #484) belong to the ingest path, not the peer port. Retired when a real
-peer grants `COMPACTION` and passes the rule. If the owner accepts, a follow-up commit freezes SY-32
-and writes `ADR-0108` in that row; if he declines this section, SY-32 stays `freeze-by-14` and
-phase 14 must build a compacting real peer or renew it past 1.0 (`renew-past-1.0` with the
-falsifier its marker now states) before it closes.
+peer grants `COMPACTION` and passes the rule. The owner accepted it; SY-32 is frozen
+and §6.5's row reads `ADR-0108`. Its marker states the falsifier that reopens it: a real peer
+that forgets a prefix of its log, grants `COMPACTION`, and fails the rule.
 
-## Open points recorded at the proposal
+
+## Open points recorded at the proposal, accepted as recommended
 
 - **A. ES-40's verdict move** (section 1.2). Recommended: adapter yes, as argued. Alternative: hold
   ES-40 as SY-32 is held, with an acceptance naming the axis and `EventStore`.
@@ -218,10 +218,10 @@ falsifier its marker now states) before it closes.
 
 ## Consequences
 
-- §1.3 reads 193 `[FROZEN]`, 10 `[PROVISIONAL]` and 2 `[DEFERRED]` (WF-1, CF-14) with every
+- §1.3 reads 194 `[FROZEN]`, 9 `[PROVISIONAL]` and 2 `[DEFERRED]` (WF-1, CF-14) with every
   commit applied: 187, 13 and 5 before.
 - The ledger's `freeze-by-14` rows for ES-39, ES-40, CF-27, SY-7, SY-10 and VT-36 are struck;
-  SY-32's keeps `freeze-by-14` with this record's reason.
-- §6.5: Completeness / `EventStore` is `far end`; Completeness / `SyncPeer` stays carried by SY-32.
+  SY-32's is struck too, frozen under section 3's acceptance.
+- §6.5: Completeness / `EventStore` is `far end`; Completeness / `SyncPeer` is accepted by this record.
 - The evidence for ES-40 on Postgres, Neon and the Durable Object, and for VT-36, is in CI's live
   jobs, not the gate. A regression there turns `live-postgres`, `live-neon` or `workerd` red.

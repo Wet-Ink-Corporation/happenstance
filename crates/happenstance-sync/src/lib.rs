@@ -12,9 +12,9 @@
 //! projection port in the caller's batch (SY-31, [`runner::Watermark`]); a push keeps the
 //! writes the log was made of (SY-39, [`write_group`]); [`StoreSyncPeer`], [`serve_sync`] and [`RemoteSyncPeer`] are a network peer's two halves, and `happenstance-neon`'s `NeonSyncPeer` and `happenstance-cloudflare`'s Durable Object over HTTP pass `happenstance-sync-testkit`'s peer suite. Not here yet: a peer set above one edge, and an
 //! [`Exchange`] over a real network, which your HTTP client supplies. A `[FROZEN]` `SY` clause binds this
-//! crate's semver as an `ES` clause binds `happenstance-core`'s. SY-29 and
-//! SY-32 are `[PROVISIONAL]`, binding until the falsifier each names (ADR-0107,
-//! and ADR-0108, proposed, which freezes SY-7 and SY-10).
+//! crate's semver as an `ES` clause binds `happenstance-core`'s. SY-29 is
+//! `[PROVISIONAL]`, binding until the falsifier it names (ADR-0107); ADR-0108
+//! froze SY-7, SY-10 and SY-32 at phase 14.
 //!
 //! # This is a port, not a protocol
 //!

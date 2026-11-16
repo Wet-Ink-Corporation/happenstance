@@ -116,8 +116,8 @@ what it withholds.
       `condition_over_removed_history_does_not_reject` run against it and against
       every fixture that grants the removal capability, and ES-38's rule rejects
       its named wrong implementation.
-- [ ] ES-39, CF-27 and SY-32 are no longer `[DEFERRED]`. ES-39 and CF-27 frozen, SY-32 `[PROVISIONAL]`, by ADR-0108 (proposed: ticked on its acceptance).
-- [ ] Every `freeze-by-14` clause in [`ledgers.md`](../ledgers.md)'s 1.0
+- [x] ES-39, CF-27 and SY-32 are no longer `[DEFERRED]`. All three frozen by ADR-0108, accepted 2026-11-16.
+- [x] Every `freeze-by-14` clause in [`ledgers.md`](../ledgers.md)'s 1.0
       dispositions — ES-39, ES-40, SY-32 and CF-27, and since ADR-0107 SY-7, SY-10 and VT-36 — is `[FROZEN]`, or
       re-dispositioned by a record that says why.
 - [ ] The specification is reconciled against this phase's changes (session
@@ -138,3 +138,5 @@ what it withholds.
   43746838635). SY-32 not frozen: its rule skips on every real peer and the CF-25 Completeness /
   `SyncPeer` row needs an accepted record, which §3 offers. ES-38's, SY-3's, SY-21's and SY-34's
   Rule lines and the Durability / `SyncPeer` ledger cell repaired; SY-33's left declared (#465).
+- **2026-11-16** — the owner accepted ADR-0108 as drafted (wi-a1a7b315fa), and SY-32 froze under
+  its §3 acceptance. Every `freeze-by-14` row is now discharged.
