@@ -52,8 +52,8 @@ crates/happenstance-sync/        the replication port, its wire messages (ADR-00
                                  write groups (WriteGroupStore, SY-39, ADR-0105), and a network
                                  peer's two halves — StoreSyncPeer + serve_sync, RemoteSyncPeer
                                  over a caller's Exchange — with SendPeer for the Send flavour.
-                                 not yet: a peer set above one edge, an Exchange over a real
-                                 network in a published crate, the adjudication hook (#450).
+                                 phase 14 added the adjudication hook (#450) and Reseed. not yet:
+                                 a peer set above one edge, an Exchange over a real network.
                                  no todo!() left in src/; the stand-in peers in tests/ keep theirs.
 crates/happenstance-sync-testkit/
                                  the sync conformance suites. `sync_peer_conformance!`, the
@@ -483,12 +483,12 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   replication (SY-27, SY-28), the push keeping write groups (SY-30), the
   watermark through `ProjectionStore` (SY-31), classified peer errors (SY-36),
   `waiting` (SY-37), the unheld own identity (SY-38) and, with ADR-0105, write
-  groups themselves (SY-39). 35 of the 39 `SY` clauses are frozen. **Still
-  open:** SY-7, which assigns compensation authorship to one peer, and SY-10,
-  which makes hub-and-spoke and peer-to-peer both first-class, are provisional
-  and `freeze-by-14`, waiting on the runner's adjudication hook (#450); SY-29 is
-  renewed past 1.0 against the first scoped-replication proposal; and the
-  retention floor (SY-32) is deferred to phase 14. The message set is four types
+  groups themselves (SY-39). 38 of the 39 `SY` clauses are frozen:
+  [ADR-0108](.kb/decisions/0108-phase-14s-clauses-are-frozen.md) froze SY-7
+  (compensation authorship) and SY-10 (hub-and-spoke and peer-to-peer) at phase
+  14 on the runner's adjudication hook (#450), and the retention floor (SY-32)
+  with a risk acceptance, since no real peer compacts yet. **Still open:** SY-29,
+  renewed past 1.0 against the first scoped-replication proposal. The message set is four types
   in the envelope with the format version on every message (ADR-0097), at
   version 3 since ADR-0104.
 - ~~**How a Postgres adapter buys position visibility.**~~ `nextval()` allocates
