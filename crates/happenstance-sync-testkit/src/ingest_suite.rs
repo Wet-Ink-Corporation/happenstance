@@ -425,7 +425,8 @@ pub mod ingest_rules {
     /// identical fact as though it were the first again; one that decodes a
     /// payload to reach its dedupe key, and skips bytes it cannot parse; and
     /// one that writes a group's compensation again when the group was a
-    /// re-delivery. `tests/wrong_ingest_stores.rs` carries all three.
+    /// re-delivery. `tests/wrong_ingest_stores.rs` carries all three. SY-3's `Rule:` line
+    /// names this rule since ADR-0108: its redelivery half is SY-3's assertion.
     ///
     /// # Errors
     ///

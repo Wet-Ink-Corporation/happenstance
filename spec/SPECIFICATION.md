@@ -7215,7 +7215,7 @@ configuration, not a property of the port.
 `runner::Adjudicate` runs on both ingest sites, `Edge::with_adjudicator` on the pull and `StoreSyncPeer::with_adjudicator` behind `serve_sync_adjudicated` on the push,
 and `Accept`, which writes nothing, is the default everywhere. The store half is `only_the_adjudicator_compensates`; the runner half, that a non-adjudicator
 writes none, fails a `MiniEdge` that adjudicates under `Accept` while the shipped `Edge` passes. The falsification test ran and its divergence is recorded (#136).
-Reopened by its own falsifier: a deployment in which two peers must both adjudicate one fact family and their compensations can be made convergent.`
+Reopened by its own falsifier: a deployment in which two peers must both adjudicate one fact family and their compensations can be made convergent.
 Rule: `only_the_adjudicator_compensates` (`happenstance-sync-testkit`, #136), in the
 ingest family: two stores take one conflicting pair in opposite orders, the rule plays
 the runner through the shipped hook (`runner::Adjudicate`, #450), mounting a seat rule on

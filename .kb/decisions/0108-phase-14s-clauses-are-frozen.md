@@ -53,8 +53,9 @@ last_reviewed: 2026-11-16
 # Phase 14's clauses are frozen, SY-32 is held for a CF-25 acceptance, and five frozen lines are repaired
 
 **Proposed on 2026-11-16 for #163.** Every freeze in it is the owner's call, and each one is its
-own commit on `claude/project-thread-xxl8lr-163`, so any one can be declined by reverting that
-commit; the fallback for each is the `freeze-by-14` row it had. No long-form record exists; this
+own commit on `claude/project-thread-xxl8lr-163`. Declining one means reverting that commit and
+re-reconciling the census totals (§1.3, §7.1) and the sync docs, which the last commit writes
+assuming the others; the fallback for each is the `freeze-by-14` row it had. No long-form record exists; this
 atom is the record.
 
 ## Context
