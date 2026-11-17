@@ -327,20 +327,20 @@ Each line names the red it must show first. "Wrong store X" means a store in
 
 ### PR 1: ADR, clause, rule, oracle (`happenstance-sync`, `happenstance-sync-testkit`, `spec/`, `.kb/`)
 
-- [ ] `memory_ingest::tests::remove_takes_the_named_events_out_and_never_reuses_their_positions`.
+- [x] `memory_ingest::tests::remove_takes_the_named_events_out_and_never_reuses_their_positions`.
       Red: no `remove`. Then append 3, remove the middle one, append 1: the new position is
       above all three (ES-38 on the oracle).
-- [ ] `..::remove_ignores_a_position_it_does_not_hold_and_reports_the_count`.
-- [ ] `..::a_removed_foreign_event_is_skipped_on_redelivery`. Red: `appended == 1` (#483).
-- [ ] `..::a_removed_own_event_is_skipped_not_refused`. Red: `UnheldOwnIdentity` (#484).
-- [ ] `..::an_own_claim_never_held_is_refused_after_a_removal` (I-3). Green from the start
+- [x] `..::remove_ignores_a_position_it_does_not_hold_and_reports_the_count`.
+- [x] `..::a_removed_foreign_event_is_skipped_on_redelivery`. Red: `appended == 1` (#483).
+- [x] `..::a_removed_own_event_is_skipped_not_refused`. Red: `UnheldOwnIdentity` (#484).
+- [x] `..::an_own_claim_never_held_is_refused_after_a_removal` (I-3). Green from the start
       if the removed set is checked by id. This guards the next refactor.
-- [ ] `..::a_group_of_removed_and_held_events_writes_no_compensation` (SY-11).
-- [ ] `..::a_group_with_one_new_event_lands_it_and_compensates_once`.
-- [ ] `..::the_group_read_drops_a_removed_group` (SY-39 bookkeeping after removal).
-- [ ] sync-testkit `ingest_fixture::tests`: a silent fixture declines `REMOVAL` with
+- [x] `..::a_group_of_removed_and_held_events_writes_no_compensation` (SY-11).
+- [x] `..::a_group_with_one_new_event_lands_it_and_compensates_once`.
+- [x] `..::the_group_read_drops_a_removed_group` (SY-39 bookkeeping after removal).
+- [x] sync-testkit `ingest_fixture::tests`: a silent fixture declines `REMOVAL` with
       `UNSTATED_INGEST_REMOVAL`, and its `remove_outside_port` answers `Removed::Nothing`.
-- [ ] Rule `ingest_rules::a_removed_event_is_not_readmitted`, green on
+- [x] Rule `ingest_rules::a_removed_event_is_not_readmitted`, green on
       `MemoryIngestFixture`. Four arrangements, each on a fresh fixture:
       (a) removed foreign: ingest `X1..X3`, remove `X2` by position, re-ingest the same
       groups through the handle held before the removal **and** a freshly connected one;
@@ -352,22 +352,22 @@ Each line names the red it must show first. "Wrong store X" means a store in
       (d) compensation: a group of only removed events carrying compensation writes none.
       Positions are compared against what the store assigned, never against literals
       (CLAUDE.md).
-- [ ] Wrong store `Resurrects` (ignores the record for foreign ids, today's adapters' behaviour)
+- [x] Wrong store `Resurrects` (ignores the record for foreign ids, today's adapters' behaviour)
       fails (a).
-- [ ] Wrong store `RefusesARemovedOwnIdentity` (today's behaviour on own ids) fails (b).
-- [ ] Wrong store `SkipsEveryUnheldOwnIdentity` (treats any unheld own claim as removed)
+- [x] Wrong store `RefusesARemovedOwnIdentity` (today's behaviour on own ids) fails (b).
+- [x] Wrong store `SkipsEveryUnheldOwnIdentity` (treats any unheld own claim as removed)
       fails (c), and also fails the existing `an_unheld_own_identity_stops_the_ingest`.
-- [ ] Wrong store `RecordsRemovalsPerHandle` (the record lives on the handle, not the store)
+- [x] Wrong store `RecordsRemovalsPerHandle` (the record lives on the handle, not the store)
       fails (a)'s fresh-handle half.
-- [ ] Wrong store `CompensatesARemovedGroup` fails (d).
-- [ ] A fixture that declines `REMOVAL` gets the rule reported as declined with its reason,
+- [x] Wrong store `CompensatesARemovedGroup` fails (d).
+- [x] A fixture that declines `REMOVAL` gets the rule reported as declined with its reason,
       not vanished (existing `require!` behaviour; one test).
-- [ ] `happenstance-sync/tests/runner`: `a_restored_edge_over_a_pruned_memory_store_applies_nothing_twice`.
+- [x] `happenstance-sync/tests/runner`: `a_restored_edge_over_a_pruned_memory_store_applies_nothing_twice`.
       The experiment's R2-dst-1 on the oracle: `Edge::restored` + `MemorySyncPeer` +
       `MemoryProjectionStore`, with a counter projection applying each id once.
-- [ ] `..::a_restored_edge_over_a_memory_store_missing_an_own_event_syncs`. R2-dst-2 on the
+- [x] `..::a_restored_edge_over_a_memory_store_missing_an_own_event_syncs`. R2-dst-2 on the
       oracle: not `Stopped`, and the foreign event in the same page lands.
-- [ ] `cargo xtask spec-trace` green with SY-40 and the amended SY-1 and SY-38.
+- [x] `cargo xtask spec-trace` green with SY-40 and the amended SY-1 and SY-38.
       `cargo xtask lint-kb` green: ADR-0110 is new, and the accepted 0098, 0107 and 0108
       are untouched.
 
@@ -567,3 +567,33 @@ its five wrong stores.
 ## Progress
 
 - 2026-11-16: plan written. Waiting on D-1 to D-10.
+- 2026-11-17: PR 1 resumed from WIP `70017a6` after a container restart. Reds recorded by
+  temporarily reverting the implementation, each restored before the next step:
+  - `memory_ingest::removal::tests`, with `stage` checking `held` only and `next_position`
+    derived from `log.len()`: `a_removed_foreign_event_is_skipped_on_redelivery` failed
+    `left: (1, 2, 0) right: (0, 3, 0)` (#483); `a_removed_own_event_is_skipped_not_refused`
+    failed `UnheldOwnIdentity { id: ..:1 }` (#484);
+    `a_group_of_removed_and_held_events_writes_no_compensation` `(1, 1, 1)` vs `(0, 2, 0)`;
+    `a_group_with_one_new_event_lands_it_and_compensates_once` `(2, 0, 1)` vs `(1, 1, 1)`;
+    `remove_takes_the_named_events_out_and_never_reuses_their_positions` at its `held ==
+    [first, last, after]` assertion (position reused). Green on restore (25 passed).
+  - The rule against each wrong store, `a_removed_event_is_not_readmitted`:
+    `Resurrects` (a) counted `(1, 2, 0)`, should be `(0, 3, 0)`; `RefusesARemovedOwnIdentity`
+    refused the echo of `..:1` with `UnheldOwnIdentity`; `SkipsEveryUnheldOwnIdentity` answered
+    the never-minted claim `Ok(Ingested { appended: 1, skipped: 1, .. })`;
+    `RecordsRemovalsPerHandle` counted `(1, 2, 0)` through the handle connected after the
+    removal; `CompensatesARemovedGroup` counted `(0, 2, 1)`, should be `(0, 2, 0)`. Also red:
+    `DropsTheClaim` (c), `RecompensatesOnRedelivery` (d) and `RefusesEveryOwnIdentity` (b),
+    whose tests now list SY-40 beside their own rule.
+  - `tests/runner/pruned.rs`, with the oracle's record check reverted:
+    `a_restored_edge_over_a_pruned_memory_store_applies_nothing_twice` failed `a pruned event
+    was re-admitted, left: 2 right: 0`; `a_restored_edge_over_a_memory_store_missing_an_own_event_syncs`
+    failed `Ingest(UnheldOwnIdentity { .., position: 1 })`. Green on restore (78 passed).
+  - Decided without the owner, in the WIP's favour: `SkipsEveryUnheldOwnIdentity` skips only
+    once the record is non-empty (the `EXISTS` fast-path shape), so it fails SY-40 and not
+    the existing SY-38 rule, which the test list expected; the unconditional version is
+    `DropsTheClaim`, already registered. `RefusesEveryOwnIdentity` is left as it was (the WIP
+    had narrowed it to held echoes) and its test lists SY-40 as a second failing rule.
+  - The restored edge's watermark is built as `Watermark::new(FAR, confirmed)`, because a
+    `MemorySyncPeer` names no responder and `Edge::watermark` is then `None`.
+

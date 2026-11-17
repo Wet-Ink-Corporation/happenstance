@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 213 clause IDs, of which 206 are normative:
-**194 `[FROZEN]`**, **10 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
+As assembled, this document carries 214 clause IDs, of which 207 are normative:
+**194 `[FROZEN]`**, **11 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -4897,6 +4897,9 @@ required, did not fire, and no provided method is added. Reopened by a reader me
 only C3, because "unknown" cannot be its default, is ADR-0028's falsifier and goes to the owner. The floor stays
 rejected on this clause's grounds, below, and a third outcome on condition evaluation stays rejected with ES-40's
 MAY. A set of retained ranges is no longer a candidate shape: no report is added for it to describe.
+#483 and #484 are resolved inside ingest by [ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)
+and SY-40: a store records the identities removed from it and skips them, and the record reaches a caller only as
+`Ingested::skipped`, so this refusal stands.
 
 No port surface in 1.x reports held or unheld history, and none is owed in
 `0.4.0` (ADR-0028). If one arrives, its default MUST answer "unknown" and MUST
@@ -7054,9 +7057,10 @@ An ingesting peer MUST append every event it receives that it does not already
 hold. In particular it MUST NOT evaluate an `AppendCondition` — its own or the
 origin's — as a precondition on the append.
 
-SY-38 is the single exception: an event that claims the receiving store's own
+SY-38 is the first exception: an event that claims the receiving store's own
 `StoreId`, where the store did not hold that identity when the ingest began, is
-refused with its whole call (ADR-0098).
+refused with its whole call (ADR-0098). SY-40 is the second: an event whose
+identity the store has recorded as removed is skipped as held (ADR-0110).
 
 `[FROZEN]`
 Rule: `ingest_never_rejects` (new, `happenstance-sync-testkit`) — two peers each
@@ -7386,6 +7390,9 @@ moves when the runner's adjudication hook mounts `directional_merge_rules_compos
 **SY-11. Re-delivery of an event the receiver already holds MUST be a no-op: no
 second copy, no compensation, no error.**
 
+An event the receiver once held and has recorded as removed is held for this
+clause's purposes (SY-40, ADR-0110).
+
 `[FROZEN]`
 Rule: `redelivery_of_an_accepted_group_is_a_no_op` (new,
 `happenstance-sync-testkit`).
@@ -7541,7 +7548,8 @@ the Neon peer's one-shot HTTP, inside the 34-minute window. It passed at phase 1
 ---
 
 **SY-38. An ingest that meets an event claiming the receiver's own `StoreId`,
-which the receiver did not hold when the ingest began, MUST refuse the whole
+which the receiver neither held when the ingest began nor has recorded as
+removed (SY-40), MUST refuse the whole
 call, write nothing in it, and report a failure whose class is stop. This is an
 exception to SY-1 and to SY-33.**
 
@@ -7552,7 +7560,8 @@ event. SY-33 forbids "any refusal whose truth value depends on which events the
 receiver holds", and this refusal's truth value does. The exception is an
 identity-integrity refusal: the event claims an identity the receiver minted
 and does not hold, so the receiver was restored or rewound under an identity
-VT-6 required it to re-mint. Every event carrying another store's identity is
+VT-6 required it to re-mint. A removal keeps the allocator and is recorded, so
+it is a skip, not this refusal (ADR-0110). Every event carrying another store's identity is
 still appended or skipped as SY-1 says. ADR-0098's acceptance added a pointer
 to this clause to the texts of SY-1 and SY-33.
 
@@ -7602,6 +7611,66 @@ already re-issued the claimed identity to a different local event, before the
 call, holds it, so the peer's original is skipped as a re-delivery, and two
 events carry one identity. Only the re-mint VT-6 requires after a restore
 prevents that.
+
+---
+
+**SY-40. A store that implements ingest MUST durably record the `EventId` of
+every event removed from it by any means that leaves its position allocator
+where it was, and ingest MUST treat an event whose identity it has recorded as
+removed as one it holds (SY-11): skipped, never appended, never refused under
+SY-38. The record MUST reach every handle and survive reopening, and a restore
+that rolls the allocator back MUST roll the record back with it.**
+
+It is SY-1's second exception, and like SY-38 it says so rather than reading SY-1
+narrowly: a removed event is one the store "does not already hold", and this
+skips it. The removal is the operator's, outside every port: a raw `DELETE`, a
+prune, the `remove_outside_port` every `REMOVAL` fixture performs (ES-38).
+`experiments/retention-reader` measured what a store does without the record. A
+restored edge re-pulls the far side's whole log, so a pruned foreign event lands
+again at the tail and a projection applies it twice (#483); and a pruned own
+event, offered back, is refused as SY-38's unheld own identity, which wedges the
+edge on the spoke side and the hub side alike (#484).
+
+A removal is not a restore, and that is why skipping is exact. VT-6's hazard is a
+store that issues an `EventId` a second time, which needs a rolled-back
+allocator, and a removal keeps the allocator (ES-38). So an identity a removal
+took can never be minted again, and the copy offered back is the event the store
+held. A restore rolls the record back with the allocator and the log, so an own
+event minted after the backup is absent from the restored record, and SY-38
+still refuses a claim on it. The record is consulted only inside `ingest`, under
+the write lock or a lock that excludes every removal, and it reaches a caller
+only as `Ingested::skipped`: no port value reports what was removed, so ES-39's
+refusal stands. Held events still dedupe on the origin pair (VT-8). A removed
+event must not come back on re-delivery; a deployment that needs it to, a pruned
+replica re-hydrated from its hub, needs an explicit operation that clears the
+record, not a change to ingest.
+
+`[PROVISIONAL — falsified by a deployment in which a removed event must come back
+on re-delivery, or by an adapter that cannot keep its allocator across a
+removal]` — minted by [ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)
+(proposed) at `0.8.0` (#483, #484). Freezes when the rule is green on SQLite, the
+Durable Object (host and `workerd`), Postgres and Neon, so the freeze rests on the
+stores whose writers do not serialise and not on SQLite alone. Until each adapter's
+change grants `IngestFixture::REMOVAL`, its mounted ingest family reports the rule
+declined. Green on `MemoryIngestStore`, whose record is a set beside its log.
+Rule: `a_removed_event_is_not_readmitted` (`happenstance-sync-testkit`) — four
+arrangements, each on a fresh fixture: a removed foreign event offered again
+through a handle held across the removal and one connected after it; a removed
+own event echoed beside a new foreign one, which lands; a claim three positions
+past the head, never minted, still refused whole after a removal; and a group of
+a removed and a held event, carrying a compensation, which writes nothing.
+Cases: E2E-46, E2E-42.
+
+*Rejects:* the shape every adapter shipped in `0.7.0`, which dedupes only
+against what it holds and re-admits a removed foreign event (`Resurrects`); one
+that refuses a removed own event as an unheld claim
+(`RefusesARemovedOwnIdentity`); one that skips every unheld own claim once
+anything was removed, so a restored store goes uncaught
+(`SkipsEveryUnheldOwnIdentity`); one that keeps the record per handle, so a
+handle connected later re-admits what was removed (`RecordsRemovalsPerHandle`);
+and one that compensates a group because one of its events is not held
+(`CompensatesARemovedGroup`). All five are in
+`crates/happenstance-sync-testkit/tests/wrong_ingest_stores.rs`.
 
 ---
 
@@ -10534,9 +10603,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 40 | 33 | 2 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 39 | 38 | 1 | 0 | 0 |
+| §5 `SyncPeer` | `SY` | 40 | 38 | 2 | 0 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **213** | **194** | **10** | **2** | **7** |
+| **Total** | | **214** | **194** | **11** | **2** | **7** |
 
 ### 7.2 The table
 
@@ -10734,6 +10803,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-37 | FROZEN | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |
 | SY-38 | FROZEN | `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test, `crat… | E2E-42, E2E-34 |
 | SY-39 | FROZEN | `an_append_reads_back_as_one_group`, `an_ingested_group_keeps_its_boundary_and… | E2E-35, E2E-39 |
+| SY-40 | PROVISIONAL | `a_removed_event_is_not_readmitted` | E2E-46, E2E-42 |
 
 #### `CF` — conformance obligations (§6)
 
