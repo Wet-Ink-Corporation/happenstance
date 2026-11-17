@@ -333,7 +333,10 @@ impl WrongIngestStore {
     /// the store's, or the handle's own under
     /// [`Mistake::RecordsRemovalsPerHandle`]. Copied, so no lock is held
     /// while the call is decided.
-    fn record_for(&self, handle: &Mutex<BTreeSet<EventId>>) -> Result<BTreeSet<EventId>, WrongError> {
+    fn record_for(
+        &self,
+        handle: &Mutex<BTreeSet<EventId>>,
+    ) -> Result<BTreeSet<EventId>, WrongError> {
         let source = if self.mistake == Mistake::RecordsRemovalsPerHandle {
             handle
         } else {
@@ -615,7 +618,10 @@ impl WrongIngestStore {
             }
             marks.push(working.len());
             let any_unheld = self.mistake == Mistake::CompensatesARemovedGroup
-                && group.events.iter().any(|shipped| !held.contains(&shipped.id));
+                && group
+                    .events
+                    .iter()
+                    .any(|shipped| !held.contains(&shipped.id));
             if counts.appended > landed_before
                 || self.mistake == Mistake::RecompensatesOnRedelivery
                 || any_unheld
@@ -647,9 +653,7 @@ impl WrongIngestStore {
     ) -> Verdict {
         let id = shipped.id;
         let claims_own = id.store() == self.own;
-        // Its mistake is the held echo; an own identity it does not hold
-        // meets SY-38's and SY-40's checks below, as a faithful store's does.
-        if claims_own && held.contains(&id) && self.mistake == Mistake::RefusesEveryOwnIdentity {
+        if claims_own && self.mistake == Mistake::RefusesEveryOwnIdentity {
             return Verdict::Refuse;
         }
         let same_content = self.mistake == Mistake::DedupesOnContent
@@ -1379,10 +1383,14 @@ fn an_unheld_own_identity_stops_the_ingest_fails_a_store_that_refuses_only_claim
 
 #[test]
 fn an_unheld_own_identity_stops_the_ingest_fails_a_store_that_refuses_every_own_identity() {
-    fails_exactly(
+    // SY-40's second arrangement echoes a removed own event, which this store
+    // refuses with every other own identity, so it fails that rule too.
+    fails_exactly_these(
         &verdicts(async || WrongFixture::new(Mistake::RefusesEveryOwnIdentity)),
-        "an_unheld_own_identity_stops_the_ingest",
-        "SY-38",
+        &[
+            ("an_unheld_own_identity_stops_the_ingest", "SY-38"),
+            ("a_removed_event_is_not_readmitted", "SY-40"),
+        ],
     );
 }
 
@@ -1656,12 +1664,7 @@ fn a_removed_event_is_not_readmitted_fails_a_store_that_records_removals_per_han
     let all = outcomes(async || WrongFixture::new(Mistake::RecordsRemovalsPerHandle));
     let verdicts: Vec<_> = all
         .iter()
-        .map(|(name, outcome)| {
-            (
-                *name,
-                outcome.as_ref().copied().map_err(|violation| violation.clause()),
-            )
-        })
+        .map(|(name, outcome)| (*name, outcome.as_ref().copied().map_err(Violation::clause)))
         .collect();
     fails_exactly(&verdicts, "a_removed_event_is_not_readmitted", "SY-40");
     let (_, outcome) = all
@@ -1697,26 +1700,6 @@ fn a_removed_event_is_not_readmitted_fails_a_fixture_that_removes_nothing() {
     let violation = outcome.expect_err("a removal that removed nothing proves nothing");
     assert_eq!(violation.clause(), "SY-40");
     assert!(violation.message().contains("Nothing"), "{violation}");
-}
-
-#[test]
-fn scratch_show_the_reds() {
-    let mut lines = Vec::new();
-    for mistake in [
-        Mistake::Resurrects,
-        Mistake::RefusesARemovedOwnIdentity,
-        Mistake::SkipsEveryUnheldOwnIdentity,
-        Mistake::RecordsRemovalsPerHandle,
-        Mistake::CompensatesARemovedGroup,
-        Mistake::DropsTheClaim,
-        Mistake::RecompensatesOnRedelivery,
-    ] {
-        let outcome = block_on(ingest_rules::a_removed_event_is_not_readmitted(
-            async move || WrongFixture::new(mistake),
-        ));
-        lines.push(format!("{mistake:?}: {outcome:?}"));
-    }
-    panic!("{}", lines.join("\n"));
 }
 
 /// The faithful store, granting removal and keeping the provided

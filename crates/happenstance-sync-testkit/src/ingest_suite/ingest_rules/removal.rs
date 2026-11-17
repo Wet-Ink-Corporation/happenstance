@@ -79,11 +79,15 @@ pub(super) async fn a_removed_foreign_event<F: IngestFixture>(
     let log = read_all(&held_before, SY_40).await?;
     held_once(&log, &first.event, SY_40)?;
     held_once(&log, &last.event, SY_40)?;
-    ensure(log.iter().all(|row| row.event != middle.event), SY_40, || {
-        format!(
-            "the fixture answered Deleted for {at} and the event it held there is still held"
-        )
-    })?;
+    ensure(
+        log.iter().all(|row| row.event != middle.event),
+        SY_40,
+        || {
+            format!(
+                "the fixture answered Deleted for {at} and the event it held there is still held"
+            )
+        },
+    )?;
     let before = observe(&held_before, SY_40).await?;
     let what = "the same three groups again, one of them removed";
     let again = ingest(&held_before, &groups, SY_40).await?;

@@ -169,10 +169,7 @@ pub trait IngestFixture {
     /// The provided body removes nothing and answers
     /// [`Removed::Nothing`](happenstance_testkit::Removed::Nothing); the rule
     /// asserts on that answer before it reads anything back.
-    fn remove_outside_port(
-        &self,
-        positions: &[SequencePosition],
-    ) -> impl Future<Output = Removed> {
+    fn remove_outside_port(&self, positions: &[SequencePosition]) -> impl Future<Output = Removed> {
         // `let _` is load-bearing: the body uses neither argument, and the gate
         // denies `unused_variables`.
         let _ = (self, positions);

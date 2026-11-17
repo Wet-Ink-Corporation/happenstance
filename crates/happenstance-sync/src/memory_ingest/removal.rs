@@ -123,7 +123,8 @@ mod tests {
         let after = append(&store, "d").await;
 
         assert_eq!(removed, 1);
-        let held: Vec<SequencePosition> = log(&store).await.iter().map(|row| row.position).collect();
+        let held: Vec<SequencePosition> =
+            log(&store).await.iter().map(|row| row.position).collect();
         assert_eq!(held, [first, last, after]);
         assert!(after > last, "{after} was assigned at or below {last}");
         let Ok(gone) = store
@@ -146,7 +147,10 @@ mod tests {
 
         assert_eq!((nothing, twice, again), (0, 1, 0));
         let after = log(&store).await;
-        assert_eq!(after.as_slice(), before.get(1..).expect("two were appended"));
+        assert_eq!(
+            after.as_slice(),
+            before.get(1..).expect("two were appended")
+        );
     }
 
     #[tokio::test]
@@ -158,12 +162,18 @@ mod tests {
             shipped(id(ORIGIN, 3), "x3"),
         ];
         let groups = one_group_each(&sent);
-        store.ingest(&groups).await.expect("the first delivery lands");
+        store
+            .ingest(&groups)
+            .await
+            .expect("the first delivery lands");
         let at = position_of(&store, sent[1].id).await;
         assert_eq!(store.remove(&[at]), 1);
         let before = log(&store).await;
 
-        let again = store.ingest(&groups).await.expect("a re-delivery is no error");
+        let again = store
+            .ingest(&groups)
+            .await
+            .expect("a re-delivery is no error");
 
         assert_eq!(
             (again.appended, again.skipped, again.compensated),
@@ -188,7 +198,10 @@ mod tests {
         let foreign = [shipped(id(ORIGIN, 9), "y")];
 
         let ingested = store
-            .ingest(&[IngestGroup::new(&echo, &[]), IngestGroup::new(&foreign, &[])])
+            .ingest(&[
+                IngestGroup::new(&echo, &[]),
+                IngestGroup::new(&foreign, &[]),
+            ])
             .await;
 
         let ingested = ingested.expect("a removed own event is a skip, not a refusal");
@@ -318,7 +331,11 @@ mod tests {
             .collect();
         assert_eq!(named, [(y_first, Some(&guard)), (z_first, Some(&guard))]);
         let kept: Vec<SequencePosition> = store.read_guard().guards.keys().copied().collect();
-        assert_eq!(kept, [y_first, z_first], "the removed group's guard is gone");
+        assert_eq!(
+            kept,
+            [y_first, z_first],
+            "the removed group's guard is gone"
+        );
     }
 
     const ORIGIN: StoreId = StoreId::from_bytes([0x64; 16]);
