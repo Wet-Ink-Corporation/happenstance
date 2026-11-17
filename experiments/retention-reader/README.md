@@ -289,8 +289,7 @@ D-7 of `.temper/plans/483-484-pruned-identity-tombstones.md`). The cure is the
 first seam named above, in the form of a trigger-written removal record:
 `happenstance-sqlite`'s migration 3 (`SCHEMA_VERSION` 3) records the origin
 identity of every deleted row, and ingest skips a recorded identity, counting
-it as skipped. Commit `b38eff0` on `claude/project-thread-qkv7ws-483-sqlite`
-made it. So `a_restored_edge_resurrects_pruned_foreign_events`,
+it as skipped. So `a_restored_edge_resurrects_pruned_foreign_events`,
 `a_restored_edge_stops_on_a_pruned_own_event` and
 `a_fresh_edge_pushing_into_a_pruned_hub_stops` assert hazards that no longer
 occur, and go red on a tree that has the fix. They are left as they are, with

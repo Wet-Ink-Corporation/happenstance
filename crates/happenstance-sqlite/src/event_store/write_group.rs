@@ -24,7 +24,7 @@ use super::SqliteEventStoreError;
 pub(super) const BASELINE_SCHEMA_VERSION: u32 = 1;
 
 /// The marker migration 2 raises a file to.
-const WRITE_GROUP_SCHEMA_VERSION: u32 = 2;
+pub(super) const WRITE_GROUP_SCHEMA_VERSION: u32 = 2;
 
 /// Migration 2, verbatim. Mirrored in the [module documentation](super).
 ///

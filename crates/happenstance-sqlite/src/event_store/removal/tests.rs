@@ -2,60 +2,10 @@
 //! a rollback takes back, and the plan of the probe ingest runs under the
 //! write lock.
 
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use rusqlite::Connection;
 
 use crate::event_store::SqliteEventStore;
-
-/// A store's file, deleted with its WAL sidecars on drop, so a second
-/// connection can delete rows as an operator would.
-struct TempFile(PathBuf);
-
-impl TempFile {
-    fn new() -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(1);
-        let mut path = std::env::temp_dir();
-        path.push(format!(
-            "happenstance-sqlite-removal-{}-{}.db",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        let file = Self(path);
-        file.remove();
-        file
-    }
-
-    /// Deletes the file and its sidecars where they exist. A failure panics,
-    /// except while a test is already unwinding, where a second panic would
-    /// abort and hide the first.
-    fn remove(&self) {
-        for suffix in ["", "-wal", "-shm"] {
-            // An owned path per sidecar: `push` needs one to extend.
-            let mut path = self.0.clone().into_os_string();
-            path.push(suffix);
-            let path = PathBuf::from(path);
-            if path.exists()
-                && let Err(error) = std::fs::remove_file(&path)
-                && !std::thread::panicking()
-            {
-                panic!("could not delete {}: {error}", path.display());
-            }
-        }
-    }
-
-    /// A second connection onto the file, opened by the test, not the store.
-    fn raw(&self) -> Connection {
-        Connection::open(&self.0).expect("the temporary file opens")
-    }
-}
-
-impl Drop for TempFile {
-    fn drop(&mut self) {
-        self.remove();
-    }
-}
+use crate::test_support::TempFile;
 
 /// Every `(origin_store, origin_position)` the record holds, in key order.
 fn record(connection: &Connection) -> Vec<(Vec<u8>, i64)> {
@@ -101,7 +51,7 @@ async fn own_and_foreign(file: &TempFile) -> (SqliteEventStore, Vec<(i64, Vec<u8
     use happenstance_core::{Event, EventId, EventStore, RecordedAt, SequencePosition, StoreId};
     use happenstance_sync::{IngestGroup, IngestStore, ReplicatedEvent};
 
-    let store = SqliteEventStore::open(&file.0).expect("a fresh file opens");
+    let store = SqliteEventStore::open(file.path()).expect("a fresh file opens");
     let event = |kind: &str| Event::new(kind, &b"{}"[..]).expect("a valid event type");
     store
         .append(&[event("Own"), event("Own")], None)
@@ -119,7 +69,7 @@ async fn own_and_foreign(file: &TempFile) -> (SqliteEventStore, Vec<(i64, Vec<u8
         .await
         .expect("a foreign event lands");
     assert_eq!(ingested.appended, 1);
-    let log = origins(&file.raw());
+    let log = origins(&file.inspect());
     assert_eq!(log.len(), 3, "two own events and one foreign: {log:?}");
     (store, log)
 }
@@ -133,13 +83,13 @@ async fn own_and_foreign(file: &TempFile) -> (SqliteEventStore, Vec<(i64, Vec<u8
 #[cfg(feature = "sync")]
 #[tokio::test]
 async fn a_raw_delete_records_each_removed_identity() {
-    let file = TempFile::new();
+    let file = TempFile::new("removal");
     let (store, log) = own_and_foreign(&file).await;
     let &[(first_own, ..), _, (foreign, ..)] = &log[..] else {
         panic!("three rows: {log:?}");
     };
 
-    let operator = file.raw();
+    let operator = file.inspect();
     delete(&operator, first_own);
     delete(&operator, foreign);
 
@@ -163,9 +113,9 @@ async fn a_raw_delete_records_each_removed_identity() {
 /// mark a held event removed, and ingest would then skip it for ever.
 #[test]
 fn a_rolled_back_delete_records_nothing() {
-    let file = TempFile::new();
-    let store = SqliteEventStore::open(&file.0).expect("a fresh file opens");
-    let mut operator = file.raw();
+    let file = TempFile::new("removal");
+    let store = SqliteEventStore::open(file.path()).expect("a fresh file opens");
+    let mut operator = file.inspect();
     operator
         .execute_batch(
             "INSERT INTO event (event_type, data, tags, origin_store, origin_position, recorded_at) \
@@ -199,9 +149,9 @@ fn a_rolled_back_delete_records_nothing() {
 /// `DELETE` on the record's `NOT NULL`.
 #[test]
 fn deleting_an_unstamped_row_records_nothing_and_succeeds() {
-    let file = TempFile::new();
-    let store = SqliteEventStore::open(&file.0).expect("a fresh file opens");
-    let operator = file.raw();
+    let file = TempFile::new("removal");
+    let store = SqliteEventStore::open(file.path()).expect("a fresh file opens");
+    let operator = file.inspect();
     operator
         .execute_batch(
             "INSERT INTO event (event_type, data, tags, recorded_at) \

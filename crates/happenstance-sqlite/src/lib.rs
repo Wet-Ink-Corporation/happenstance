@@ -314,3 +314,85 @@ mod op_read_is_sealed_downstream {}
 #[cfg(feature = "sync")]
 #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 pub use happenstance_sync;
+
+/// Test-only helpers shared by the unit tests under `src/`: one `TempFile`
+/// instead of a copy per test module, for the event store's removal and
+/// version-2 tests and the ingest spike's tests, all of which need a store on a
+/// real file that a second connection can open. Inline rather than a file of
+/// its own so the `cfg(test)` region is visible where the code is. After the
+/// re-export above, so no cited line moves.
+#[cfg(all(test, feature = "event-store"))]
+mod test_support {
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    /// A database file of its own, deleted with its WAL sidecars on drop, so
+    /// a second connection can look at the tables or act as an operator
+    /// would. Dropped after the store it backs, because Windows will not
+    /// unlink an open file.
+    pub(crate) struct TempFile(pub(crate) PathBuf);
+
+    impl TempFile {
+        /// A fresh path under the system temporary directory, tagged with
+        /// `label`, this process and an ordinal, and empty: any leftover from
+        /// an earlier run is deleted.
+        pub(crate) fn new(label: &str) -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(1);
+            let mut path = std::env::temp_dir();
+            path.push(format!(
+                "happenstance-sqlite-{label}-{}-{}.db",
+                std::process::id(),
+                // Relaxed: the counter only has to hand out distinct values,
+                // and `fetch_add` is atomic at any ordering; no other memory
+                // is published through it.
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let file = Self(path);
+            file.remove();
+            file
+        }
+
+        /// The file's path.
+        pub(crate) fn path(&self) -> &Path {
+            &self.0
+        }
+
+        /// Deletes the file and its sidecars where they exist. A failure
+        /// panics, except while a test is already unwinding, where a second
+        /// panic would abort and hide the first.
+        pub(crate) fn remove(&self) {
+            for suffix in ["", "-wal", "-shm"] {
+                // An owned path per sidecar: `push` needs one to extend.
+                let mut path = self.0.clone().into_os_string();
+                path.push(suffix);
+                let path = PathBuf::from(path);
+                if path.exists()
+                    && let Err(error) = std::fs::remove_file(&path)
+                    && !std::thread::panicking()
+                {
+                    panic!("could not delete {}: {error}", path.display());
+                }
+            }
+        }
+
+        /// A second connection onto the file, opened by the test rather than
+        /// the store, that waits out a concurrent writer for the shipped busy
+        /// timeout as the store's own connections do.
+        pub(crate) fn inspect(&self) -> rusqlite::Connection {
+            let connection =
+                rusqlite::Connection::open(&self.0).expect("the temporary file opens");
+            connection
+                .busy_timeout(std::time::Duration::from_millis(
+                    crate::connection::BUSY_TIMEOUT_MS,
+                ))
+                .expect("the connection takes a busy timeout");
+            connection
+        }
+    }
+
+    impl Drop for TempFile {
+        fn drop(&mut self) {
+            self.remove();
+        }
+    }
+}

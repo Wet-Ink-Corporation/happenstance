@@ -24,12 +24,8 @@ use happenstance_sync::Classify;
 /// fixture's `remove_outside_port` calls. The connection waits out a writer
 /// for the shipped busy timeout rather than failing at once.
 pub(super) fn remove(file: &TempFile, positions: &[SequencePosition]) {
+    // `inspect` waits out a writer for the shipped busy timeout.
     let mut operator = file.inspect();
-    operator
-        .busy_timeout(std::time::Duration::from_millis(
-            crate::connection::BUSY_TIMEOUT_MS,
-        ))
-        .expect("the operator's connection takes a busy timeout");
     operator
         .pragma_update(None, "foreign_keys", "ON")
         .expect("the operator's connection enforces foreign keys");
@@ -74,7 +70,7 @@ fn counts(ingested: happenstance_sync::Ingested) -> (usize, usize, usize) {
 /// the tail.
 #[tokio::test]
 async fn a_removed_foreign_event_is_skipped_on_redelivery() {
-    let file = TempFile::new();
+    let file = TempFile::new("ingest-removal");
     let store = SqliteEventStore::open(&file.0).expect("a fresh file opens");
     let from = peer(0x61);
     let batch = [
@@ -108,7 +104,7 @@ async fn a_removed_foreign_event_is_skipped_on_redelivery() {
 /// class `Stop`, and nothing landed.
 #[tokio::test]
 async fn a_removed_own_event_is_skipped_not_refused() {
-    let file = TempFile::new();
+    let file = TempFile::new("ingest-removal");
     let store = SqliteEventStore::open(&file.0).expect("a fresh file opens");
     let first = store
         .append(&[event("Local", "a")], None)
@@ -147,7 +143,7 @@ async fn a_removed_own_event_is_skipped_not_refused() {
 /// claim (the sync-testkit's `SkipsEveryUnheldOwnIdentity`).
 #[tokio::test]
 async fn an_own_claim_never_held_is_refused_after_a_removal() {
-    let file = TempFile::new();
+    let file = TempFile::new("ingest-removal");
     let store = SqliteEventStore::open(&file.0).expect("a fresh file opens");
     let first = store
         .append(&[event("Local", "a")], None)
@@ -193,7 +189,7 @@ async fn an_own_claim_never_held_is_refused_after_a_removal() {
 /// answered a second time.
 #[tokio::test]
 async fn a_group_of_removed_and_held_events_writes_no_compensation() {
-    let file = TempFile::new();
+    let file = TempFile::new("ingest-removal");
     let store = SqliteEventStore::open(&file.0).expect("a fresh file opens");
     let from = peer(0x64);
     let group = [
@@ -226,7 +222,7 @@ async fn a_group_of_removed_and_held_events_writes_no_compensation() {
 /// new one.
 #[tokio::test]
 async fn a_group_with_one_new_event_lands_it_and_compensates_once() {
-    let file = TempFile::new();
+    let file = TempFile::new("ingest-removal");
     let store = SqliteEventStore::open(&file.0).expect("a fresh file opens");
     let from = peer(0x65);
     let group = [
@@ -278,7 +274,7 @@ fn snapshot(file: &TempFile) -> (Vec<u8>, i64) {
 /// allocator moves.
 #[tokio::test]
 async fn a_skip_against_a_removal_burns_no_position_and_leaves_the_file_unchanged() {
-    let file = TempFile::new();
+    let file = TempFile::new("ingest-removal");
     let store = SqliteEventStore::open(&file.0).expect("a fresh file opens");
     let from = peer(0x66);
     let batch = [
@@ -313,7 +309,7 @@ async fn a_skip_against_a_removal_burns_no_position_and_leaves_the_file_unchange
 /// the handles opened after the removal re-admit the event.
 #[tokio::test]
 async fn the_record_reaches_every_handle_and_survives_reopen() {
-    let file = TempFile::new();
+    let file = TempFile::new("ingest-removal");
     let earlier = SqliteEventStore::open(&file.0).expect("a fresh file opens");
     let batch = [shipped(id(peer(0x67), 1), 1, event("Shipped", "a"))];
     ingest(&earlier, &[IngestGroup::new(&batch, &[])])
@@ -355,8 +351,8 @@ async fn the_record_reaches_every_handle_and_survives_reopen() {
 /// roll back; the restored store would skip the post-backup claim as removed.
 #[tokio::test]
 async fn a_restored_copy_rolls_the_record_back_with_the_allocator() {
-    let file = TempFile::new();
-    let backup = TempFile::new();
+    let file = TempFile::new("ingest-removal");
+    let backup = TempFile::new("ingest-removal");
     let store = SqliteEventStore::open(&file.0).expect("a fresh file opens");
     let kept = store
         .append(&[event("Local", "kept")], None)

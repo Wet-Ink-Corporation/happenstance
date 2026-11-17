@@ -47,6 +47,9 @@ impl TempDb {
         path.push(format!(
             "happenstance-sqlite-pruned-{label}-{}-{}.db",
             std::process::id(),
+            // Relaxed: the counter only has to hand out distinct values, and
+            // `fetch_add` is atomic at any ordering; no other memory is
+            // published through it.
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         let db = Self(path);

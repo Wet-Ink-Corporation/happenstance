@@ -39,10 +39,8 @@
 use rusqlite::Connection;
 
 use super::SCHEMA_VERSION_KEY;
-
-/// The marker migration 2 raised a file to, and the one migration 3 starts
-/// from.
-const WRITE_GROUP_SCHEMA_VERSION: u32 = 2;
+// The marker migration 2 raised a file to, and the one migration 3 starts from.
+use super::write_group::WRITE_GROUP_SCHEMA_VERSION;
 
 /// The marker migration 3 raises a file to.
 const REMOVAL_SCHEMA_VERSION: u32 = 3;

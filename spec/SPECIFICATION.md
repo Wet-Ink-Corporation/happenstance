@@ -1733,9 +1733,9 @@ its actual limit; until phase 8 no store in this workspace had one to document,
 and a MUST nothing can fail is a MUST nothing has met. `happenstance-sqlite`
 states all three as public constants — `MAX_EVENT_DATA_LEN` = 1,048,576 bytes,
 `MAX_TAGS_PER_EVENT` = 128 and `MAX_EVENTS_PER_BATCH` = 256
-(`crates/happenstance-sqlite/src/event_store.rs:365`, `:349`, `:358`) — enforces
-them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:767`,
-`:773`, `:760`), and mirrors them onto its fixture so
+(`crates/happenstance-sqlite/src/event_store.rs:365`, `:372`, `:381`) — enforces
+them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:790`,
+`:796`, `:783`), and mirrors them onto its fixture so
 `append_reports_exceeded_store_limits` reads them rather than a literal. All
 three clear their floors with room, VT-23's 128-item floor is evaluated by the
 same adapter through chunked statements rather than refused, and each number is
@@ -9549,7 +9549,7 @@ holds a peer's one budget to both of its store's field ceilings. On `append_repo
 seventeen mutants, `SharedPayloadBudgetStore` (#143) among them. The falsifier's constant-ceiling half is answered
 by every real adapter. `happenstance-sqlite` states its ceilings as constants mirrored from the adapter's own `pub
 const` rather than restated (`crates/happenstance-sqlite/tests/support/mod.rs:212-218`, mirroring
-`crates/happenstance-sqlite/src/event_store.rs:365`, `:349` and `:358`), and `happenstance-postgres` and
+`crates/happenstance-sqlite/src/event_store.rs:365`, `:372` and `:381`), and `happenstance-postgres` and
 `happenstance-neon` state constant policy ceilings below any physical wall, so the rule asserts a number each store
 honours. `happenstance-cloudflare`'s documented 2 MB row limit is a budget its fields share, and the adapter carves
 it into four constant ceilings that fit together (ADR-0093): one row at all four is 1,835,264 bytes

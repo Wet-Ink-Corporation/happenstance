@@ -656,3 +656,11 @@ its five wrong stores.
   so that line stays in the integration test at 3 (option A for that line only).
   `a_fresh_file_is_created_at_version_2_with_write_groups` is renamed `..._version_3_...`.
   ADR-0110 accepted (`0c4a96c`), merged; "proposed" dropped from PR 2's text.
+- 2026-11-17, review of part 2 (approved at `ba8a559e758721ec`), minors fixed: F1 the spec's
+  shorthand siblings of `event_store.rs:365` repointed (`:372`, `:381`; `:790`, `:796`, `:783`);
+  F2 the `migrate` comment names `write_group/tests/version_2.rs`; F3 each `Relaxed` counter
+  says why; F4 one `TempFile` in `lib.rs`'s `#[cfg(test)] mod test_support`, used by
+  `removal/tests.rs`, `write_group/tests/version_2.rs` and `ingest_spike.rs`'s tests (inline in
+  `lib.rs` because the edit hook classifies a `src/test_support.rs` file as production code); F5
+  `WRITE_GROUP_SCHEMA_VERSION` is `pub(super)` and `removal.rs` imports it; F6 the experiment
+  addendum cites tests and issues, not a branch commit.

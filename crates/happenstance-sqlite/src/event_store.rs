@@ -1144,7 +1144,7 @@ impl SqliteEventStore {
             connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
 
         // Each step is its own function so that a unit test can compose the
-        // same steps and stop at version 2: `write_group/version_2.rs`.
+        // same steps and stop at version 2: `write_group/tests/version_2.rs`.
         apply_baseline(&transaction)?;
         write_group::migrate_to_2(&transaction)?;
         removal::migrate_to_3(&transaction)?;

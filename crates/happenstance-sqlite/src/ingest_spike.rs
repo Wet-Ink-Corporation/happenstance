@@ -164,9 +164,6 @@ mod tests {
 
     #![allow(clippy::unwrap_used)]
 
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
     use futures_core::Stream;
     use happenstance_core::{
         AppendCondition, AppendError, Event, EventId, EventStore, Query, QueryItem, ReadOptions,
@@ -234,43 +231,9 @@ mod tests {
         found
     }
 
-    /// A store on a file of its own, so a second connection can look at the
-    /// tables or reach the schema. Dropped after the store it backs, because
-    /// Windows will not unlink an open file.
-    struct TempFile(PathBuf);
-
-    impl TempFile {
-        fn new() -> Self {
-            static NEXT: AtomicU64 = AtomicU64::new(1);
-            let mut path = std::env::temp_dir();
-            path.push(format!(
-                "happenstance-sqlite-ingest-spike-{}-{}.db",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
-            let file = Self(path);
-            file.remove();
-            file
-        }
-
-        fn remove(&self) {
-            for suffix in ["", "-wal", "-shm"] {
-                let mut path = self.0.clone().into_os_string();
-                path.push(suffix);
-                let _ = std::fs::remove_file(PathBuf::from(path));
-            }
-        }
-
-        fn inspect(&self) -> rusqlite::Connection {
-            rusqlite::Connection::open(&self.0).unwrap()
-        }
-    }
-
-    impl Drop for TempFile {
-        fn drop(&mut self) {
-            self.remove();
-        }
-    }
+    // A store on a file of its own, so a second connection can look at the
+    // tables or reach the schema: the crate's one test-only `TempFile`.
+    use crate::test_support::TempFile;
 
     /// VT-9's restated falsifier (ADR-0066): *`IngestStore` fails to carry a
     /// foreign `RecordedAt` unchanged*. One of the two stamps is before 1970,
@@ -305,7 +268,7 @@ mod tests {
     /// no error, no second row, no second tag row, no second count.
     #[tokio::test]
     async fn redelivery_is_a_skip_not_an_error() {
-        let file = TempFile::new();
+        let file = TempFile::new("ingest-spike");
         let store = SqliteEventStore::open(&file.0).unwrap();
         let from = peer(0xB2);
         let first = [
@@ -458,7 +421,7 @@ mod tests {
     /// pass.
     #[tokio::test]
     async fn a_compensation_that_fails_in_the_transaction_takes_the_losing_event_with_it() {
-        let file = TempFile::new();
+        let file = TempFile::new("ingest-spike");
         let store = SqliteEventStore::open(&file.0).unwrap();
         file.inspect()
             .execute_batch(
@@ -823,7 +786,7 @@ mod tests {
     /// the foreign event it now is, under the identity that minted it.
     #[tokio::test]
     async fn a_claim_lands_as_foreign_after_the_store_is_reminted() {
-        let file = TempFile::new();
+        let file = TempFile::new("ingest-spike");
         let store = SqliteEventStore::open(&file.0).unwrap();
         let claimed = Claimed::on(&store).await;
         ingest(&store, &claimed.groups())
@@ -995,7 +958,7 @@ mod tests {
         impl SqliteIngestFixture {
             fn new() -> Self {
                 Self {
-                    file: TempFile::new(),
+                    file: TempFile::new("ingest-spike"),
                 }
             }
         }

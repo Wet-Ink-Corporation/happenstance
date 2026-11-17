@@ -10,8 +10,6 @@
 //! path.
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Barrier};
 
 use happenstance_core::StoreId;
@@ -19,59 +17,7 @@ use rusqlite::Connection;
 
 use super::super::{WRITE_GROUP_SCHEMA_VERSION, migrate_to_2};
 use crate::event_store::{SCHEMA_VERSION_KEY, apply_baseline, mint_identity};
-
-/// A database file deleted with its WAL sidecars on drop.
-struct TempFile(PathBuf);
-
-impl TempFile {
-    fn new(label: &str) -> Self {
-        static NEXT: AtomicU64 = AtomicU64::new(1);
-        let mut path = std::env::temp_dir();
-        path.push(format!(
-            "happenstance-sqlite-v2-{label}-{}-{}.db",
-            std::process::id(),
-            NEXT.fetch_add(1, Ordering::Relaxed)
-        ));
-        let file = Self(path);
-        file.remove();
-        file
-    }
-
-    /// Deletes the file and its sidecars where they exist. A failure panics,
-    /// except while a test is already unwinding.
-    fn remove(&self) {
-        for suffix in ["", "-wal", "-shm"] {
-            // An owned path per sidecar: `push` needs one to extend.
-            let mut path = self.0.clone().into_os_string();
-            path.push(suffix);
-            let path = PathBuf::from(path);
-            if path.exists()
-                && let Err(error) = std::fs::remove_file(&path)
-                && !std::thread::panicking()
-            {
-                panic!("could not delete {}: {error}", path.display());
-            }
-        }
-    }
-
-    /// A connection onto the file that waits out a concurrent writer, as the
-    /// store's own connections do.
-    fn connect(&self) -> Connection {
-        let connection = Connection::open(&self.0).expect("the temporary file opens");
-        connection
-            .busy_timeout(std::time::Duration::from_millis(
-                crate::connection::BUSY_TIMEOUT_MS,
-            ))
-            .expect("the connection takes a busy timeout");
-        connection
-    }
-}
-
-impl Drop for TempFile {
-    fn drop(&mut self) {
-        self.remove();
-    }
-}
+use crate::test_support::TempFile;
 
 /// `migrate` stopped after migration 2: the same steps in the same
 /// `BEGIN IMMEDIATE`, and the incarnation read back inside it. Read raw, not
@@ -179,7 +125,7 @@ fn version_1_file(connection: &Connection) {
 #[test]
 fn version_2_creates_the_amended_schema() {
     let file = TempFile::new("amended-schema");
-    let mut connection = file.connect();
+    let mut connection = file.inspect();
     migrate_to_version_2(&mut connection);
 
     let expected: BTreeSet<(String, String)> = [
@@ -217,7 +163,7 @@ fn concurrent_version_2_migrations_agree_on_one_store_id() {
                 let barrier = Arc::clone(&barrier);
                 let file = &file;
                 scope.spawn(move || {
-                    let mut connection = file.connect();
+                    let mut connection = file.inspect();
                     barrier.wait();
                     migrate_to_version_2(&mut connection)
                 })
@@ -230,7 +176,7 @@ fn concurrent_version_2_migrations_agree_on_one_store_id() {
     });
 
     assert_eq!(ids.len(), 1, "two incarnations for one file: {ids:?}");
-    let connection = file.connect();
+    let connection = file.inspect();
     let identity_rows: i64 = connection
         .query_row(
             "SELECT count(*) FROM store_meta WHERE k = 'store_id'",
@@ -251,7 +197,7 @@ fn concurrent_version_2_migrations_agree_on_one_store_id() {
 #[test]
 fn migration_2_adds_write_groups_to_a_version_1_file() {
     let file = TempFile::new("migration-2");
-    let mut connection = file.connect();
+    let mut connection = file.inspect();
     version_1_file(&connection);
 
     migrate_to_version_2(&mut connection);
@@ -293,7 +239,7 @@ fn migration_2_adds_write_groups_to_a_version_1_file() {
 #[test]
 fn migrating_a_version_1_file_leaves_it_at_2() {
     let file = TempFile::new("new-v1");
-    let mut connection = file.connect();
+    let mut connection = file.inspect();
     version_1_file(&connection);
     assert_eq!(marker(&connection), 1);
 
@@ -310,7 +256,7 @@ fn migrating_a_version_1_file_leaves_it_at_2() {
 #[test]
 fn a_fresh_file_is_created_at_version_2_with_write_groups() {
     let file = TempFile::new("fresh-v2");
-    let mut connection = file.connect();
+    let mut connection = file.inspect();
     migrate_to_version_2(&mut connection);
 
     assert_eq!(marker(&connection), 2);
