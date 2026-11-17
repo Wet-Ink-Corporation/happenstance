@@ -198,7 +198,7 @@ sealing option in that pass — wrap `rusqlite::Error` behind an opaque value en
 publicly — depended entirely on the answer, and `kb-decision-0044` settled the re-export question
 without supplying it, so the option was ruled out on cost-of-delay rather than on ES-6's meaning.
 `#[non_exhaustive]` protects the *addition* of variants, not the *change* of a variant's payload
-(`crates/happenstance-sqlite/src/event_store.rs:1387`), which is why the question has a semver
+(`crates/happenstance-sqlite/src/event_store.rs:1409`), which is why the question has a semver
 consequence and not only a documentation one.
 
 ## What forces it
