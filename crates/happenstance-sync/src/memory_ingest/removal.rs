@@ -24,8 +24,8 @@ impl MemoryIngestStore {
     /// an unheld own identity (SY-40). It is kept for the store's life.
     ///
     /// Removing part of a write group is outside what ES-38 describes. The
-    /// rows left keep the group's name, and lose its guard if the removed row
-    /// carried it.
+    /// rows left keep the group's name and its guard; a group with no row left
+    /// loses both.
     ///
     /// # Examples
     ///
