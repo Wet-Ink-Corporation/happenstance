@@ -7,7 +7,8 @@
 //! another view commits. [`MemoryProjectionStore`] cannot tell a rollback
 //! from a drop, or say when a write set ended, so a test over it cannot fail
 //! a runner that gets any of these wrong. This wrapper logs each of them, and
-//! fails one `begin` or one checkpoint's commits on request.
+//! fails one `begin`, one checkpoint's commits or one checkpoint's reads on
+//! request.
 //!
 //! # Why only the bare flavour
 //!
@@ -125,7 +126,9 @@ impl From<MemoryProjectionStoreError> for RecordingStoreError {
 ///
 /// [`failing_begin`](Self::failing_begin) fails one `begin`, counted across
 /// every caller, and [`failing_commits_under`](Self::failing_commits_under)
-/// fails every commit under one checkpoint id. A failed `begin` opens no
+/// fails every commit under one checkpoint id.
+/// [`failing_checkpoint_reads_of`](Self::failing_checkpoint_reads_of) arms a
+/// second handle whose reads of one checkpoint id fail. A failed `begin` opens no
 /// write set and logs nothing. A failed commit is logged as
 /// [`BatchCall::Commit`] and discards its write set, as a store whose commit
 /// failed would.
@@ -177,6 +180,7 @@ pub struct RecordingProjectionStore {
     shared: Rc<Shared>,
     fail_begin: Option<usize>,
     fail_commit: Option<ProjectionId>,
+    fail_read: Option<ProjectionId>,
 }
 
 /// What every handle onto one recording store shares.
@@ -217,6 +221,23 @@ impl RecordingProjectionStore {
         Self {
             fail_commit: Some(id),
             ..Self::default()
+        }
+    }
+
+    /// A second handle onto this store's rows, checkpoints and log, whose
+    /// every `checkpoint` read of `id` fails with
+    /// [`RecordingStoreError::Injected`].
+    ///
+    /// A handle rather than a constructor, so a test can set state up through
+    /// an unarmed handle and then meet it through this one. Only reads fail:
+    /// commits and resets under `id` still land, and `self` stays unarmed.
+    /// The handle keeps `self`'s other injected failures.
+    #[must_use]
+    pub fn failing_checkpoint_reads_of(&self, id: ProjectionId) -> Self {
+        Self {
+            fail_read: Some(id),
+            // A second handle onto the one state, not a copy of it.
+            ..self.clone()
         }
     }
 
@@ -344,6 +365,9 @@ impl ProjectionStore for RecordingProjectionStore {
     }
 
     async fn checkpoint(&self, id: &ProjectionId) -> Result<Checkpoint, RecordingStoreError> {
+        if self.fail_read.as_ref() == Some(id) {
+            return Err(RecordingStoreError::Injected);
+        }
         Ok(ProjectionStore::checkpoint(&self.shared.inner, id).await?)
     }
 

@@ -2,7 +2,7 @@
 id: kb-decision-0109
 title: A typed checkpoint is pinned to the event store it was built from, and PS-40 is minted provisional
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0109
 reversibility: medium
@@ -10,7 +10,7 @@ phase: null
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed 2026-11-16 for #485, with the owner's answers 485-Q1..Q6 all A. The typed runners
+  Accepted 2026-11-17 for #485 (proposed 2026-11-16), with the owner's answers 485-Q1..Q6 all A. The typed runners
   (run_projection, run_fan_out) take a Source, an event store paired with its StoreId, and
   record a 63-bit mark of that id under a sibling checkpoint, name#digest, beside PS-25's
   unchanged name@digest. A run whose source differs from the recorded mark stops with
@@ -39,12 +39,12 @@ source_paths:
   - experiments/retention-reader/tests/it/r1_runner.rs
   - spec/SPECIFICATION.md
   - docs/upgrading-to-0-8.md
-last_reviewed: 2026-11-16
+last_reviewed: 2026-11-17
 ---
 
 # A typed checkpoint is pinned to the event store it was built from, and PS-40 is minted provisional
 
-**Proposed on 2026-11-16 for #485.** It stays `proposed` until the owner accepts it. The owner's
+**Accepted on 2026-11-17 for #485**, on the owner's "all as recommended" (proposed 2026-11-16). The owner's
 answers to the plan's six questions (`.temper/plans/485-checkpoint-pinned-to-source.md`,
 485-Q1..Q6) were all the recommended option, and this record writes them down. No long-form
 record exists; this atom is the record.

@@ -34,9 +34,9 @@ not the same as what a user needed to be told.
 ## [Unreleased]
 
 A typed projection's checkpoint is pinned to the event store it was built from
-(#485, PS-40, [ADR-0109](.kb/decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md),
-proposed). Resumed against a different store with the same projection store, a
-view used to skip that store's events at or below its old checkpoint and apply
+(#485, PS-40, [ADR-0109](.kb/decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md)).
+Resumed against a different store with the same projection store, a view used to
+skip that store's events at or below its old checkpoint and apply
 again the ones above it, in silence (`experiments/retention-reader`'s R1-4). It
 now stops with `ProjectionError::SourceChanged` before it reads or applies
 anything. **This is a breaking change to `happenstance`'s two runners**; read
@@ -62,6 +62,10 @@ store migrates: the pin is one more checkpoint row, under an id of its own.
   view's `Source` is built from on these stores, where it used to need the
   `sync` feature's `IngestStore::store_id`, which now delegates to it (#485,
   485-Q4). Async and fallible on Postgres and Neon, fallible on Cloudflare.
+- `happenstance-testkit`: `RecordingProjectionStore::failing_checkpoint_reads_of`,
+  a second handle onto the same recording store whose reads of one checkpoint id
+  fail, so a runner's refused pin or checkpoint read can be tested (#485,
+  485-Q7). Additive.
 - `happenstance`: PS-40's rule, `a_checkpoint_is_not_resumed_against_another_store`,
   a typed-layer test rather than a conformance rule, rejecting a runner with no pin, a pin never compared, and
   the identity folded into the main key; and `a_view_refuses_another_sqlite_file`

@@ -492,6 +492,7 @@ Labelled `485-Q*` so they cannot be confused with the D1–D5 of the other sitti
 | 485-Q4 | Public identity accessors on adapters that lack one outside `sync` | **A** add inherent `store_id()` to `PostgresEventStore` (async, `PostgresEventStoreError`), `NeonEventStore` (async), `CloudflareEventStore` (sync; make the private fn public), with `IngestStore::store_id` delegating, as additive minors in the same release (separate PRs). **B** document "enable `sync` and call `IngestStore::store_id`" | **A**: without it, a Postgres user must pull in replication to run a view | owner | |
 | 485-Q5 | PS-40's marker at minting | **A** `[PROVISIONAL]` now, frozen in the 1.0 freeze pass with the other freeze-by-21 rows. **B** `[FROZEN]` now by ADR-0109 (the mark function and `#` separator become a promise immediately) | **A**: it is minted and frozen in one breath only if the owner wants it settled before 1.0's pass. The goldens (test 5) bind the encoding either way | owner | |
 | 485-Q6 | The experiment's R1-4 test, which no longer compiles against HEAD (path dependencies, `support.rs:57-63`) | **A** update `support.rs::project` to pass a `Source` and invert R1-4 to assert the refusal, keeping its doc's "recorded hazard" history plus a "closed by #485" line; note it in README F3. This rewrites a test's expectation, so it is an H-12 decision. **B** leave it, since experiments are not in the gate (but they then rot uncompiled) | **A** | owner | |
+| 485-Q7 | How to test a refused pin or main checkpoint read, given `doc_surface.rs::no_local_projection_store` | **A** an additive knob on the published testkit, `RecordingProjectionStore::failing_checkpoint_reads_of(&self, id)`, a second handle onto the same state. **B** the fake in a crate outside `happenstance` | **A** | owner (Ryan, 2026-11-17, "all as recommended") | A |
 
 Decided in this plan without a human (contestable at review): eager pin write;
 `#` separator; FNV-1a `>> 1` as the mark; `SourceChanged` carries the pin id;
@@ -534,9 +535,9 @@ About 30 files and about 1,500 lines changed:
 ## Progress
 
 - [x] Explored. The brief's `EventStore::store_id` premise is corrected above.
-- [x] Owner answers 485-Q1..Q6: all **A** (relayed by the delegating session; the
-  owner was asked to confirm). Q4 lands as its own commit on this branch.
-- [x] ADR-0109 (`status: proposed`) + PS-40 `[PROVISIONAL]`, E2E-59, §7.1/§7.2.
+- [x] Owner answers 485-Q1..Q8: all **A**, confirmed by the owner on 2026-11-17
+  ("all as recommended"). Q4 lands as its own commit on this branch.
+- [x] ADR-0109 (proposed 2026-11-16, accepted by the owner 2026-11-17) + PS-40 `[PROVISIONAL]`, E2E-59, §7.1/§7.2.
 - [x] Tests 1–5. **Red:** compile error E0432, unresolved imports
   `super::SourceMark` and `super::derive_pair` in `checkpoint/tests.rs`. Green
   after `checkpoint/pin.rs` and `derive_pair`.
@@ -556,8 +557,12 @@ About 30 files and about 1,500 lines changed:
     store then refuses itself.
   - W3 is a runner written in the rule's own test file
     (`FoldedIntoTheKey`), asserted to fail legs A, B, E.
-- [~] Test 13's pin-read-failure half (review F3) is **blocked on an H-16
-  decision.** A local fake store wrapping the recording store was written and
+- [x] Test 13's pin-read-failure half (review F3), done after 485-Q7 chose A:
+  `RecordingProjectionStore::failing_checkpoint_reads_of` and
+  `tests/fan_out/reads.rs` (three tests). **Red, by mutant** (each reverted): the
+  pin read folded into `NeverRun` fails the pin-read and fan-out tests; the main
+  read folded fails the main-read test. Earlier, before Q7, it was **blocked on an
+  H-16 decision.** A local fake store wrapping the recording store was written and
   passed, with two `bind_source` mutants as red evidence (the pin read's error
   folded into `NeverRun` failed the pin-read and fan-out cases; the main read's
   failed the main-read case). But `crates/happenstance/tests/doc_surface.rs`'s
