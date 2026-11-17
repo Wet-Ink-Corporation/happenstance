@@ -1143,21 +1143,12 @@ impl SqliteEventStore {
         let transaction =
             connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
 
-        transaction.execute_batch(MIGRATION_1)?;
-        transaction.execute(
-            "INSERT OR IGNORE INTO store_meta (k, v) VALUES (?, ?)",
-            rusqlite::params![SCHEMA_VERSION_KEY, write_group::BASELINE_SCHEMA_VERSION],
-        )?;
+        // Each step is its own function so that a unit test can compose the
+        // same steps and stop at version 2: `write_group/version_2.rs`.
+        apply_baseline(&transaction)?;
         write_group::migrate_to_2(&transaction)?;
         removal::migrate_to_3(&transaction)?;
-        // `randomblob` is SQLite's own CSPRNG. Sixteen bytes of entropy from the
-        // driver already in the tree, weighed against adding a crate for them
-        // and chosen deliberately — `happenstance-core` mints nothing because it
-        // is `no_std`-capable and has no entropy source, so the adapter must.
-        transaction.execute(
-            "INSERT OR IGNORE INTO store_meta (k, v) VALUES (?, randomblob(16))",
-            [STORE_ID_KEY],
-        )?;
+        mint_identity(&transaction)?;
 
         let store_id = read_identity(&transaction)?;
         transaction.commit()?;
@@ -3956,6 +3947,42 @@ mod busy_conformance {
         drop(holder);
         drop(store);
     }
+}
+
+/// Migration 1 and the baseline marker: the first step of `migrate`.
+///
+/// `INSERT OR IGNORE`, so a file that already carries a marker keeps it and
+/// the later steps read the version it is really at.
+///
+/// # Errors
+///
+/// The driver failed.
+fn apply_baseline(transaction: &Connection) -> rusqlite::Result<()> {
+    transaction.execute_batch(MIGRATION_1)?;
+    transaction.execute(
+        "INSERT OR IGNORE INTO store_meta (k, v) VALUES (?, ?)",
+        rusqlite::params![SCHEMA_VERSION_KEY, write_group::BASELINE_SCHEMA_VERSION],
+    )?;
+    Ok(())
+}
+
+/// Mints this file's incarnation unless it already has one: the last step of
+/// `migrate` before the read-back.
+///
+/// `randomblob` is SQLite's own CSPRNG. Sixteen bytes of entropy from the
+/// driver already in the tree, weighed against adding a crate for them and
+/// chosen deliberately — `happenstance-core` mints nothing because it is
+/// `no_std`-capable and has no entropy source, so the adapter must.
+///
+/// # Errors
+///
+/// The driver failed.
+fn mint_identity(transaction: &Connection) -> rusqlite::Result<()> {
+    transaction.execute(
+        "INSERT OR IGNORE INTO store_meta (k, v) VALUES (?, randomblob(16))",
+        [STORE_ID_KEY],
+    )?;
+    Ok(())
 }
 
 // Write groups (#420): migration 2, the stamp, and the group read.

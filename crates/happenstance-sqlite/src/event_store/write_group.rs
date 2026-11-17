@@ -135,6 +135,11 @@ mod tests {
     use super::STAMP_SQL;
     use crate::event_store::SqliteEventStore;
 
+    // The version-2 schema, reached by stopping `migrate`'s steps after
+    // migration 2: where `tests/migration.rs`'s version-2 assertions live now
+    // that every public open goes on to migration 3.
+    mod version_2;
+
     /// `EXPLAIN QUERY PLAN`'s detail lines.
     fn plan(connection: &Connection, sql: &str) -> Vec<String> {
         let mut statement = connection

@@ -642,3 +642,17 @@ its five wrong stores.
     (`len() == 5`), `migration_2_adds_write_groups_to_a_version_1_file` (`marker == 2`,
     `SCHEMA_VERSION == 2`), `new_refuses_a_version_1_file_until_it_is_migrated` (`marker == 2`
     after `open_on`) and `a_fresh_file_is_created_at_version_2_with_write_groups` (`marker == 2`).
+- 2026-11-17, the five version-2 tests: **the owner chose B** ("old tests still check the
+  v1-to-v2 step through an intermediate state; new tests cover v3"). `migrate`'s steps are now
+  `apply_baseline`, `migrate_to_2`, `migrate_to_3`, `mint_identity` (no behaviour change), and
+  `src/event_store/write_group/tests/version_2.rs` composes them stopping after migration 2,
+  holding every version-2 assertion against a real version-2 file: the five-object set, marker 2,
+  the eight-way race at five objects, write groups added to a v1 file twice with identity and
+  legacy row intact, `WRITE_GROUP_SCHEMA_VERSION == 2`, a migrated v1 file at 2, a fresh file at 2
+  with `write_group`. Red: with `migrate_to_2` skipped, four of the five fail `left: 1 right: 2`;
+  the race test, like its original, does not depend on migration 2. The five integration tests
+  assert version 3 on the public path, each pointing at its version-2 half. One v2 assertion is
+  unreachable: `new` accepting a migrated file at 2, because this build's `new` accepts only 3,
+  so that line stays in the integration test at 3 (option A for that line only).
+  `a_fresh_file_is_created_at_version_2_with_write_groups` is renamed `..._version_3_...`.
+  ADR-0110 accepted (`0c4a96c`), merged; "proposed" dropped from PR 2's text.
