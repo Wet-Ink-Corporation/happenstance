@@ -9,16 +9,17 @@ use core::pin::Pin;
 use futures_core::Stream;
 use happenstance_core::{
     Authority, Checkpoint, CommitError, EventStore, InvalidQuery, ProjectionId, ProjectionStore,
-    ReadOptions, SequencePosition, SequencedEvent, Tags,
+    ReadOptions, SequencePosition, SequencedEvent, StoreId, Tags,
 };
 
 use crate::boundary::{AtLeastOneType, derive_query};
-use crate::checkpoint::{self, InvalidCheckpointId};
+use crate::checkpoint::{self, InvalidCheckpointId, SourceMark};
 use crate::chunk::Chunk;
 use crate::codec::{Codec, CodecError, decode_event};
 use crate::delivered::Delivered;
 use crate::domain::DomainEvent;
 use crate::policy::{ApplyFailure, Policy};
+use crate::source::Source;
 
 /// The adapter error of whatever store a projection writes into.
 pub(crate) type StoreError<P> = <<P as Projection>::Store as ProjectionStore>::Error;
@@ -112,7 +113,7 @@ pub(crate) type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::B
 ///
 /// use happenstance::{Chunk, Json, Progressed, run_projection};
 /// use happenstance::{SendEventStore, SendProjection};
-/// use happenstance::SendProjectionStore;
+/// use happenstance::{SendProjectionStore, Source, StoreId};
 /// # use happenstance::{bytes::Bytes, Codec, CodecError, DomainEvent};
 /// # use happenstance::{Delivered, Event, EventType, ProjectionId, Tags};
 /// # use happenstance::{MemoryEventStore, MemoryProjectionBatch};
@@ -150,6 +151,7 @@ pub(crate) type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::B
 ///
 /// fn spawn_run<S, P, St>(
 ///     events: Arc<S>,
+///     id: StoreId,
 ///     models: Arc<St>,
 ///     mut projection: P,
 ///     chunk: Chunk,
@@ -163,8 +165,9 @@ pub(crate) type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::B
 ///     tokio::spawn(async move {
 ///         // Reduced to its message: the handle asks no more bounds.
 ///         // To keep the chain, return it and add `St::Error: Send`.
+///         let source = Source::new(&*events, id);
 ///         let run = run_projection(
-///             &*events, &*models, &mut projection, &Json, chunk,
+///             source, &*models, &mut projection, &Json, chunk,
 ///         )
 ///         .await
 ///         .map_err(|e| e.to_string());
@@ -185,8 +188,9 @@ pub(crate) type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::B
 ///     sold: 0,
 /// };
 /// let chunk = Chunk::of(64.try_into()?);
+/// let id = events.store_id();
 /// let (sold, run) =
-///     spawn_run(events, Arc::clone(&models), sold, chunk).await?;
+///     spawn_run(events, id, Arc::clone(&models), sold, chunk).await?;
 ///
 /// assert_eq!(run?.applied, 1);
 /// assert_eq!(sold.sold, 1, "the projection came back with its state");
@@ -203,9 +207,10 @@ pub(crate) type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::B
 /// # use std::sync::Arc;
 /// # use happenstance::{Chunk, Json, Progressed, run_projection};
 /// # use happenstance::{SendEventStore, SendProjection};
-/// # use happenstance::SendProjectionStore;
+/// # use happenstance::{SendProjectionStore, Source, StoreId};
 /// fn spawn_run<S, P>(
 ///     events: Arc<S>,
+///     id: StoreId,
 ///     models: Arc<P::Store>,
 ///     mut projection: P,
 ///     chunk: Chunk,
@@ -216,8 +221,9 @@ pub(crate) type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::B
 ///     P::Store: SendProjectionStore<Batch: Send> + Sync + 'static,
 /// {
 ///     tokio::spawn(async move {
+///         let source = Source::new(&*events, id);
 ///         let run = run_projection(
-///             &*events, &*models, &mut projection, &Json, chunk,
+///             source, &*models, &mut projection, &Json, chunk,
 ///         )
 ///         .await
 ///         .map_err(|e| e.to_string());
@@ -437,6 +443,39 @@ where
     #[error("reading the checkpoint failed")]
     Checkpoint(#[source] W),
 
+    /// The checkpoint was built from another event store than this run's.
+    ///
+    /// PS-40. Its positions belong to the store that assigned them, so resuming
+    /// here would skip this store's events at or below the checkpoint and
+    /// apply the rest as though they followed. Nothing was read from the
+    /// event store, nothing was applied, and nothing was committed: the main
+    /// checkpoint and the pin are as they were.
+    ///
+    /// To re-point the view at this store,
+    /// [`reset`](happenstance_core::ProjectionStore::reset) `pin`, which is
+    /// [`source_checkpoint_id`](crate::source_checkpoint_id), and reset the
+    /// main checkpoint with the read model's deletes so it rebuilds. After a
+    /// restore that brought the event store and the projection store back
+    /// together and then re-minted the store's identity, reset the pin
+    /// alone: the next run adopts the new identity and resumes.
+    #[error("checkpoint {pin} records source {recorded}, but this run reads store {found}")]
+    SourceChanged {
+        /// The pin's id: the one to reset to re-point the view.
+        pin: ProjectionId,
+        /// The mark the pin holds: [`SourceMark::of`] the store it was built
+        /// from.
+        recorded: SourceMark,
+        /// The store this run was handed.
+        found: StoreId,
+    },
+
+    /// Recording the source store's mark failed (PS-40).
+    ///
+    /// Nothing was read from the event store and nothing was applied. The
+    /// pin is unchanged.
+    #[error("recording the checkpoint's source store failed")]
+    RecordSource(#[source] CommitError<W>),
+
     /// The checkpoint sits at the last representable position.
     ///
     /// [`SequencePosition::next`] is `checked_add` rather than `saturating_add`
@@ -531,7 +570,9 @@ where
     /// `BEGIN` to issue, and either can be refused (ADR-0062). Chunks already
     /// committed stay committed. The first event of the chunk that would have
     /// followed *was* read — a batch is only opened once one is in hand — and
-    /// it is not applied; a restart re-reads it from the checkpoint.
+    /// it is not applied; a restart re-reads it from the checkpoint. A first
+    /// run opens one more, empty, to record its source store (PS-40), and a
+    /// refusal there reads nothing and carries no progress.
     #[error("opening a write set for the next chunk failed")]
     Begin {
         /// What the run had committed before this.
@@ -573,6 +614,8 @@ where
             Self::Boundary(_)
             | Self::CheckpointId(_)
             | Self::Checkpoint(_)
+            | Self::SourceChanged { .. }
+            | Self::RecordSource(_)
             | Self::KeySpaceExhausted { .. } => Progressed::default(),
             Self::Read { progress, .. }
             | Self::Decode { progress, .. }
@@ -608,6 +651,17 @@ where
 /// them into it, and hands the write set and the position of the last event
 /// it took to the port's single [`commit`](ProjectionStore::commit) — which is
 /// what makes the read model and the checkpoint move together or not at all.
+///
+/// # The checkpoint is pinned to its store
+///
+/// A position means something only in the store that assigned it, so the
+/// run takes a [`Source`]: the event store and its identity. The first run
+/// records that identity beside the checkpoint, under
+/// [`source_checkpoint_id`](crate::source_checkpoint_id), before it reads
+/// anything; a later run handed another store stops with
+/// [`ProjectionError::SourceChanged`] and touches nothing (PS-40). A
+/// checkpoint an earlier release wrote without one is adopted for the store
+/// its first run reads.
 ///
 /// # Which flavour this binds, and what spawning it costs
 ///
@@ -685,10 +739,11 @@ where
 /// # Errors
 ///
 /// See [`ProjectionError`]. In short: the derived query and checkpoint id,
-/// the checkpoint read, the stream, the decode, `apply`, a failing
-/// `on_error`, the commit and the rollback each have their own arm, every one
-/// of them carries the partial [`Progressed`], and the three that name an
-/// event carry its position.
+/// the checkpoint read, the source pin (a checkpoint built from another
+/// store is [`SourceChanged`](ProjectionError::SourceChanged), PS-40), the
+/// stream, the decode, `apply`, a failing `on_error`, the commit and the
+/// rollback each have their own arm, every one of them carries the partial
+/// [`Progressed`], and the three that name an event carry its position.
 ///
 /// # Example
 ///
@@ -751,7 +806,7 @@ where
 /// };
 /// let chunk = Chunk::of(64.try_into()?);
 /// let done =
-///     run_projection(&events, &models, &mut sold, &Json, chunk)
+///     run_projection((&events).into(), &models, &mut sold, &Json, chunk)
 ///         .await?;
 ///
 /// assert_eq!(done.applied, 2);
@@ -816,7 +871,9 @@ where
 /// `(store, checkpoint_id)` is the caller's to guarantee**, by whatever
 /// their deployment already uses to elect a singleton. The id is
 /// [`checkpoint_id`](crate::checkpoint_id): the name and a digest of the
-/// derived query, so two runners of one name and one query share it.
+/// derived query, so two runners of one name and one query share it. The
+/// event store is pinned (PS-40): a runner handed another store is refused,
+/// so the pair is in effect `(store, checkpoint_id, source)`.
 ///
 /// Only the *backwards* half is guarded. `CheckpointRegression` stops a
 /// stale runner dragging the checkpoint down, which is the rolling-redeploy
@@ -835,7 +892,7 @@ where
 ///
 // The three sections above sit *after* the fence rather than beside the subject
 // each belongs to, because three sentences of `SPECIFICATION.md` cite
-// `crates/happenstance/src/runner.rs:853` as the location of this item and that
+// `crates/happenstance/src/runner.rs:910` as the location of this item and that
 // line number is only right while the fence stays where it is: prose added
 // above it pushes the item's declaration down and leaves the three citations
 // pointing at whatever line the item used to occupy.
@@ -851,7 +908,7 @@ where
 // Moving a section up is still *allowed*; it costs the three citations moving
 // with it.
 pub async fn run_projection<S, P, C>(
-    events: &S,
+    source: Source<'_, S>,
     models: &P::Store,
     projection: &mut P,
     codec: &C,
@@ -871,12 +928,15 @@ where
     // Keyed on the name **and** the query (PS-25), so a projection whose query
     // changed reads `NeverRun` and replays, instead of resuming past events
     // its old query never nominated. Read and commit share this one value.
-    let key = checkpoint::derive(projection.id(), &query).map_err(ProjectionError::CheckpointId)?;
+    let keys =
+        checkpoint::derive_pair(projection.id(), &query).map_err(ProjectionError::CheckpointId)?;
+    let key = &keys.main;
 
-    let checkpoint = models
-        .checkpoint(&key)
+    // Pinned to the store it reads before anything is read from it (PS-40):
+    // a checkpoint built from another store stops the run here.
+    let checkpoint = checkpoint::bind_source(models, &keys, source.id())
         .await
-        .map_err(ProjectionError::Checkpoint)?;
+        .map_err(checkpoint::Bound::into_error)?;
 
     // `from` is **inclusive**, so feeding a checkpoint straight in re-applies
     // the last event on every run. `next` is the only sanctioned way to move
@@ -893,7 +953,7 @@ where
     // One read for the whole run. Re-reading per chunk would re-derive the
     // query and re-anchor `from`, turning one replay into N — which is the
     // cost of polling, not a way to do chunking.
-    let stream = events.read(&query, options);
+    let stream = source.events().read(&query, options);
     let mut stream = core::pin::pin!(stream);
 
     let mut progress = Progressed::default();
@@ -971,7 +1031,7 @@ where
         // is always one, because a chunk is only opened once its first event
         // is in hand. A skip record rides this commit with it (PS-27).
         models
-            .commit(batch, &key, last, Authority::Live)
+            .commit(batch, key, last, Authority::Live)
             .await
             .map_err(|source| ProjectionError::Commit { progress, source })?;
         tally.credit(&mut progress, last);

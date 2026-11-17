@@ -12,7 +12,8 @@ use happenstance_core::{
 };
 
 use super::{
-    InvalidCheckpointId, MAX_CHECKPOINT_NAME_LEN, derive, encode_item, encode_query, fnv1a64,
+    InvalidCheckpointId, MAX_CHECKPOINT_NAME_LEN, SourceMark, derive, derive_pair, encode_item,
+    encode_query, fnv1a64,
 };
 
 fn types(names: &[&str]) -> Query {
@@ -243,4 +244,155 @@ fn type_order_does_not_change_the_digest() {
         Tags::empty(),
     ));
     assert_eq!(digest(&forwards), digest(&backwards));
+}
+
+// ---------------------------------------------------------------------------
+// The source pin (PS-40)
+// ---------------------------------------------------------------------------
+
+/// The pin shares the main key's name and digest and differs only at the
+/// separator. The digest is `tests/projection_runner.rs`'s
+/// `the_runner_commits_under_the_derived_id` golden for `van_stock`.
+#[test]
+fn source_pin_id_is_name_hash_digest() {
+    let scope = Tags::from_pairs([("depot", "d7")]).expect("a valid tag pair");
+    let query = Query::from_item(
+        QueryItem::new(["StockDelivered", "StockDispatched"], scope).expect("a valid item"),
+    );
+
+    let keys = derive_pair(&name("van_stock"), &query).expect("derivable");
+
+    assert_eq!(keys.main.as_str(), "van_stock@dc525f3f5d262b19");
+    assert_eq!(keys.pin.as_str(), "van_stock#dc525f3f5d262b19");
+}
+
+/// No pin equals any main key, over names that themselves carry either
+/// separator. Rejects a pin derived with `@`, and a pin that is the bare name.
+#[test]
+fn source_pin_and_main_key_are_never_equal() {
+    let names = [
+        "a",
+        "a@b",
+        "a#b",
+        "b",
+        "x@0093fbc1e0e24aed",
+        "x#0093fbc1e0e24aed",
+    ];
+    let queries = [
+        Query::all(),
+        types(&["A"]),
+        types(&["T93"]),
+        tagged(&["A"], &["k:v"]),
+    ];
+    let mut mains = Vec::new();
+    let mut pins = Vec::new();
+    for value in names {
+        for query in &queries {
+            let keys = derive_pair(&name(value), query).expect("derivable");
+            assert_eq!(
+                keys.main,
+                derive(&name(value), query).expect("derivable"),
+                "the pair's main key is the one `checkpoint_id` derives"
+            );
+            mains.push(keys.main);
+            pins.push(keys.pin);
+        }
+    }
+    for pin in &pins {
+        assert!(!mains.contains(pin), "{pin} is also a main key");
+        let at = pin.as_str().len() - 17;
+        assert_eq!(
+            pin.as_str().as_bytes()[at],
+            b'#',
+            "{pin} does not end in `#` and a digest"
+        );
+    }
+}
+
+/// The pin passes the same checks the main key does: no new length refusal,
+/// and no door around `ProjectionId::new`.
+#[test]
+fn source_pin_refuses_what_the_main_key_refuses() {
+    let long = name(&"n".repeat(MAX_CHECKPOINT_NAME_LEN + 1));
+    assert_eq!(
+        derive_pair(&long, &Query::all()).map(|keys| keys.pin),
+        Err(InvalidCheckpointId::NameTooLong { len: 239 })
+    );
+
+    let fits = name(&"n".repeat(MAX_CHECKPOINT_NAME_LEN));
+    let keys = derive_pair(&fits, &Query::all()).expect("derivable");
+    assert_eq!(keys.pin.as_str().len(), 255);
+
+    let watermark = ProjectionId::sync_watermark(StoreId::from_bytes([0xab; 16]));
+    assert_eq!(
+        derive_pair(&watermark, &Query::all()).map(|keys| keys.pin),
+        Err(InvalidCheckpointId::Refused(
+            InvalidProjectionId::Reserved { prefix: "sync/" }
+        ))
+    );
+}
+
+/// Sixteen bytes from a counter, spread by `SplitMix64` so every byte varies.
+fn spread(seed: u64) -> StoreId {
+    let mix = |mut z: u64| {
+        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+        z ^ (z >> 31)
+    };
+    let low = mix(seed.wrapping_mul(2).wrapping_add(0x9e37_79b9_7f4a_7c15));
+    let high = mix(seed.wrapping_mul(2).wrapping_add(1));
+    let mut bytes = [0_u8; 16];
+    bytes[..8].copy_from_slice(&low.to_le_bytes());
+    bytes[8..].copy_from_slice(&high.to_le_bytes());
+    StoreId::from_bytes(bytes)
+}
+
+/// Every mark fits a signed 64-bit column and is a valid position. Rejects
+/// W4, a mark that keeps FNV-1a's top bit: about half of these hashes set it,
+/// and SQLite and Neon would saturate every one of them to `i64::MAX`.
+#[test]
+fn source_mark_fits_a_signed_sixty_four_bit_column() {
+    let ceiling = i64::MAX.unsigned_abs();
+    let edges = [
+        StoreId::from_bytes([0; 16]),
+        StoreId::from_bytes([0xff; 16]),
+        StoreId::from_bytes([0x80; 16]),
+    ];
+    let mut top_bit_hashes = 0_u32;
+    for id in edges.into_iter().chain((0..50_000).map(spread)) {
+        let mark = SourceMark::of(id);
+        assert!(
+            (1..=ceiling).contains(&mark.get()),
+            "{id}: mark {mark} is outside 1..=i64::MAX"
+        );
+        if fnv1a64(&id.to_bytes()) > ceiling {
+            top_bit_hashes += 1;
+        }
+    }
+    assert!(
+        top_bit_hashes > 1000,
+        "the sample never exercised a hash above i64::MAX"
+    );
+}
+
+/// The marks a deployment's pins hold. A promise like PS-25's digests:
+/// changing the function strands every pin. Computed outside Rust, by a
+/// Python FNV-1a over the sixteen bytes, shifted right by one.
+#[test]
+fn source_mark_goldens() {
+    let goldens = [
+        ([0x00; 16], "44100fdcb07fb232"),
+        ([0xff; 16], "6b303a847ad0f42a"),
+        ([0xab; 16], "518cb382aeca0efa"),
+        (
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+            "3e426e4a3bc28bba",
+        ),
+        ([0x02; 16], "0e9caf0ecf6c2392"),
+    ];
+    for (bytes, golden) in goldens {
+        let mark = SourceMark::of(StoreId::from_bytes(bytes));
+        assert_eq!(mark.to_string(), golden, "{bytes:?}");
+        assert_eq!(format!("{:016x}", mark.get()), golden);
+    }
 }

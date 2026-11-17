@@ -234,14 +234,6 @@ impl<T> NeonEventStore<T> {
     pub(super) fn watermark_statement(&self) -> SqlStatement {
         SqlStatement::new(WATERMARK_SQL.replace("{event}", &self.config().qualified_event()))
     }
-
-    /// The meta row's identity, base64, as column `v`.
-    pub(super) fn identity_statement(&self) -> SqlStatement {
-        SqlStatement::new(format!(
-            "SELECT encode(v, 'base64') AS v FROM {} WHERE k = 'store_id'",
-            self.config().qualified_meta()
-        ))
-    }
 }
 
 // The bare flavour, the only one `NeonEventStore` has, and only that name in
@@ -262,13 +254,8 @@ impl<T: SqlTransport> IngestStore for NeonEventStore<T> {
     /// `MissingIdentity` when the meta row is absent; `MalformedIdentity` when
     /// it is not sixteen bytes; `MalformedPayload` when it is not base64.
     async fn store_id(&self) -> Result<StoreId, Self::Error> {
-        let response = self
-            .transport()
-            .round_trip(SqlRequest::single(self.identity_statement()).read_only())
-            .await
-            .map_err(NeonError::Transport)?;
-        let body = decode_body::<T::Error>(&response, self.config().max_response_bytes)?;
-        identity_from(first_result_set::<T::Error>(&body)?)
+        // The inherent read, which needs no feature (#485).
+        NeonEventStore::store_id(self).await
     }
 
     async fn ingest(
@@ -430,18 +417,6 @@ fn claimed(detail: Option<&str>, groups: &[IngestGroup<'_>]) -> Option<EventId> 
         .flat_map(|group| group.events)
         .nth(index)
         .map(|replicated| replicated.id)
-}
-
-/// The identity an [`identity_statement`](NeonEventStore::identity_statement)
-/// answered.
-///
-/// # Errors
-///
-/// `MissingIdentity` when the meta row is absent, and what
-/// `stored_store_id` refuses.
-pub(super) fn identity_from<E>(set: &ResultSet) -> Result<StoreId, NeonError<E>> {
-    let stored = set.text(0, "v").ok_or(NeonError::MissingIdentity)?;
-    stored_store_id(stored)
 }
 
 /// The watermark a [`watermark_statement`](NeonEventStore::watermark_statement)

@@ -41,7 +41,7 @@ types, errors, in-memory store — is `happenstance-core`, and that is what a
 | [A — Event store semantics](#a--event-store-semantics) | E2E-01 … E2E-14 |
 | [B — Projections and the runner](#b--projections-and-the-runner) | E2E-15 … E2E-32 |
 | [C — Sync and convergence](#c--sync-and-convergence) | E2E-33 … E2E-45 |
-| [D — Lifecycle and evolution](#d--lifecycle-and-evolution) | E2E-46 … E2E-51 |
+| [D — Lifecycle and evolution](#d--lifecycle-and-evolution) | E2E-46 … E2E-51, E2E-59 |
 | [E — Edge and `!Send`](#e--edge-and-send) | E2E-52 … E2E-58 |
 | [What cannot be written yet](#what-cannot-be-written-yet) | — |
 
@@ -1359,6 +1359,34 @@ both and compile only inside a `Box<dyn core::error::Error>` doctest — which i
 how the crate's own doctests escape it (`query.rs:191`, `append.rs:31`). One
 `impl From<InvalidTag> for InvalidQuery`, or a single `InvalidInput` the three collapse
 into, is two lines and lands on all thirty-odd queries in this catalogue.
+
+---
+
+### E2E-59 — A projection resumed against another store
+
+- **From:** ES-39's reader experiment (`experiments/retention-reader`, R1-4, #156);
+  Kestrel Motor (a hub restored from another hub's backup, its views kept); serves **PS-40**
+- **Level:** contract
+- **Spans:** `happenstance`, `happenstance-core`; and, for a real column,
+  `happenstance-sqlite`
+
+**GIVEN** a view built to the end of store A's log, and store B holding four events of its
+own followed by five that read like A's.
+**WHEN** the same view and the same projection store are run against B.
+**THEN** the run stops with `SourceChanged`, naming the view's pin, A's mark and B; it
+applies nothing; and the main checkpoint, the pin and the rows are as A's run left them.
+Run against A again, the view resumes.
+
+**Falsifies:** that a checkpoint is a fact about the view. It is a fact about the view
+**and the log it was read from**: positions are store-local (ES-29, SY-19), so a position
+from A means nothing in B, and a runner that resumes there skips B's own events at or below
+it and applies the rest as though they followed. Nothing in the port could tell, because
+the port stores a position per id and nothing else.
+
+**Rejects:** every runner before `0.8.0`, which keys the checkpoint on the view alone and
+resumes: on R1-4's fixture it skips B's four events and applies one of A's again, and
+returns `Ok`. And the store's identity folded into the checkpoint id, which reads
+`NeverRun` on B and replays B into A's rows without resetting them.
 
 ---
 

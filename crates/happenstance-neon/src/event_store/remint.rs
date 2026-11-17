@@ -1,5 +1,6 @@
-//! `NeonEventStore::remint_identity`, and the one decoder of a stored identity
-//! every path here shares (#104, ADR-0086).
+//! `NeonEventStore::remint_identity` and `NeonEventStore::store_id`, and the
+//! one decoder of a stored identity every path here shares (#104, ADR-0086,
+//! #485).
 //!
 //! A child of `event_store` so it reaches the private response decoders
 //! without widening them, and a file of its own so the lines of `event_store.rs`
@@ -10,9 +11,66 @@ use happenstance_core::StoreId;
 use super::{NeonEventStore, decode_base64, decode_body, first_result_set};
 use crate::error::NeonError;
 use crate::migration::remint_statement;
-use crate::transport::{HttpResponse, SqlRequest, SqlTransport};
+use crate::transport::{HttpResponse, SqlRequest, SqlStatement, SqlTransport};
+use crate::wire::ResultSet;
+
+impl<T> NeonEventStore<T> {
+    /// The meta row's identity, base64, as column `v`.
+    pub(super) fn identity_statement(&self) -> SqlStatement {
+        SqlStatement::new(format!(
+            "SELECT encode(v, 'base64') AS v FROM {} WHERE k = 'store_id'",
+            self.config().qualified_meta()
+        ))
+    }
+}
 
 impl<T: SqlTransport> NeonEventStore<T> {
+    /// This store's identity, as the meta row holds it, in one read-only
+    /// round trip.
+    ///
+    /// Read on every call and never cached (ADR-0086), so after a
+    /// [`remint_identity`](Self::remint_identity) the next call on any handle
+    /// answers the new one. The `sync` feature's `IngestStore::store_id` is
+    /// this read.
+    ///
+    /// It is what the typed layer's projection runner pins a view's checkpoint
+    /// to: build its `Source` from **this** store's answer, at the call site,
+    /// never from configuration, so a view resumed against another branch or
+    /// database is refused rather than resumed from positions that mean
+    /// something else there (PS-40).
+    ///
+    /// # Errors
+    ///
+    /// * [`NeonError::MissingIdentity`] if the meta table has no `store_id`
+    ///   row, which means migration 1 has not been applied.
+    /// * [`NeonError::MalformedIdentity`] or [`NeonError::MalformedPayload`] if
+    ///   the value is not sixteen bytes of base64.
+    /// * [`NeonError::Transport`], [`NeonError::Http`], [`NeonError::Sql`] or a
+    ///   decoding variant as any read reports them.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use happenstance_neon::{NeonConfig, NeonError, NeonEventStore, SqlTransport};
+    ///
+    /// # async fn identity<T: SqlTransport>(transport: T) -> Result<(), NeonError<T::Error>> {
+    /// let events = NeonEventStore::new(transport, NeonConfig::default());
+    /// let id = events.store_id().await?;
+    /// // `happenstance::Source::new(&events, id)` pairs the store with it.
+    /// assert_eq!(id, events.store_id().await?, "the same row, read twice");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn store_id(&self) -> Result<StoreId, NeonError<T::Error>> {
+        let response = self
+            .transport()
+            .round_trip(SqlRequest::single(self.identity_statement()).read_only())
+            .await
+            .map_err(NeonError::Transport)?;
+        let body = decode_body::<T::Error>(&response, self.config().max_response_bytes)?;
+        identity_from(first_result_set::<T::Error>(&body)?)
+    }
+
     /// Replaces this store's persisted identity with a freshly minted one, and
     /// returns it.
     ///
@@ -103,6 +161,18 @@ fn decode_reminted<E>(
         .get(column)
         .and_then(serde_json::Value::as_str)
         .ok_or(NeonError::MissingColumn { column })?;
+    stored_store_id(stored)
+}
+
+/// The identity an [`identity_statement`](NeonEventStore::identity_statement)
+/// answered.
+///
+/// # Errors
+///
+/// `MissingIdentity` when the meta row is absent, and what
+/// `stored_store_id` refuses.
+pub(super) fn identity_from<E>(set: &ResultSet) -> Result<StoreId, NeonError<E>> {
+    let stored = set.text(0, "v").ok_or(NeonError::MissingIdentity)?;
     stored_store_id(stored)
 }
 

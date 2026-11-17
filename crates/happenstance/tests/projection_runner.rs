@@ -28,7 +28,8 @@ use happenstance::{
     Event, EventId, EventStore, EventType, InvalidCheckpointId, Json, MemoryEventStore,
     MemoryProjectionBatch, MemoryProjectionStore, MemoryProjectionStoreError, MemoryStoreError,
     Progressed, Projection, ProjectionError, ProjectionId, ProjectionStore, Query, QueryItem,
-    ReadOptions, SequencePosition, SequencedEvent, Tags, checkpoint_id, run_projection,
+    ReadOptions, SequencePosition, SequencedEvent, Source, SourceMark, Tags, checkpoint_id,
+    run_projection, source_checkpoint_id,
 };
 use happenstance_testkit::GappyMemoryStore;
 use serde::{Deserialize, Serialize};
@@ -330,7 +331,8 @@ async fn derived_query_matches_event_types_and_scope() {
     let models = MemoryProjectionStore::new();
     let mut projection = VanStock::for_depot("d7");
 
-    let progress = run_projection(&events, &models, &mut projection, &Json, chunk(8))
+    let source = Source::new(&events, events.inner.store_id());
+    let progress = run_projection(source, &models, &mut projection, &Json, chunk(8))
         .await
         .expect("the runner completes");
 
@@ -365,7 +367,7 @@ async fn apply_receives_decoded_domain_events() {
     let models = MemoryProjectionStore::new();
     let mut projection = VanStock::for_depot("d7");
 
-    let _ = run_projection(&events, &models, &mut projection, &Json, chunk(8))
+    let _ = run_projection((&events).into(), &models, &mut projection, &Json, chunk(8))
         .await
         .expect("the runner completes");
 
@@ -404,7 +406,7 @@ async fn read_model_and_checkpoint_commit_together() {
     // Before the run: neither half exists.
     assert!(rows_and_checkpoint_agree(&models, &key).await);
 
-    let progress = run_projection(&events, &models, &mut projection, &Json, chunk(1))
+    let progress = run_projection((&events).into(), &models, &mut projection, &Json, chunk(1))
         .await
         .expect("the runner completes");
 
@@ -495,7 +497,7 @@ async fn first_run_starts_from_the_beginning() {
     let key = checkpoint_id(&projection).expect("a derivable id");
     assert_eq!(models.checkpoint(&key).await.unwrap(), Checkpoint::NeverRun);
 
-    let progress = run_projection(&events, &models, &mut projection, &Json, chunk(8))
+    let progress = run_projection((&events).into(), &models, &mut projection, &Json, chunk(8))
         .await
         .expect("the runner completes");
 
@@ -510,7 +512,7 @@ async fn resume_advances_past_the_checkpoint() {
 
     let models = MemoryProjectionStore::new();
     let mut first = VanStock::for_depot("d7");
-    let _ = run_projection(&events, &models, &mut first, &Json, chunk(8))
+    let _ = run_projection((&events).into(), &models, &mut first, &Json, chunk(8))
         .await
         .expect("the first run completes");
 
@@ -518,7 +520,7 @@ async fn resume_advances_past_the_checkpoint() {
     // so a runner feeding the checkpoint straight in would re-apply the last
     // event on every run.
     let mut idle = VanStock::for_depot("d7");
-    let progress = run_projection(&events, &models, &mut idle, &Json, chunk(8))
+    let progress = run_projection((&events).into(), &models, &mut idle, &Json, chunk(8))
         .await
         .expect("the idle run completes");
     assert_eq!(progress.applied, 0);
@@ -528,7 +530,7 @@ async fn resume_advances_past_the_checkpoint() {
     // One more event, and only that one is applied.
     seed(&events, &[dispatched("d7", 2)]).await;
     let mut third = VanStock::for_depot("d7");
-    let progress = run_projection(&events, &models, &mut third, &Json, chunk(8))
+    let progress = run_projection((&events).into(), &models, &mut third, &Json, chunk(8))
         .await
         .expect("the resumed run completes");
 
@@ -567,13 +569,13 @@ async fn one_chunk_serves_every_view() {
         ..VanStock::for_depot("d8")
     };
 
-    let seven = run_projection(&events, &models, &mut d7, &Json, per_commit)
+    let seven = run_projection((&events).into(), &models, &mut d7, &Json, per_commit)
         .await
         .expect("the d7 view completes");
-    let eight = run_projection(&events, &models, &mut d8, &Json, per_commit)
+    let eight = run_projection((&events).into(), &models, &mut d8, &Json, per_commit)
         .await
         .expect("the d8 view completes");
-    let again = run_projection(&events, &models, &mut d7, &Json, per_commit)
+    let again = run_projection((&events).into(), &models, &mut d7, &Json, per_commit)
         .await
         .expect("the idle d7 run completes");
 
@@ -606,7 +608,8 @@ async fn tolerates_gapped_positions() {
 
     let models = MemoryProjectionStore::new();
     let mut projection = VanStock::for_depot("d7");
-    let first = run_projection(&events, &models, &mut projection, &Json, chunk(1))
+    let source = Source::new(&events, events.store_id());
+    let first = run_projection(source, &models, &mut projection, &Json, chunk(1))
         .await
         .expect("the gapped run completes");
     assert_eq!(first.applied, 2);
@@ -617,7 +620,7 @@ async fn tolerates_gapped_positions() {
         .await
         .expect("the gappy fixture appends");
     let mut resumed = VanStock::for_depot("d7");
-    let progress = run_projection(&events, &models, &mut resumed, &Json, chunk(1))
+    let progress = run_projection(source, &models, &mut resumed, &Json, chunk(1))
         .await
         .expect("the resumed gapped run completes");
 
@@ -654,7 +657,7 @@ async fn a_checkpoint_at_the_last_position_reports_exhausted_key_space() {
         .await
         .expect("the oracle commits");
 
-    let error = run_projection(&events, &models, &mut projection, &Json, chunk(8))
+    let error = run_projection((&events).into(), &models, &mut projection, &Json, chunk(8))
         .await
         .expect_err("there is no position past the last one to resume from");
 
@@ -707,7 +710,8 @@ async fn commits_before_the_stream_ends() {
     };
     let mut projection = VanStock::for_depot("d7");
 
-    let _ = run_projection(&events, &models, &mut projection, &Json, chunk(2))
+    let pinned = Source::new(&events, source.store_id());
+    let _ = run_projection(pinned, &models, &mut projection, &Json, chunk(2))
         .await
         .expect("the runner completes");
 
@@ -745,7 +749,7 @@ async fn decode_failure_names_its_position_and_rolls_back() {
     // batch, the third fails, and the batch is discarded whole.
     let models = MemoryProjectionStore::new();
     let mut projection = VanStock::for_depot("d7");
-    let error = run_projection(&events, &models, &mut projection, &Json, chunk(8))
+    let error = run_projection((&events).into(), &models, &mut projection, &Json, chunk(8))
         .await
         .expect_err("the poisoned event stops the runner");
 
@@ -774,7 +778,7 @@ async fn decode_failure_names_its_position_and_rolls_back() {
     // at the last **good** position rather than at the poisoned one.
     let models = MemoryProjectionStore::new();
     let mut projection = VanStock::for_depot("d7");
-    let error = run_projection(&events, &models, &mut projection, &Json, chunk(2))
+    let error = run_projection((&events).into(), &models, &mut projection, &Json, chunk(2))
         .await
         .expect_err("the poisoned event stops the runner");
 
@@ -862,7 +866,7 @@ async fn pump_reports_the_failing_position() {
         scope: depot_tags("d7"),
         total: 0,
     };
-    let error = run_projection(&events, &models, &mut projection, &Json, chunk(3))
+    let error = run_projection((&events).into(), &models, &mut projection, &Json, chunk(3))
         .await
         .expect_err("the refused delivery stops the runner");
 
@@ -922,7 +926,7 @@ fn a_buffered_run_is_ready_at_its_first_poll_without_a_runtime() {
 
     let mut context = Context::from_waker(core::task::Waker::noop());
     let run = core::pin::pin!(run_projection(
-        &events,
+        (&events).into(),
         &models,
         &mut stock,
         &Json,
@@ -995,7 +999,7 @@ fn a_run_whose_apply_yields_is_pending_at_its_first_poll() {
 
     let mut context = Context::from_waker(core::task::Waker::noop());
     let run = core::pin::pin!(run_projection(
-        &events,
+        (&events).into(),
         &models,
         &mut stock,
         &Json,
@@ -1078,7 +1082,7 @@ async fn apply_is_handed_the_origin_identity_not_the_local_position() {
         seen: Vec::new(),
     };
 
-    let progressed = run_projection(&events, &models, &mut identities, &Json, chunk(8))
+    let progressed = run_projection((&events).into(), &models, &mut identities, &Json, chunk(8))
         .await
         .expect("the runner completes");
     assert_eq!(progressed.applied, 3, "every restored event was applied");
@@ -1114,7 +1118,7 @@ async fn the_runner_commits_under_the_derived_id() {
     let key = checkpoint_id(&projection).expect("a derivable id");
     assert_eq!(key.as_str(), "van_stock@dc525f3f5d262b19");
 
-    let _ = run_projection(&events, &models, &mut projection, &Json, chunk(8))
+    let _ = run_projection((&events).into(), &models, &mut projection, &Json, chunk(8))
         .await
         .expect("the runner completes");
 
@@ -1131,7 +1135,7 @@ async fn the_runner_commits_under_the_derived_id() {
     // And it resumes under the id it committed under: a second run applies
     // nothing.
     let mut again = VanStock::for_depot("d7");
-    let idle = run_projection(&events, &models, &mut again, &Json, chunk(8))
+    let idle = run_projection((&events).into(), &models, &mut again, &Json, chunk(8))
         .await
         .expect("the idle run completes");
     assert_eq!(idle.applied, 0);
@@ -1236,7 +1240,7 @@ async fn changed_query_starts_a_new_checkpoint() {
 
     let models = MemoryProjectionStore::new();
     let mut v1 = View::<DeliveriesOnly>::scoped(Tags::empty());
-    let first = run_projection(&events, &models, &mut v1, &Json, chunk(8))
+    let first = run_projection((&events).into(), &models, &mut v1, &Json, chunk(8))
         .await
         .expect("the narrow view completes");
     assert_eq!(first.applied, 2);
@@ -1257,7 +1261,7 @@ async fn changed_query_starts_a_new_checkpoint() {
         Checkpoint::NeverRun
     );
 
-    let widened = run_projection(&events, &models, &mut v2, &Json, chunk(8))
+    let widened = run_projection((&events).into(), &models, &mut v2, &Json, chunk(8))
         .await
         .expect("the widened view completes");
     assert_eq!(
@@ -1276,6 +1280,189 @@ async fn changed_query_starts_a_new_checkpoint() {
     assert_eq!(
         models.checkpoint(&v3_key).await.unwrap(),
         Checkpoint::NeverRun
+    );
+}
+
+// ---------------------------------------------------------------------------
+// PS-40 — `a_checkpoint_is_not_resumed_against_another_store`
+// ---------------------------------------------------------------------------
+
+/// What a run against a store returned, reduced to what PS-40 reads.
+type PinOutcome = Result<Progressed, ProjectionError<MemoryStoreError, Same, Same>>;
+type Same = MemoryProjectionStoreError;
+
+/// A runner the rule can be held against: the shipped one, or a wrong one.
+trait SourcedRunner {
+    async fn run(
+        &self,
+        events: &MemoryEventStore,
+        models: &MemoryProjectionStore,
+        projection: &mut VanStock,
+    ) -> PinOutcome;
+}
+
+/// The runner this crate ships.
+struct Pinned;
+
+impl SourcedRunner for Pinned {
+    async fn run(
+        &self,
+        events: &MemoryEventStore,
+        models: &MemoryProjectionStore,
+        projection: &mut VanStock,
+    ) -> PinOutcome {
+        run_projection(events.into(), models, projection, &Json, chunk(8)).await
+    }
+}
+
+/// W1 and W2: a runner with no pin, or one that records the store it is
+/// handed and never compares it. Both forget what the checkpoint was built
+/// from before every run, which is R1-4's runner exactly.
+struct Unpinned;
+
+impl SourcedRunner for Unpinned {
+    async fn run(
+        &self,
+        events: &MemoryEventStore,
+        models: &MemoryProjectionStore,
+        projection: &mut VanStock,
+    ) -> PinOutcome {
+        let pin = source_checkpoint_id(projection).expect("a derivable id");
+        let empty = models.begin().await.expect("a buffered begin");
+        models.reset(empty, &pin).await.expect("the pin resets");
+        run_projection(events.into(), models, projection, &Json, chunk(8)).await
+    }
+}
+
+/// W3: the store's identity folded into the main key (485-Q2 option B). A
+/// switch reads `NeverRun` and replays the new store into rows it never
+/// reset.
+struct FoldedIntoTheKey;
+
+impl SourcedRunner for FoldedIntoTheKey {
+    async fn run(
+        &self,
+        events: &MemoryEventStore,
+        models: &MemoryProjectionStore,
+        projection: &mut VanStock,
+    ) -> PinOutcome {
+        let name = format!("{}-{}", projection.id, events.store_id());
+        let mut keyed = VanStock {
+            id: ProjectionId::new(name).expect("a valid id"),
+            scope: projection.scope.clone(),
+            seen: Vec::new(),
+            totals: core::mem::take(&mut projection.totals),
+        };
+        let ran = run_projection(events.into(), models, &mut keyed, &Json, chunk(8)).await;
+        projection.seen = keyed.seen;
+        projection.totals = keyed.totals;
+        ran
+    }
+}
+
+/// PS-40's rule, against any runner. `Err` names every leg that failed.
+///
+/// R1-4's setup (`experiments/retention-reader`): store A holds eight
+/// events and the view runs to its end; store B holds four of its own and
+/// then five that read like A's. The run on B must stop with
+/// `SourceChanged` naming the pin, A's mark and B (leg A), apply nothing
+/// (B), and leave the main checkpoint (C), the pin (D) and the rows (E) as
+/// A's run left them.
+async fn source_pin_holds(runner: &impl SourcedRunner) -> Result<(), String> {
+    let a = MemoryEventStore::new();
+    let a_log: Vec<Stock> = (1..=8).map(|units| delivered("d7", units)).collect();
+    seed(&a, &a_log).await;
+    let models = MemoryProjectionStore::new();
+    let mut view = VanStock::for_depot("d7");
+    let built = runner
+        .run(&a, &models, &mut view)
+        .await
+        .map_err(|error| format!("the run on A failed: {error}"))?;
+    if built.applied != a_log.len() {
+        return Err(format!("the run on A applied {}", built.applied));
+    }
+
+    let b = MemoryEventStore::new();
+    let own: Vec<Stock> = (1..=4).map(|units| dispatched("d7", units)).collect();
+    seed(&b, &own).await;
+    seed(&b, &a_log[3..]).await;
+
+    let key = checkpoint_id(&view).expect("a derivable id");
+    let pin = source_checkpoint_id(&view).expect("a derivable id");
+    let main_before = models.checkpoint(&key).await.expect("readable");
+    let pin_before = models.checkpoint(&pin).await.expect("readable");
+    let rows_before = models.snapshot();
+
+    let mut again = VanStock::for_depot("d7");
+    let ran = runner.run(&b, &models, &mut again).await;
+
+    let mut failed = Vec::new();
+    let recorded = SourceMark::of(a.store_id());
+    match &ran {
+        Err(ProjectionError::SourceChanged {
+            pin: named,
+            recorded: mark,
+            found,
+        }) if *named == pin && *mark == recorded && *found == b.store_id() => {}
+        other => failed.push(format!("leg A: the run on B returned {other:?}")),
+    }
+    if !again.seen.is_empty() {
+        failed.push(format!("leg B: the run on B applied {:?}", again.seen));
+    }
+    let main_after = models.checkpoint(&key).await.expect("readable");
+    if main_after != main_before {
+        failed.push(format!(
+            "leg C: the main checkpoint moved to {main_after:?}"
+        ));
+    }
+    let pin_after = models.checkpoint(&pin).await.expect("readable");
+    if pin_after != pin_before {
+        failed.push(format!("leg D: the pin moved to {pin_after:?}"));
+    }
+    if models.snapshot() != rows_before {
+        failed.push(format!("leg E: the rows became {:?}", models.snapshot()));
+    }
+    if failed.is_empty() {
+        Ok(())
+    } else {
+        Err(failed.join("\n"))
+    }
+}
+
+/// The legs a failure names, in order.
+fn pin_legs(outcome: Result<(), String>) -> Vec<char> {
+    let Err(failed) = outcome else {
+        return Vec::new();
+    };
+    failed
+        .lines()
+        .filter_map(|line| line.strip_prefix("leg ")?.chars().next())
+        .collect()
+}
+
+#[tokio::test]
+async fn a_checkpoint_is_not_resumed_against_another_store() {
+    assert_eq!(source_pin_holds(&Pinned).await, Ok(()));
+}
+
+/// W1 and W2 resume past B's own events and apply A's look-alikes again:
+/// the error, the applications, the checkpoint and the rows all go wrong,
+/// and the pin is re-recorded as B.
+#[tokio::test]
+async fn the_source_rule_rejects_a_runner_without_a_pin() {
+    assert_eq!(
+        pin_legs(source_pin_holds(&Unpinned).await),
+        ['A', 'B', 'C', 'D', 'E']
+    );
+}
+
+/// W3 returns `Ok` with every B event applied into A's rows. Its main key
+/// is a fresh one, so A's checkpoint stays put, and it writes no pin.
+#[tokio::test]
+async fn the_source_rule_rejects_the_identity_folded_into_the_key() {
+    assert_eq!(
+        pin_legs(source_pin_holds(&FoldedIntoTheKey).await),
+        ['A', 'B', 'E']
     );
 }
 
@@ -1300,7 +1487,7 @@ async fn a_name_too_long_for_a_checkpoint_id_stops_the_run() {
         Err(InvalidCheckpointId::NameTooLong { len: 239 })
     );
 
-    let error = run_projection(&events, &models, &mut projection, &Json, chunk(8))
+    let error = run_projection((&events).into(), &models, &mut projection, &Json, chunk(8))
         .await
         .expect_err("a name with no room for the digest stops the run");
 

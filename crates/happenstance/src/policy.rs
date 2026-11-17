@@ -93,7 +93,7 @@ use crate::codec::CodecError;
 /// };
 /// let chunk = Chunk::of(64.try_into()?);
 /// let done =
-///     run_projection(&events, &models, &mut shreds, &Json, chunk)
+///     run_projection((&events).into(), &models, &mut shreds, &Json, chunk)
 ///         .await?;
 ///
 /// assert_eq!((done.applied, done.skipped), (1, 1));

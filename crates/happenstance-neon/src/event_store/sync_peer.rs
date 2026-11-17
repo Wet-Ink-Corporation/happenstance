@@ -51,7 +51,8 @@ use happenstance_sync::{
     PullBatchLimit, Pulled, PushBatch, StoreResume, SyncPeer, Waiting,
 };
 
-use super::ingest::{identity_from, ingest_body, ingested_from, watermark_from};
+use super::ingest::{ingest_body, ingested_from, watermark_from};
+use super::remint::identity_from;
 use super::write_group::{decode_group_page, group_budget};
 use super::{NeonEventStore, as_i64, decode_body};
 use crate::error::NeonError;

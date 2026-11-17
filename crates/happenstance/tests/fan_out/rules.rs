@@ -70,7 +70,13 @@ impl FanRunner for Shipped {
         size: NonZeroUsize,
     ) -> Ran {
         let ran = catch_unwind(AssertUnwindSafe(|| {
-            block_on(run_fan_out(events, models, views, &Json, Chunk::of(size)))
+            block_on(run_fan_out(
+                events.into(),
+                models,
+                views,
+                &Json,
+                Chunk::of(size),
+            ))
         }));
         match ran {
             Ok(fan) => {

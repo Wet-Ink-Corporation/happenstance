@@ -53,9 +53,9 @@ mod rebuild_through_reset {
     use happenstance::bytes::Bytes;
     use happenstance::{
         Checkpoint, Chunk, Codec, CodecError, CommandOutcome, DecisionModel, Delivered,
-        DomainEvent, EventStore, EventType, Json, Progressed, Projection, ProjectionId,
-        ProjectionStore, Query, ReadOptions, ResetError, Retry, SequencePosition, Tags,
-        checkpoint_id, collect, commit, run_projection,
+        DomainEvent, EventStore, EventType, Json, Progressed, Projection, ProjectionError,
+        ProjectionId, ProjectionStore, Query, ReadOptions, ResetError, Retry, SequencePosition,
+        Source, SourceMark, Tags, checkpoint_id, collect, commit, run_projection,
     };
     use happenstance_sqlite::connection::open_configured;
     use happenstance_sqlite::event_store::SqliteEventStore;
@@ -398,7 +398,8 @@ mod rebuild_through_reset {
             chunk: usize,
         ) -> Result<Progressed, Box<dyn Error>> {
             let chunk = Chunk::of(NonZeroUsize::try_from(chunk)?);
-            Ok(run_projection(&self.events, &self.models, view, &Json, chunk).await?)
+            let source = Source::new(&self.events, self.events.store_id());
+            Ok(run_projection(source, &self.models, view, &Json, chunk).await?)
         }
     }
 
@@ -685,6 +686,69 @@ mod rebuild_through_reset {
             unrestored(&built.before, &after, rebuilt, built.head, built.seed.len()),
             Vec::<&str>::new()
         );
+        Ok(())
+    }
+
+    /// A view built from one SQLite file refuses another file's log, after
+    /// every handle is dropped and the file is reopened (PS-40, E2E-59).
+    ///
+    /// The mark lives in a real `INTEGER` column, and this shows it round-trips
+    /// there. It does not pin W4, a mark that keeps FNV-1a's top bit: SQLite
+    /// saturates such a mark to `i64::MAX`, and for one pair of random stores in
+    /// four both marks exceed it and read back equal, so under W4 this test
+    /// still passes one run in four. `source_mark_fits_a_signed_sixty_four_bit_column`,
+    /// in `crates/happenstance/src/checkpoint/tests.rs`, rejects W4
+    /// deterministically. What this test does reject is a pin that does not
+    /// survive a reopen, which would adopt the second file. The first file's
+    /// own log, reopened, resumes: the positive control.
+    #[tokio::test]
+    async fn a_view_refuses_another_sqlite_file() -> TestResult {
+        let built_from = Fixture::open("refuses-built")?;
+        let mut view = DepotView::new();
+        build(&built_from, &mut view, CHUNK).await?;
+        let other = Fixture::open("refuses-other")?;
+        other.append(&first_seed()).await?;
+        let (built_id, other_id) = (built_from.events.store_id(), other.events.store_id());
+        let Fixture {
+            events,
+            models,
+            app,
+            file,
+        } = built_from;
+        drop((events, models, app));
+
+        let models = SqliteProjectionStore::open(&file.path)?;
+        let mut again = DepotView::new();
+        let chunk = Chunk::of(NonZeroUsize::try_from(CHUNK)?);
+        let refused = run_projection(
+            Source::new(&other.events, other_id),
+            &models,
+            &mut again,
+            &Json,
+            chunk,
+        )
+        .await;
+
+        match refused {
+            Err(ProjectionError::SourceChanged {
+                recorded, found, ..
+            }) => {
+                assert_eq!(recorded, SourceMark::of(built_id));
+                assert_eq!(found, other_id);
+            }
+            other => panic!("expected SourceChanged, got {other:?}"),
+        }
+        let reopened = SqliteEventStore::open(&file.path)?;
+        assert_eq!(reopened.store_id(), built_id, "the identity survived");
+        let resumed = run_projection(
+            Source::new(&reopened, reopened.store_id()),
+            &models,
+            &mut again,
+            &Json,
+            chunk,
+        )
+        .await?;
+        assert_eq!((resumed.applied, resumed.through), (0, None));
         Ok(())
     }
 }

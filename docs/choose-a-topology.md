@@ -37,7 +37,11 @@ workspace, or a device that has not pruned that history.
 order, and a replicated event is numbered by when it arrived
 ([SY-19](../spec/SPECIFICATION.md)). A checkpoint or a resume point is only
 meaningful against the store that assigned it. Event identity is what crosses
-between stores.
+between stores. The typed runner holds you to this: a view's checkpoint is
+pinned to the store it was built from, and a run against another store stops
+with `ProjectionError::SourceChanged` and applies nothing
+([PS-40](../spec/SPECIFICATION.md)). Build each device's views from that
+device's own store.
 
 **Nothing is refused, and nothing is overwritten.** A store taking in another
 store's events never refuses one ([SY-1](../spec/SPECIFICATION.md)). When two

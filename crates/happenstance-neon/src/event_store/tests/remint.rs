@@ -246,6 +246,49 @@ async fn a_conditional_append_without_an_identity_row_is_missing_identity() {
     );
 }
 
+/// `store_id` needs no `sync` feature (#485): it sends the meta row's read
+/// alone, marked read-only, and answers the identity the row holds.
+///
+/// Rejects a read that is not marked read-only, which a replica-routing proxy
+/// could not send to a replica, and one that answers anything but the row.
+#[tokio::test]
+async fn store_id_reads_the_meta_row_read_only_and_answers_it() {
+    let transport = Recording::answering(
+        br#"{"fields":[],"command":"SELECT","rowCount":1,"rows":[{"v":"q6urq6urq6urq6urq6urqw=="}]}"#,
+    );
+    let store = NeonEventStore::new(&transport, config());
+
+    let id = store.store_id().await.expect("the row decodes");
+
+    assert_eq!(id, MINTED);
+    let sent = transport.sent.borrow();
+    let [request] = sent.as_slice() else {
+        panic!("one round trip, got {}", sent.len());
+    };
+    let [statement] = request.statements.as_slice() else {
+        panic!("one statement, got {:?}", request.statements);
+    };
+    assert_eq!(
+        statement.query,
+        r#"SELECT encode(v, 'base64') AS v FROM "hs_1"."store_meta" WHERE k = 'store_id'"#
+    );
+    assert!(request.read_only, "a read, so marked read-only");
+}
+
+/// A store with no identity row says so through `store_id`, rather than
+/// answering a shape error that would send an operator to this crate.
+#[tokio::test]
+async fn store_id_without_an_identity_row_is_missing_identity() {
+    let transport = Scripted::answering(
+        200,
+        br#"{"fields":[],"command":"SELECT","rowCount":0,"rows":[]}"#,
+    );
+    let store = NeonEventStore::new(&transport, config());
+
+    let refused = store.store_id().await.expect_err("there is no row");
+    assert!(matches!(refused, NeonError::MissingIdentity), "{refused:?}");
+}
+
 /// A conditional append that wrote nothing while its probe saw the identity row
 /// and no conflict is neither outcome, and is not blamed on the row either.
 ///

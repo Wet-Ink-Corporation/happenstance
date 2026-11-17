@@ -112,6 +112,43 @@ fn the_nth_begin_fails_and_opens_nothing() {
 }
 
 #[test]
+fn reads_of_one_id_fail_on_the_armed_handle_alone() {
+    let refused = ProjectionId::from_static("refused");
+    let kept = ProjectionId::from_static("kept");
+    let store = RecordingProjectionStore::new();
+    let armed = store.failing_checkpoint_reads_of(refused.clone());
+    block_on(async {
+        let mut batch = armed.begin().await.expect("reads only are armed");
+        batch.write("refused", 1);
+        armed
+            .commit(batch, &refused, at(1), Authority::Live)
+            .await
+            .expect("a commit under the refused id still lands");
+        assert!(matches!(
+            armed.checkpoint(&refused).await,
+            Err(RecordingStoreError::Injected)
+        ));
+        assert_eq!(
+            armed.checkpoint(&kept).await.expect("another id reads"),
+            Checkpoint::NeverRun
+        );
+        assert_eq!(
+            store
+                .checkpoint(&refused)
+                .await
+                .expect("the first handle is unarmed"),
+            Checkpoint::Live { through: at(1) }
+        );
+    });
+    assert_eq!(
+        store.get("refused"),
+        Some(1),
+        "one state behind both handles"
+    );
+    assert_eq!(store.calls(), armed.calls(), "one log behind both handles");
+}
+
+#[test]
 fn commits_under_one_id_fail_and_others_land() {
     let refused = ProjectionId::from_static("refused");
     let kept = ProjectionId::from_static("kept");

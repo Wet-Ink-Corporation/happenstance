@@ -60,7 +60,7 @@ use happenstance::bytes::Bytes;
 use happenstance::{
     Checkpoint, Chunk, Codec, CodecError, CommandError, DecisionModel, Delivered, DomainEvent,
     EventStore, EventType, InvalidTag, Json, Projection, ProjectionError, ProjectionId,
-    ProjectionStore, Query, ReadOptions, Retry, Tag, Tags, checkpoint_id, collect, commit,
+    ProjectionStore, Query, ReadOptions, Retry, Source, Tag, Tags, checkpoint_id, collect, commit,
     run_projection,
 };
 use happenstance_sqlite::connection::open_configured;
@@ -1438,7 +1438,8 @@ where
     P::Error: Send + Sync,
 {
     let chunk = Chunk::of(chunk.try_into()?);
-    let progress = run_projection(events, models, projection, &Json, chunk).await?;
+    let source = Source::new(events, events.store_id());
+    let progress = run_projection(source, models, projection, &Json, chunk).await?;
     Ok(progress.applied)
 }
 
@@ -1454,7 +1455,8 @@ async fn poison(
     projection: &mut Couriered,
 ) -> Result<(u64, String)> {
     let chunk = Chunk::of(CHUNK.try_into()?);
-    match run_projection(events, models, projection, &Json, chunk).await {
+    let source = Source::new(events, events.store_id());
+    match run_projection(source, models, projection, &Json, chunk).await {
         Ok(progress) => bail!(
             "the couriered view decoded {} event(s) it could not have",
             progress.applied

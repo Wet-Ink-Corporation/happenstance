@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**194 `[FROZEN]`**, **9 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
+As assembled, this document carries 213 clause IDs, of which 206 are normative:
+**194 `[FROZEN]`**, **10 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -6382,6 +6382,49 @@ hash of the id is lossy and forbidden too, but no fixed set of ids can show it,
 because showing it needs two ids that collide; the mutant registry names it
 rather than registering it.
 
+**PS-40 — A runner MUST NOT resume a checkpoint against an event store other
+than the one its positions came from. It MUST record the source store's
+identity with the checkpoint, before the first commit under it, and MUST refuse
+a run whose source differs, applying nothing.**
+`[PROVISIONAL — falsified by callers handing the runner a store's identity that
+is not the store's: the identity is the caller's to supply, and a wrong one
+passes the check and resumes]` — minted by [ADR-0109](../.kb/decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md)
+at `0.8.0` (#485), and frozen in the 1.0 freeze pass with the other rows that pass
+holds. If the falsifier is met, the cure is a `store_id` on `EventStore` itself,
+so that the runner asks the store it reads, which this clause does not take
+(ADR-0109 decision 1).
+Positions are store-local (ES-29, SY-19), so a checkpoint is a statement about
+one store's log; resumed against another, it skips that store's events at or
+below it and applies the rest as though they followed, which
+`experiments/retention-reader` measured as R1-4. The record is a second id the
+runner derives beside PS-25's, `name#digest`, with `#` in place of `@`, whose
+position is a 63-bit mark of the `StoreId` (FNV-1a over its sixteen bytes,
+shifted right by one, so every SQL adapter in this workspace stores it exactly).
+The port is unchanged (ADR-0063), PS-25's id and goldens are unchanged, and the
+record is written with an empty commit (PS-21) before the run reads anything. A
+checkpoint written without a record, by a runner before `0.8.0`, is adopted for
+the store its first run reads. Two stores share a mark with odds of about one in
+2^63, the argument PS-25 makes for its digest.
+**Rule:** `a_checkpoint_is_not_resumed_against_another_store` — a view built on
+store A, then run on store B holding four events of its own and five like A's:
+the run returns `SourceChanged` naming the pin, A's mark and B, applies nothing,
+and leaves the main checkpoint, the pin and the rows as they were. A typed-layer
+rule, in `crates/happenstance/tests/projection_runner.rs`, beside PS-25's, held
+against the wrong runners below. W4 is rejected deterministically, and the mark's
+goldens bound, by `source_mark_fits_a_signed_sixty_four_bit_column` and its neighbours in
+`crates/happenstance/src/checkpoint/tests.rs`; `a_view_refuses_another_sqlite_file` in
+`examples/rebuilding-read-models/tests/rebuild_through_reset.rs` shows only the round trip
+through a real `INTEGER` column. No adapter can fail the rule, so it is not a conformance rule.
+**Cases:** E2E-59.
+**Rejects:** W1, a runner with no record, which is every runner before `0.8.0`;
+W2, a runner that records the store and never compares it; W3, the store's
+identity folded into PS-25's id, which reads `NeverRun` on a switch and replays
+the new store into rows nobody reset, silently, and breaks PS-25's goldens; W4, a
+mark that keeps FNV-1a's top bit, which SQLite and Neon saturate to `i64::MAX`
+and Postgres refuses; and W5, a record written after the first chunk commits,
+which a crash between the two leaves unrecorded and the next run adopts for
+whatever store it was handed.
+
 ---
 
 ### 4.8 Failure policy
@@ -6444,7 +6487,7 @@ new port surface and no store-side knowledge of what a skip means.
 
 **Count retaken at phase 18: one.** The falsifier expected *"record"* to
 degrade into *"log a warning"*, and it never did: `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:853`) writes nothing anywhere, logs nothing,
+(`crates/happenstance/src/runner.rs:910`) writes nothing anywhere, logs nothing,
 and now offers the failure instead. `Projection` carries a provided
 `on_error`, defaulting to halt, so a projection that says nothing stops at the
 first failure as the alpha's runner did; one that answers `Policy::Skip` has its
@@ -6530,14 +6573,14 @@ runner (one read, one decode, twenty applies) and the safe runner (twenty
 `tokio::spawn`s) are opposites the port adjudicates neither way.
 
 **Built at phase 18 (#112): `happenstance::run_fan_out`**
-(`crates/happenstance/src/fan_out.rs:288`) drives N views of one projection type
+(`crates/happenstance/src/fan_out.rs:294`) drives N views of one projection type
 over one read. The owned-batch obstacle is met without sharing anything: each view
 holds its own owned write set (`crates/happenstance-core/src/projection.rs:759`),
 all in one task, and nothing is spawned, so no batch is asked to be `'static` or
 `Send`. It catches no panic, by the owner's call (ADR-0101): an unwind
 leaves the call, every open write set is dropped, and the port rolls a dropped
 batch back, so no row since a view's last commit survives and no checkpoint moves.
-`happenstance::run_projection` (`crates/happenstance/src/runner.rs:853`) still
+`happenstance::run_projection` (`crates/happenstance/src/runner.rs:910`) still
 drives one projection per call, catches no unwind, and spawns nothing.
 
 **The rule holds the observable, and three catching runners fail it.** The MUST
@@ -6664,7 +6707,7 @@ exists, it is unavailable over a function that never landed, and both readings
 fire the same falsifier: the pump has acquired no caller but the typed one,
 because it has acquired no caller and no body. The runner an application calls
 is `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:853`), which drives the port's `checkpoint`,
+(`crates/happenstance/src/runner.rs:910`), which drives the port's `checkpoint`,
 `begin`, `commit` and `rollback` directly, one crate above the port that states
 the invariant.
 
@@ -10490,10 +10533,10 @@ between them because its *shape* does not wait on a transport but its
 | §2.1–§2.6 value types | `VT` | 36 | 33 | 2 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
-| §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
+| §4 `ProjectionStore` | `PS` | 40 | 33 | 2 | 0 | 5 |
 | §5 `SyncPeer` | `SY` | 39 | 38 | 1 | 0 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **212** | **194** | **9** | **2** | **7** |
+| **Total** | | **213** | **194** | **10** | **2** | **7** |
 
 ### 7.2 The table
 
@@ -10646,6 +10689,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
 | PS-38 | FROZEN | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint`, `fan_o… | E2E-15, E2E-17, E2E-23 |
 | PS-39 | FROZEN | `projection_ids_round_trip_by_bytes` | E2E-18 |
+| PS-40 | PROVISIONAL | `a_checkpoint_is_not_resumed_against_another_store` †, `source_mark_fits_a_sig… | E2E-59 |
 
 #### `SY` — the `SyncPeer` port (§5)
 
@@ -11044,7 +11088,8 @@ that nobody reads the unchanged number as evidence that nothing moved.
 
 ### 7.6 E2E cases no clause claims
 
-**None. All 58 cases are claimed by at least one clause.**
+**None. All 59 cases are claimed by at least one clause.** E2E-59 joined at `0.8.0`,
+claimed by PS-40 alone (ADR-0109).
 
 That result is suspicious enough to state how it was reached, because "the defect
 list is empty" is the shape of a list that was never computed.
@@ -11058,10 +11103,11 @@ with a stricter rule — discarding any `Cases:` line beginning with the word
 prose contributed nothing. The orphan set was empty under both readings.
 
 The distribution is uneven and the unevenness is informative rather than
-alarming. Four cases are claimed by exactly one clause each: **E2E-14** (SY-6),
-**E2E-31** (PS-31), **E2E-50** (PS-25) and **E2E-51** (VT-18). Single-claim cases
-are the ones a later edit can orphan without anyone noticing, and three of the
-four are the lifecycle cases whose surrounding decisions are still open. At the
+alarming. Five cases are claimed by exactly one clause each: **E2E-14** (SY-6),
+**E2E-31** (PS-31), **E2E-50** (PS-25), **E2E-51** (VT-18) and **E2E-59** (PS-40).
+Single-claim cases
+are the ones a later edit can orphan without anyone noticing. Three of the first four
+are lifecycle cases, and E2E-59's one clause is still provisional (PS-40). At the
 other end, **E2E-42** — transitive convergence — is claimed by 26 clauses across
 four sections, which is what a case that exercises a whole design looks like.
 

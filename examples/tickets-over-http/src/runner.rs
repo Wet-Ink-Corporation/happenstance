@@ -16,7 +16,7 @@ use core::time::Duration;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use happenstance::{Chunk, Json, run_projection};
+use happenstance::{Chunk, Json, Source, run_projection};
 use happenstance_sqlite::event_store::SqliteEventStore;
 use happenstance_sqlite::projection_store::SqliteProjectionStore;
 use tickets_over_http::{CHUNK, SeatHolders, ensure_schema};
@@ -44,7 +44,8 @@ pub(crate) async fn run(path: PathBuf) -> Result<()> {
     println!("runner started against {}", path.display());
 
     loop {
-        match run_projection(&events, &models, &mut view, &Json, chunk).await {
+        let source = Source::new(&events, events.store_id());
+        match run_projection(source, &models, &mut view, &Json, chunk).await {
             Ok(progress) => {
                 if progress.applied > 0 {
                     println!(

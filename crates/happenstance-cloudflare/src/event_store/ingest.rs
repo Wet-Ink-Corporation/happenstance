@@ -341,7 +341,7 @@ impl CloudflareIngestStore {
     ) -> Result<Ingested, Refusal> {
         // Read inside the transaction, so the claim check and the compensation
         // stamp use the identity current when the call runs.
-        let own = self.store.store_id()?;
+        let own = self.store.incarnation()?;
         // The head, read as the call's first read, and only when the call
         // carries a claim. A claim is judged only against `ClaimCheck::Against`,
         // so none is ever judged without it; its `None` is an empty store,

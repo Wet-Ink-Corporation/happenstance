@@ -291,6 +291,11 @@ store's own events below the old checkpoint and re-apply one above it. No
 completeness report bears on it; the cure is the typed checkpoint recording
 the source store's identity. The deployment note's candidate issue 1.
 
+**Closed by #485** (PS-40, ADR-0109): the typed runner now pins a checkpoint to
+the store it was built from, and R1-4 asserts the refusal,
+`ProjectionError::SourceChanged`, where it recorded the hazard. Its name and its
+history are kept.
+
 ### F4. Questions for #158, not harms on this reading
 
 - R2-src-3: a purge that cuts a write group ships the remainder as a group of
