@@ -152,7 +152,7 @@ pub trait IngestFixture {
     /// that declares the capability and forgets
     /// [`remove_outside_port`](Self::remove_outside_port) fails the rule on
     /// every run, because the provided body answers
-    /// [`Removed::Nothing`](happenstance_testkit::Removed::Nothing).
+    /// [`Removed::Nothing`].
     const REMOVAL: Capability = Capability::declined(UNSTATED_INGEST_REMOVAL);
 
     /// Removes the events this store holds at `positions` outside every port
@@ -167,7 +167,7 @@ pub trait IngestFixture {
     /// not skip.
     ///
     /// The provided body removes nothing and answers
-    /// [`Removed::Nothing`](happenstance_testkit::Removed::Nothing); the rule
+    /// [`Removed::Nothing`]; the rule
     /// asserts on that answer before it reads anything back.
     fn remove_outside_port(&self, positions: &[SequencePosition]) -> impl Future<Output = Removed> {
         // `let _` is load-bearing: the body uses neither argument, and the gate
