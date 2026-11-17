@@ -45,7 +45,7 @@ store migrates: the pin is one more checkpoint row, under an id of its own.
 
 A store that had events removed outside the port no longer takes them back, or
 refuses them, when they are offered again (#483, #484, SY-40,
-[ADR-0110](.kb/decisions/0110-a-removed-event-is-not-readmitted.md), proposed).
+[ADR-0110](.kb/decisions/0110-a-removed-event-is-not-readmitted.md)).
 `experiments/retention-reader` showed a restored edge re-admitting pruned foreign
 events at the tail, so a projection applied them twice, and refusing a pruned own
 event as `UnheldOwnIdentity`, which wedged the edge. Ingest now skips an event
@@ -115,7 +115,7 @@ entry below.
   from each log's own `store_id`. No rule's verdict changes.
 - **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
   an identity that is not the store's.
-- **SY-40 is minted `[PROVISIONAL]`** by ADR-0110 (proposed), and the frozen
+- **SY-40 is minted `[PROVISIONAL]`** by ADR-0110, and the frozen
   SY-1 and SY-38 are amended by it: a removed event is SY-1's second exception,
   and SY-38's refusal no longer covers an identity the store has recorded as
   removed. SY-11 and ES-39 point at it. `happenstance-sync`'s docs on
