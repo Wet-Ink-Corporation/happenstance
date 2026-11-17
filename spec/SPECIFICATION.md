@@ -7654,11 +7654,16 @@ stores whose writers do not serialise and not on SQLite alone. Until each adapte
 change grants `IngestFixture::REMOVAL`, its mounted ingest family reports the rule
 declined. Green on `MemoryIngestStore`, whose record is a set beside its log.
 Rule: `a_removed_event_is_not_readmitted` (`happenstance-sync-testkit`) — four
-arrangements, each on a fresh fixture: a removed foreign event offered again
-through a handle held across the removal and one connected after it; a removed
-own event echoed beside a new foreign one, which lands; a claim three positions
-past the head, never minted, still refused whole after a removal; and a group of
-a removed and a held event, carrying a compensation, which writes nothing.
+arrangements on three fresh fixtures; (c) runs on (b)'s store after its removal:
+(a) a removed foreign event offered again through a handle held across the
+removal and one connected after it; (b) a removed own event echoed beside a new
+foreign one, which lands; (c) a claim three positions past the head, never
+minted, still refused whole after a removal; and (d) a group of a removed and a
+held event, carrying a compensation, which writes nothing. The rule reaches the
+record through handles onto one open store, so it checks neither that the
+record survives reopening nor that a restore rolls it back: until the ingest
+family has a `REOPEN` capability, each adapter's own regression tests check
+both (the plan's I-4 and I-5).
 Cases: E2E-46, E2E-42.
 
 *Rejects:* the shape every adapter shipped in `0.7.0`, which dedupes only

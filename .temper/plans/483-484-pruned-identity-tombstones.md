@@ -341,7 +341,7 @@ Each line names the red it must show first. "Wrong store X" means a store in
 - [x] sync-testkit `ingest_fixture::tests`: a silent fixture declines `REMOVAL` with
       `UNSTATED_INGEST_REMOVAL`, and its `remove_outside_port` answers `Removed::Nothing`.
 - [x] Rule `ingest_rules::a_removed_event_is_not_readmitted`, green on
-      `MemoryIngestFixture`. Four arrangements, each on a fresh fixture:
+      `MemoryIngestFixture`. Four arrangements on three fresh fixtures; (c) runs on (b)'s store after its removal:
       (a) removed foreign: ingest `X1..X3`, remove `X2` by position, re-ingest the same
       groups through the handle held before the removal **and** a freshly connected one;
       `appended == 0`, `skipped == 3`, the log is unchanged, and `X2` is unheld;
@@ -355,8 +355,9 @@ Each line names the red it must show first. "Wrong store X" means a store in
 - [x] Wrong store `Resurrects` (ignores the record for foreign ids, today's adapters' behaviour)
       fails (a).
 - [x] Wrong store `RefusesARemovedOwnIdentity` (today's behaviour on own ids) fails (b).
-- [x] Wrong store `SkipsEveryUnheldOwnIdentity` (treats any unheld own claim as removed)
-      fails (c), and also fails the existing `an_unheld_own_identity_stops_the_ingest`.
+- [x] Wrong store `SkipsEveryUnheldOwnIdentity` (once the record is non-empty, treats any
+      unheld own claim as removed) fails (c), and fails SY-40 alone: with no removal it
+      refuses as SY-38 says, so the existing `an_unheld_own_identity_stops_the_ingest` passes it.
 - [x] Wrong store `RecordsRemovalsPerHandle` (the record lives on the handle, not the store)
       fails (a)'s fresh-handle half.
 - [x] Wrong store `CompensatesARemovedGroup` fails (d).
@@ -596,4 +597,13 @@ its five wrong stores.
     had narrowed it to held echoes) and its test lists SY-40 as a second failing rule.
   - The restored edge's watermark is built as `Watermark::new(FAR, confirmed)`, because a
     `MemorySyncPeer` names no responder and `Edge::watermark` is then `None`.
+- 2026-11-17, review fixes. F1: `remove` now keeps a guard only while its group's opening row
+  survives, since `read_groups` reads it from that row alone. Red first:
+  `removing_a_groups_first_row_drops_its_guard` failed `a guard nothing can read is still kept,
+  left: [1, 3] right: [3]` (positions as the store assigned them); green after. F5: `doomed`
+  computed once. F7: the pruned re-pull asserts `skipped == 4` exactly. F3, F4: SY-40's Rule
+  paragraph says (c) shares (b)'s store and that reopen and restore are each adapter's
+  regression tests (I-4, I-5) until the ingest family has `REOPEN`.
+  F6: the `SkipsEveryUnheldOwnIdentity` deviation from this list (it fails SY-40 alone, not
+  also the SY-38 rule) goes to the owner for confirmation on the PR.
 
