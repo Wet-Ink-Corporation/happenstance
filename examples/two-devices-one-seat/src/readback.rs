@@ -9,9 +9,9 @@ use std::path::Path;
 
 use happenstance::{EventId, StoreId};
 
-use crate::domain::{Place, SALE_REFUNDED};
+use crate::domain::{Place, SALE_REFUNDED, ShowId};
 use crate::error::StoryError;
-use crate::scenario::Site;
+use crate::scenario::{SHOW, Site};
 use crate::timeline::TimelineView;
 
 /// One place's file, read back.
@@ -29,7 +29,7 @@ pub struct Replica {
 }
 
 impl Replica {
-    async fn read(dir: &Path, at: Place) -> Result<Self, StoryError> {
+    async fn read(dir: &Path, at: Place, show: &ShowId) -> Result<Self, StoryError> {
         let site = Site::open(dir, at)?;
         let log = site.log(at).await?;
         Ok(Self {
@@ -40,7 +40,7 @@ impl Replica {
                 .filter(|event| event.event_type() == &SALE_REFUNDED)
                 .map(|event| event.id)
                 .collect(),
-            view: site.view()?,
+            view: site.view(show)?,
         })
     }
 }
@@ -58,16 +58,18 @@ pub struct Converged {
 }
 
 impl Converged {
-    /// Opens the three files under `dir` afresh and reads them.
+    /// Opens the three files under `dir` afresh and reads them, the read
+    /// model as it stands for the story's show.
     ///
     /// # Errors
     ///
     /// Any [`StoryError`] opening or reading a file, naming the file or place.
     pub async fn read(dir: &Path) -> Result<Self, StoryError> {
+        let show = ShowId::new(SHOW).map_err(StoryError::Show)?;
         Ok(Self {
-            central: Replica::read(dir, Place::Central).await?,
-            tablet: Replica::read(dir, Place::Tablet).await?,
-            phone: Replica::read(dir, Place::Phone).await?,
+            central: Replica::read(dir, Place::Central, &show).await?,
+            tablet: Replica::read(dir, Place::Tablet, &show).await?,
+            phone: Replica::read(dir, Place::Phone, &show).await?,
         })
     }
 

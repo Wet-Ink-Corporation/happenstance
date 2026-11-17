@@ -2,8 +2,9 @@
 //!
 //! Every pull and push a device makes is encoded into the sync envelope by
 //! [`RemoteSyncPeer`](happenstance_sync::RemoteSyncPeer), handed here as
-//! bytes, answered by [`serve_sync`] over central's
-//! [`StoreSyncPeer`], and decoded on the way back. That is the whole network
+//! bytes, answered by [`serve_sync_adjudicated`] over central's
+//! [`StoreSyncPeer`], which judges each push by central's rule before it
+//! lands, and decoded on the way back. That is the whole network
 //! path with the network replaced by a call, so replacing [`Uplink`] with an
 //! HTTP client changes the transport and nothing else.
 //!
@@ -28,8 +29,13 @@ use core::cell::Cell;
 
 use happenstance::EventStore;
 use happenstance_sqlite::event_store::SqliteEventStore;
+use happenstance_sync::runner::Adjudicate;
 use happenstance_sync::wire::Route;
-use happenstance_sync::{Classify, Exchange, FailureClass, ServeError, StoreSyncPeer, serve_sync};
+use happenstance_sync::{
+    Classify, Exchange, FailureClass, ServeError, StoreSyncPeer, serve_sync_adjudicated,
+};
+
+use crate::rule::{CentralRule, RuleError};
 
 /// The central store's type.
 ///
@@ -45,8 +51,13 @@ pub type Central = SqliteEventStore;
 /// alike, as the [`EventStore`] contract names it rather than the adapter.
 pub type CentralError = <Central as EventStore>::Error;
 
-/// Central's side of a sync: its log to read, and its ingest to write.
-pub type CentralPeer = StoreSyncPeer<Central, Central>;
+/// Central's side of a sync: its log to read, its ingest to write, and the
+/// rule it judges each push by before the push lands (SY-7).
+///
+/// The rule is a type parameter with central's own as its default, so the
+/// test that shows what goes wrong without it can mount one that answers
+/// nothing, while the binary has no way to.
+pub type CentralPeer<A = CentralRule> = StoreSyncPeer<Central, Central, A>;
 
 /// Whether a device has signal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,17 +72,20 @@ pub enum Link {
     PullOnly,
 }
 
-/// One device's link to central.
+/// One device's link to central, whose peer judges what it is pushed by `A`.
+///
+/// No bound on the struct, as on every generic type here: the bound sits on
+/// the `Exchange` impl, the one place that calls the rule.
 #[derive(Debug)]
-pub struct Uplink {
-    far: CentralPeer,
+pub struct Uplink<A = CentralRule> {
+    far: CentralPeer<A>,
     link: Cell<Link>,
 }
 
-impl Uplink {
+impl<A> Uplink<A> {
     /// A link to `far`, with signal.
     #[must_use]
-    pub const fn new(far: CentralPeer) -> Self {
+    pub const fn new(far: CentralPeer<A>) -> Self {
         Self {
             far,
             link: Cell::new(Link::Up),
@@ -84,7 +98,10 @@ impl Uplink {
     }
 }
 
-impl Exchange for Uplink {
+/// Any rule central mounts fails as a [`RuleError`], so every uplink fails
+/// with one [`UplinkError`] and a sync failure has one type, whichever rule
+/// judged it.
+impl<A: Adjudicate<Error = RuleError>> Exchange for Uplink<A> {
     type Error = UplinkError;
 
     async fn exchange(&self, route: Route, request: Vec<u8>) -> Result<Vec<u8>, UplinkError> {
@@ -93,7 +110,7 @@ impl Exchange for Uplink {
         // later version adds.
         match (self.link.get(), route) {
             (Link::Up, _) | (Link::PullOnly, Route::Pull) => {
-                Ok(serve_sync(&self.far, route, &request).await?)
+                Ok(serve_sync_adjudicated(&self.far, route, &request).await?)
             }
             (Link::Down | Link::PullOnly, _) => Err(UplinkError::Offline),
         }
@@ -106,9 +123,9 @@ pub enum UplinkError {
     /// No signal: the request never left the device.
     #[error("no signal: the request never left the device")]
     Offline,
-    /// Central answered with a failure of its own.
+    /// Central answered with a failure of its own, its rule's included.
     #[error(transparent)]
-    Serve(#[from] ServeError<CentralError, CentralError>),
+    Serve(#[from] ServeError<CentralError, CentralError, RuleError>),
 }
 
 impl Classify for UplinkError {

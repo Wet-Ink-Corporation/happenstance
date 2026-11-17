@@ -12,15 +12,14 @@ use happenstance::{
 use happenstance_sqlite::connection::open_configured;
 use happenstance_sqlite::event_store::SqliteEventStore;
 use happenstance_sqlite::projection_store::SqliteProjectionStore;
-use happenstance_sync::runner::{Edge, SyncStatus};
+use happenstance_sync::runner::{Adjudicate, Edge, SyncStatus};
 use happenstance_sync::wire::ResumeToken;
-use happenstance_sync::{RemoteSyncPeer, StoreSyncPeer, SyncPeer};
+use happenstance_sync::{EventGroup, RemoteSyncPeer, ReplicatedEvent, StoreSyncPeer, SyncPeer};
 use rusqlite::Connection;
 
-use crate::domain::{
-    BoxOffice, Device, Place, SaleId, ShowId, ShowLedger, adjudicate, schedule, sell_seat,
-};
+use crate::domain::{BoxOffice, Device, Place, SaleId, ShowId, ShowLedger, schedule, sell_seat};
 use crate::error::StoryError;
+use crate::rule::{CentralRule, RuleError};
 use crate::timeline::{DDL, Timeline, TimelineView};
 use crate::uplink::{Central, Link, Uplink};
 
@@ -82,9 +81,9 @@ impl Site {
         })
     }
 
-    /// The read model as this file holds it.
-    pub(crate) fn view(&self) -> Result<TimelineView, StoryError> {
-        TimelineView::read(&self.app).map_err(|source| StoryError::ReadModel {
+    /// `show`'s read model as this file holds it.
+    pub(crate) fn view(&self, show: &ShowId) -> Result<TimelineView, StoryError> {
+        TimelineView::read(&self.app, show).map_err(|source| StoryError::ReadModel {
             file: self.file.clone(),
             source,
         })
@@ -119,19 +118,24 @@ impl Site {
 
 /// A device's side of its one sync relationship: the peer it talks to and
 /// the edge that remembers how far they got.
+///
+/// The edge judges nothing it pulls (its rule is the default `Accept`):
+/// central is the one place that writes a refund (SY-7), so the rule sits on
+/// central's side of the link, on what the device pushes.
 #[derive(Debug)]
-struct Handset {
-    peer: RemoteSyncPeer<Uplink>,
+struct Handset<A> {
+    peer: RemoteSyncPeer<Uplink<A>>,
     edge: Edge<ResumeToken>,
 }
 
-impl Handset {
-    /// A device linked to `central`, through its own `serve_sync` endpoint.
-    fn linked_to(central: &Central) -> Self {
+impl<A: Adjudicate<Error = RuleError>> Handset<A> {
+    /// A device linked to `central`, through its own endpoint, whose peer
+    /// judges each push by `rule` before it lands.
+    fn linked_to(central: &Central, rule: A) -> Self {
         // Two handles onto one store: central's read half and ingest half
         // must be the same store, and a `SqliteEventStore` clone is a second
         // handle onto the same connection, not a copy of the log.
-        let far = StoreSyncPeer::new(central.clone(), central.clone());
+        let far = StoreSyncPeer::new(central.clone(), central.clone()).with_adjudicator(rule);
         let limits = far.limits();
         Self {
             peer: RemoteSyncPeer::new(Uplink::new(far), limits),
@@ -155,35 +159,65 @@ pub struct Synced {
 }
 
 /// The story's world: central, the tablet and the phone, each on its own file,
-/// and one sync edge per device.
+/// one sync edge per device, and the rule central judges every push by.
+///
+/// Generic over the rule, defaulting to central's own, for one reason: the
+/// test that shows the oversell left unanswered mounts a rule that answers
+/// nothing, through [`judged_by`](Self::judged_by). The story and the binary
+/// only ever call [`open`](Self::open).
 #[derive(Debug)]
-pub struct Scenario {
+pub struct Scenario<A = CentralRule> {
     show: ShowId,
     central: Site,
     tablet: Site,
     phone: Site,
-    tablet_link: Handset,
-    phone_link: Handset,
+    tablet_link: Handset<A>,
+    phone_link: Handset<A>,
+    rule: A,
 }
 
 impl Scenario {
-    /// Opens the three files under `dir`, creating them if they are new.
+    /// Opens the three files under `dir`, creating them if they are new, with
+    /// central judging every push by its own rule.
     ///
     /// # Errors
     ///
     /// [`StoryError::Open`], [`StoryError::OpenModel`] or
     /// [`StoryError::ReadModel`] naming the file that would not open.
     pub fn open(dir: &Path) -> Result<Self, StoryError> {
+        Self::judged_by(dir, CentralRule::new)
+    }
+}
+
+impl<A: Adjudicate<Error = RuleError> + Clone> Scenario<A> {
+    /// Opens the three files under `dir`, with central judging every push by
+    /// the rule `rule` builds from central's store and the show.
+    ///
+    /// The rule is cloned once per device, because each device's link holds
+    /// a peer of its own, and kept once more for
+    /// [`judge_again`](Self::judge_again). Central's rule is two handles, so
+    /// a clone is a handle onto the same file and a copy of the show's name.
+    ///
+    /// # Errors
+    ///
+    /// As [`open`](Scenario::open).
+    pub fn judged_by(
+        dir: &Path,
+        rule: impl FnOnce(Central, ShowId) -> A,
+    ) -> Result<Self, StoryError> {
+        let show = ShowId::new(SHOW).map_err(StoryError::Show)?;
         let central = Site::open(dir, Place::Central)?;
-        let tablet_link = Handset::linked_to(&central.events);
-        let phone_link = Handset::linked_to(&central.events);
+        let rule = rule(central.events.clone(), show.clone());
+        let tablet_link = Handset::linked_to(&central.events, rule.clone());
+        let phone_link = Handset::linked_to(&central.events, rule.clone());
         Ok(Self {
-            show: ShowId::new(SHOW).map_err(StoryError::Show)?,
+            show,
             tablet: Site::open(dir, Place::Tablet)?,
             phone: Site::open(dir, Place::Phone)?,
             central,
             tablet_link,
             phone_link,
+            rule,
         })
     }
 
@@ -195,7 +229,7 @@ impl Scenario {
         }
     }
 
-    const fn handset(&self, device: Device) -> &Handset {
+    const fn handset(&self, device: Device) -> &Handset<A> {
         match device {
             Device::Tablet => &self.tablet_link,
             Device::Phone => &self.phone_link,
@@ -304,23 +338,32 @@ impl Scenario {
         self.handset(device).edge.status()
     }
 
-    /// Central applies its rule over the whole history it now holds, as an
-    /// ordinary conditional append (SY-2). Central is the one place that does
-    /// (SY-7), by this application's convention: no published runner writes
-    /// a compensation beside an ingest yet (#450).
+    /// Asks central's rule about everything central holds, as though it were
+    /// all pushed again in one group, and says how many events it answered.
+    ///
+    /// Nothing is written: the rule decides and never writes, and the answer
+    /// is only counted. Central's rule answers a history it has already
+    /// judged with nothing, so a push delivered twice could not earn a second
+    /// refund even if the runner did not skip it (SY-11).
     ///
     /// # Errors
     ///
-    /// [`StoryError::Adjudicate`] if the store fails.
-    pub async fn adjudicate(&self) -> Result<CommandOutcome, StoryError> {
-        commit(
-            &self.central.events,
-            ShowLedger::new(&self.show),
-            ATTEMPTS,
-            adjudicate,
-        )
-        .await
-        .map_err(|source| StoryError::Adjudicate(Box::new(source)))
+    /// [`StoryError::Read`] if central's log cannot be read, and
+    /// [`StoryError::Adjudicate`] if the rule cannot judge it.
+    pub async fn judge_again(&self) -> Result<usize, StoryError> {
+        let held = self
+            .central
+            .log(Place::Central)
+            .await?
+            .into_iter()
+            .map(|event| ReplicatedEvent::new(event.id, event.recorded_at, event.event))
+            .collect();
+        let answered = self
+            .rule
+            .compensation(&EventGroup::new(None, held), &[])
+            .await
+            .map_err(StoryError::Adjudicate)?;
+        Ok(answered.len())
     }
 
     /// Brings the read model up to date on all three files, and says how many
@@ -344,7 +387,7 @@ impl Scenario {
     ///
     /// [`StoryError::ReadModel`] if the table cannot be read.
     pub fn view(&self, at: Place) -> Result<TimelineView, StoryError> {
-        self.site(at).view()
+        self.site(at).view(&self.show)
     }
 
     /// The show, folded from the history `at` holds.

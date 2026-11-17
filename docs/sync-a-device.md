@@ -394,13 +394,24 @@ written by one peer only
 ([#450](https://github.com/Wet-Ink-Corporation/happenstance/issues/450)): a
 `runner::Adjudicate`, mounted with `Edge::with_adjudicator` for what an edge
 pulls, or with `StoreSyncPeer::with_adjudicator`, served through
-`serve_sync_adjudicated`, for what a far side is pushed. The runner lands each
-incoming group and its compensation in one write. Without a rule, choose the
-one peer that decides, usually central, and have it run a decision over the
-history it holds after a sync, with `commit` like any other. Either way the
-compensation is an event, so it syncs back to every device.
+`serve_sync_adjudicated`, for what a far side is pushed. For central, that is
+the second: mount the rule on central's peer, and leave each device's edge on
+the default, which judges nothing, so central is the one peer that writes a
+compensation. The rule is asked about each pushed group before the push
+lands, reads what it needs from its own handle onto central, and returns the
+compensation; it writes nothing itself. The runner lands each group and its
+compensation in one write, and the compensation is an event, so it syncs
+back to every device. Not compiled on this page: `CentralRule` is the
+example's:
+
+```text
+let far = StoreSyncPeer::new(central.clone(), central.clone())
+    .with_adjudicator(CentralRule::new(central.clone(), show));
+
+serve_sync_adjudicated(&far, route, &request).await?
+```
 
 [`examples/two-devices-one-seat`](../examples/two-devices-one-seat/src/overview.md)
 is that arrangement end to end on three SQLite files: both devices sell the
-last seat, central refunds the sale that reached it last, and the three files
-converge on the same log and the same read model.
+last seat, central's rule refunds the sale that reached it last as that sale
+lands, and the three files converge on the same log and the same read model.
