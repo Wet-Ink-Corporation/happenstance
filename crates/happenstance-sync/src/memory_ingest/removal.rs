@@ -4,7 +4,7 @@
 use alloc::collections::BTreeSet;
 use alloc::vec::Vec;
 
-use happenstance_core::{SequencePosition, SequencedEvent};
+use happenstance_core::SequencePosition;
 
 use super::MemoryIngestStore;
 
@@ -24,8 +24,8 @@ impl MemoryIngestStore {
     /// an unheld own identity (SY-40). It is kept for the store's life.
     ///
     /// Removing part of a write group is outside what ES-38 describes. The
-    /// rows left keep the group's name and its guard; a group with no row left
-    /// loses both.
+    /// rows left keep the group's name, and lose its guard if the removed row
+    /// carried it: a group's guard travels on its first row.
     ///
     /// # Examples
     ///
@@ -49,32 +49,38 @@ impl MemoryIngestStore {
         let named: BTreeSet<SequencePosition> = positions.iter().copied().collect();
         let mut guard = self.write_guard();
         let state = &mut *guard;
+        // One flag per row of `log`, computed once: every cut below reads it.
         let doomed: Vec<bool> = state
             .log
             .iter()
             .map(|row| named.contains(&row.position))
             .collect();
-        let gone: Vec<&SequencedEvent> = state
-            .log
-            .iter()
-            .filter(|row| named.contains(&row.position))
-            .collect();
-        for row in &gone {
+        let mut removed = 0;
+        for (row, _) in state.log.iter().zip(&doomed).filter(|&(_, &gone)| gone) {
             state.held.remove(&row.id);
             state.removed.insert(row.id);
+            removed += 1;
         }
-        let removed = gone.len();
-        // `group_of` is index for index with `log`, so it is cut by the same
-        // flags, in the same order, before `log` is.
+        // `group_of` is index for index with `log`, so both are cut by the
+        // same flags, in the same order.
         let mut flags = doomed.iter();
         state
             .group_of
             .retain(|_| !flags.next().copied().unwrap_or(false));
-        state.log.retain(|row| !named.contains(&row.position));
-        // A guard is kept by its group's name; a group with no row left keeps
-        // none.
-        let named_groups: BTreeSet<SequencePosition> = state.group_of.iter().copied().collect();
-        state.guards.retain(|first, _| named_groups.contains(first));
+        let mut flags = doomed.iter();
+        state
+            .log
+            .retain(|_| !flags.next().copied().unwrap_or(false));
+        // A guard is read from its group's opening row only (`read_groups`),
+        // so it is kept while that row is, and goes with it.
+        let openers: BTreeSet<SequencePosition> = state
+            .log
+            .iter()
+            .zip(&state.group_of)
+            .filter(|&(row, &first)| row.position == first)
+            .map(|(_, &first)| first)
+            .collect();
+        state.guards.retain(|first, _| openers.contains(first));
         removed
     }
 }
@@ -336,6 +342,44 @@ mod tests {
             [y_first, z_first],
             "the removed group's guard is gone"
         );
+    }
+
+    /// Removing the opening row of a guarded group drops the guard with it:
+    /// the read takes a group's guard from its opening row only, so the rows
+    /// left are read back under the group's name with no guard, and the store
+    /// keeps no guard entry nothing can read.
+    #[tokio::test]
+    async fn removing_a_groups_first_row_drops_its_guard() {
+        let store = MemoryIngestStore::new();
+        let guard = AppendCondition::new(Query::from_item(
+            QueryItem::of_types(["Written"]).expect("a valid item"),
+        ));
+        let x = [shipped(id(ORIGIN, 1), "x1"), shipped(id(ORIGIN, 2), "x2")];
+        let y = [shipped(id(ORIGIN, 3), "y1")];
+        store
+            .ingest(&[
+                IngestGroup::new(&x, &[]).with_guard(Some(&guard)),
+                IngestGroup::new(&y, &[]).with_guard(Some(&guard)),
+            ])
+            .await
+            .expect("the oracle ingests");
+        let x_first = position_of(&store, x[0].id).await;
+        let y_first = position_of(&store, y[0].id).await;
+
+        assert_eq!(store.remove(&[x_first]), 1);
+        let page = store
+            .read_groups(None, NonZeroUsize::new(16).expect("non-zero"))
+            .await
+            .expect("the oracle's scan is in group order");
+
+        let named: Vec<(SequencePosition, Option<&AppendCondition>, usize)> = page
+            .groups
+            .iter()
+            .map(|group| (group.first(), group.guard(), group.events().len()))
+            .collect();
+        assert_eq!(named, [(x_first, None, 1), (y_first, Some(&guard), 1)]);
+        let kept: Vec<SequencePosition> = store.read_guard().guards.keys().copied().collect();
+        assert_eq!(kept, [y_first], "a guard nothing can read is still kept");
     }
 
     const ORIGIN: StoreId = StoreId::from_bytes([0x64; 16]);
