@@ -33,7 +33,7 @@ use happenstance_sync::{
 use happenstance_sync_testkit::{
     IngestFixture, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, Violation, ingest_rules,
 };
-use happenstance_testkit::{Capability, RuleOutcome, block_on};
+use happenstance_testkit::{Capability, Removed, RuleOutcome, block_on};
 
 /// The one mistake a [`WrongIngestStore`] makes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,6 +183,29 @@ enum Mistake {
     /// reachable. Every rule that asks the store who it is must report the
     /// failure rather than carry on with an identity it was never told.
     CannotReadItsIdentity,
+    /// SY-40's, the shape every adapter shipped in `0.7.0` for foreign events
+    /// (#483): dedupe only against the rows still held and never read the
+    /// removal record for a foreign identity, so a removed foreign event is
+    /// admitted again at the tail and a projection applies it twice.
+    Resurrects,
+    /// SY-40's, the same shape for own events (#484): a removed own event is
+    /// not held, so it falls through to SY-38's check and the whole call is
+    /// refused as an unheld own identity, which wedges the edge.
+    RefusesARemovedOwnIdentity,
+    /// SY-40's over-reach: once the record holds anything, skip every unheld
+    /// own claim as removed, as a store does that reads the record's
+    /// `EXISTS` fast path and never probes the claim itself. A store restored
+    /// after one removal is then never caught (SY-38).
+    SkipsEveryUnheldOwnIdentity,
+    /// SY-40's on durability: keep the record on the handle, as a
+    /// connection-local `TEMP` table does, so a removal reaches the handles
+    /// open at the time and a handle connected later re-admits what was
+    /// removed.
+    RecordsRemovalsPerHandle,
+    /// SY-40's with SY-11: decide a group's compensation by whether any of its
+    /// events is unheld rather than whether any landed, so a group of removed
+    /// events is answered again although nothing in it was written.
+    CompensatesARemovedGroup,
 }
 
 /// The ceilings every [`WrongIngestStore`] declares and enforces, far above
@@ -276,8 +299,17 @@ struct WrongIngestStore {
     /// The fault its fixture armed: the zero-based index, among the rows the
     /// next ingest writes, of the row whose write fails. Taken by that ingest.
     fault: Mutex<Option<usize>>,
+    /// The removal record: the origin identity of every row removed outside
+    /// the port (SY-40).
+    removed: Mutex<BTreeSet<EventId>>,
+    /// The record each handle connected so far keeps, which only
+    /// [`Mistake::RecordsRemovalsPerHandle`] reads.
+    handle_records: Mutex<Vec<Record>>,
     mistake: Mistake,
 }
+
+/// One handle's removal record, shared with the store that notifies it.
+type Record = Arc<Mutex<BTreeSet<EventId>>>;
 
 /// What [`WrongIngestStore::write_groups`] decided, before any of it is
 /// committed.
@@ -295,6 +327,75 @@ struct Written {
 impl WrongIngestStore {
     fn rows(&self) -> Result<MutexGuard<'_, Vec<Row>>, WrongError> {
         self.rows.lock().map_err(|_| WrongError::Poisoned)
+    }
+
+    /// The removal record an ingest through a handle keeping `handle` reads:
+    /// the store's, or the handle's own under
+    /// [`Mistake::RecordsRemovalsPerHandle`]. Copied, so no lock is held
+    /// while the call is decided.
+    fn record_for(&self, handle: &Mutex<BTreeSet<EventId>>) -> Result<BTreeSet<EventId>, WrongError> {
+        let source = if self.mistake == Mistake::RecordsRemovalsPerHandle {
+            handle
+        } else {
+            &self.removed
+        };
+        source
+            .lock()
+            .map(|record| record.clone())
+            .map_err(|_| WrongError::Poisoned)
+    }
+
+    /// Deletes the rows at `positions` and records each one's origin identity,
+    /// in the store's record or in every open handle's.
+    ///
+    /// Test code, so a position this store cannot remove is a broken test
+    /// environment and panics: its allocator is its last row's position, so
+    /// removing the tail would rewind it, which a removal must not do, and no
+    /// rule asks for it.
+    fn remove(&self, positions: &[SequencePosition]) -> Result<(), WrongError> {
+        let mut rows = self.rows()?;
+        assert!(
+            rows.last()
+                .is_none_or(|last| !positions.contains(&last.stored.position)),
+            "this wrong store cannot remove its last row without rewinding its allocator"
+        );
+        let gone: BTreeSet<EventId> = rows
+            .iter()
+            .filter(|row| positions.contains(&row.stored.position))
+            .map(|row| row.origin)
+            .collect();
+        rows.retain(|row| !positions.contains(&row.stored.position));
+        if self.mistake != Mistake::RecordsRemovalsPerHandle {
+            self.removed
+                .lock()
+                .map_err(|_| WrongError::Poisoned)?
+                .extend(gone);
+            return Ok(());
+        }
+        let records = self
+            .handle_records
+            .lock()
+            .map_err(|_| WrongError::Poisoned)?;
+        for record in records.iter() {
+            record
+                .lock()
+                .map_err(|_| WrongError::Poisoned)?
+                .extend(gone.iter().copied());
+        }
+        Ok(())
+    }
+
+    /// One `ingest`, through a handle keeping `handle_record`.
+    fn ingest_through(
+        &self,
+        groups: &[IngestGroup<'_>],
+        handle_record: &Mutex<BTreeSet<EventId>>,
+    ) -> Result<Ingested, IngestError<WrongError>> {
+        self.check_ceilings(groups)?;
+        let removed = self.record_for(handle_record).map_err(IngestError::Store)?;
+        let mut rows = self.rows().map_err(IngestError::Store)?;
+        let written = self.write_groups(&mut rows, groups, &removed)?;
+        self.apply(&mut rows, written)
     }
 
     /// Commits what `written` decided onto `rows`, row by row in write order,
@@ -465,6 +566,7 @@ impl WrongIngestStore {
         &self,
         rows: &mut Vec<Row>,
         groups: &[IngestGroup<'_>],
+        removed: &BTreeSet<EventId>,
     ) -> Result<Written, IngestError<WrongError>> {
         let held: BTreeSet<EventId> = rows.iter().map(|row| row.origin).collect();
         // What [`Mistake::LooksUpOneChunkOfIdentities`] knows past its chunk.
@@ -494,7 +596,7 @@ impl WrongIngestStore {
                 } else {
                     (&nothing_held, working.get(start..).unwrap_or_default())
                 };
-                match self.verdict(held_here, seen, shipped, head_of_batch) {
+                match self.verdict(held_here, removed, seen, shipped, head_of_batch) {
                     Verdict::Skip => counts.skipped += 1,
                     Verdict::Land => {
                         // Inside the loop the group has a head, so the
@@ -512,7 +614,11 @@ impl WrongIngestStore {
                 }
             }
             marks.push(working.len());
-            if counts.appended > landed_before || self.mistake == Mistake::RecompensatesOnRedelivery
+            let any_unheld = self.mistake == Mistake::CompensatesARemovedGroup
+                && group.events.iter().any(|shipped| !held.contains(&shipped.id));
+            if counts.appended > landed_before
+                || self.mistake == Mistake::RecompensatesOnRedelivery
+                || any_unheld
             {
                 counts.compensated += self.compensate(&mut working, group.compensation);
                 if self.mistake == Mistake::AdjudicatesOnIngest {
@@ -529,17 +635,21 @@ impl WrongIngestStore {
     }
 
     /// What this store does with `shipped`, given what it `held` when the call
-    /// began and what the call has written so far.
+    /// began, the identities it has recorded as `removed`, and what the call
+    /// has written so far.
     fn verdict(
         &self,
         held: &BTreeSet<EventId>,
+        removed: &BTreeSet<EventId>,
         working: &[Row],
         shipped: &ReplicatedEvent,
         head_of_batch: bool,
     ) -> Verdict {
         let id = shipped.id;
         let claims_own = id.store() == self.own;
-        if claims_own && self.mistake == Mistake::RefusesEveryOwnIdentity {
+        // Its mistake is the held echo; an own identity it does not hold
+        // meets SY-38's and SY-40's checks below, as a faithful store's does.
+        if claims_own && held.contains(&id) && self.mistake == Mistake::RefusesEveryOwnIdentity {
             return Verdict::Refuse;
         }
         let same_content = self.mistake == Mistake::DedupesOnContent
@@ -548,7 +658,15 @@ impl WrongIngestStore {
         // treats bytes it cannot parse as nothing to write.
         let undecodable = self.mistake == Mistake::DecodesPayload
             && core::str::from_utf8(shipped.event.data()).is_err();
-        if held.contains(&id) || same_content || undecodable {
+        // Held once and recorded as removed: a skip (SY-40), except where the
+        // mistake never reads the record for this side of the identity.
+        let recorded = removed.contains(&id)
+            && match self.mistake {
+                Mistake::Resurrects => claims_own,
+                Mistake::RefusesARemovedOwnIdentity => !claims_own,
+                _ => true,
+            };
+        if held.contains(&id) || recorded || same_content || undecodable {
             return Verdict::Skip;
         }
         let written_by_this_call = working.iter().any(|row| row.origin == id);
@@ -556,6 +674,7 @@ impl WrongIngestStore {
         if claims_own && checked {
             return match self.mistake {
                 Mistake::DropsTheClaim => Verdict::Skip,
+                Mistake::SkipsEveryUnheldOwnIdentity if !removed.is_empty() => Verdict::Skip,
                 Mistake::RefusesOnlyClaimsThatLand if written_by_this_call => Verdict::Skip,
                 _ => Verdict::Refuse,
             };
@@ -808,14 +927,12 @@ impl SendIngestStore for WrongIngestStore {
         Ok(self.own)
     }
 
+    /// An ingest reading the store's own record; a handle passes its own.
     async fn ingest(
         &self,
         groups: &[IngestGroup<'_>],
     ) -> Result<Ingested, IngestError<Self::Error>> {
-        self.check_ceilings(groups)?;
-        let mut rows = self.rows().map_err(IngestError::Store)?;
-        let written = self.write_groups(&mut rows, groups)?;
-        self.apply(&mut rows, written)
+        self.ingest_through(groups, &self.removed)
     }
 
     async fn watermark(&self) -> Result<Watermark, Self::Error> {
@@ -865,15 +982,18 @@ impl WrongFixture {
             own: fresh_incarnation(),
             rows: Mutex::new(Vec::new()),
             fault: Mutex::new(None),
+            removed: Mutex::new(BTreeSet::new()),
+            handle_records: Mutex::new(Vec::new()),
             mistake,
         }))
     }
 }
 
-/// A handle onto a [`WrongFixture`]'s store. A type of its own for the
-/// orphan rule's reason, which `MemoryIngestHandle` states.
+/// A handle onto a [`WrongFixture`]'s store, and the removal record it keeps
+/// for [`Mistake::RecordsRemovalsPerHandle`]. A type of its own for the orphan
+/// rule's reason, which `MemoryIngestHandle` states.
 #[derive(Debug, Clone)]
-struct WrongHandle(Arc<WrongIngestStore>);
+struct WrongHandle(Arc<WrongIngestStore>, Record);
 
 impl IngestFixture for WrongFixture {
     type Store = WrongHandle;
@@ -891,8 +1011,27 @@ impl IngestFixture for WrongFixture {
     /// Mirrored too, so VT-36's ingest rule runs against every mistake here.
     const MAX_TAGS_PER_BATCH: Option<usize> = Some(WRONG_MAX_TAGS_PER_BATCH);
 
+    /// Supported, so SY-40's rule runs against every mistake here: a removal
+    /// deletes rows from the one log every handle shares and records them.
+    const REMOVAL: Capability = Capability::SUPPORTED;
+
     async fn connect(&self) -> Self::Store {
-        WrongHandle(Arc::clone(&self.0))
+        let record = Record::default();
+        // The store keeps a second handle on the record so a removal can reach
+        // it. Test code: a poisoned list is a broken environment.
+        self.0
+            .handle_records
+            .lock()
+            .expect("the wrong store's handle list is not poisoned")
+            .push(Arc::clone(&record));
+        WrongHandle(Arc::clone(&self.0), record)
+    }
+
+    async fn remove_outside_port(&self, positions: &[SequencePosition]) -> Removed {
+        self.0
+            .remove(positions)
+            .expect("the wrong store's locks are not poisoned");
+        Removed::Deleted
     }
 
     async fn arm_mid_group_fault(&self, after: usize) -> Result<(), Violation> {
@@ -947,7 +1086,7 @@ impl SendIngestStore for WrongHandle {
         &self,
         groups: &[IngestGroup<'_>],
     ) -> Result<Ingested, IngestError<Self::Error>> {
-        SendIngestStore::ingest(&*self.0, groups).await
+        self.0.ingest_through(groups, &self.1)
     }
 
     async fn watermark(&self) -> Result<Watermark, Self::Error> {
@@ -1011,6 +1150,32 @@ fn fails_exactly(
     }
 }
 
+/// Each `(rule, clause)` in `failing` reports its clause, and every other rule
+/// passes: [`fails_exactly`] for a mistake two rules are each written against.
+fn fails_exactly_these(
+    verdicts: &[(&'static str, Result<RuleOutcome, &'static str>)],
+    failing: &[(&str, &'static str)],
+) {
+    for (rule, _) in failing {
+        assert!(
+            verdicts.iter().any(|(name, _)| name == rule),
+            "`{rule}` is not in the enumeration: {verdicts:?}"
+        );
+    }
+    for (name, verdict) in verdicts {
+        match failing.iter().find(|(rule, _)| rule == name) {
+            Some((_, clause)) => {
+                assert_eq!(*verdict, Err(*clause), "`{name}` must reject its mutant");
+            }
+            None => assert_eq!(
+                *verdict,
+                Ok(RuleOutcome::Ran),
+                "`{name}` failed a mutant written against {failing:?}"
+            ),
+        }
+    }
+}
+
 #[test]
 fn the_faithful_store_passes_every_rule() {
     let all = verdicts(async || WrongFixture::new(Mistake::Faithful));
@@ -1041,6 +1206,7 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
         ("only_the_adjudicator_compensates", "SY-7"),
         ("directional_merge_rules_compose", "SY-10"),
         ("bulk_ingest_is_idempotent_in_bounded_round_trips", "SY-14"),
+        ("a_removed_event_is_not_readmitted", "SY-40"),
     ];
     assert_eq!(all.len(), clauses.len(), "a rule was added: {all:?}");
     for (name, verdict) in all {
@@ -1160,19 +1326,27 @@ fn dedupe_reaches_identity_without_decoding_fails_a_store_that_decodes_the_paylo
 
 #[test]
 fn dedupe_reaches_identity_without_decoding_fails_a_store_that_recompensates_on_redelivery() {
-    fails_exactly(
+    // SY-40's fourth arrangement re-delivers a group carrying a compensation,
+    // so a store that always answers a re-delivery fails it too (SY-11).
+    fails_exactly_these(
         &verdicts(async || WrongFixture::new(Mistake::RecompensatesOnRedelivery)),
-        "dedupe_reaches_identity_without_decoding",
-        "SY-12",
+        &[
+            ("dedupe_reaches_identity_without_decoding", "SY-12"),
+            ("a_removed_event_is_not_readmitted", "SY-40"),
+        ],
     );
 }
 
 #[test]
 fn an_unheld_own_identity_stops_the_ingest_fails_a_store_that_drops_the_claim() {
-    fails_exactly(
+    // SY-40's third arrangement is an unheld claim after a removal, so a store
+    // that drops every unheld claim fails it too.
+    fails_exactly_these(
         &verdicts(async || WrongFixture::new(Mistake::DropsTheClaim)),
-        "an_unheld_own_identity_stops_the_ingest",
-        "SY-38",
+        &[
+            ("an_unheld_own_identity_stops_the_ingest", "SY-38"),
+            ("a_removed_event_is_not_readmitted", "SY-40"),
+        ],
     );
 }
 
@@ -1446,4 +1620,114 @@ fn bulk_ingest_is_idempotent_in_bounded_round_trips_fails_a_store_that_caps_the_
         "bulk_ingest_is_idempotent_in_bounded_round_trips",
         "VT-24",
     );
+}
+
+#[test]
+fn a_removed_event_is_not_readmitted_fails_a_store_that_resurrects_a_removed_foreign_event() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::Resurrects)),
+        "a_removed_event_is_not_readmitted",
+        "SY-40",
+    );
+}
+
+#[test]
+fn a_removed_event_is_not_readmitted_fails_a_store_that_refuses_a_removed_own_identity() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::RefusesARemovedOwnIdentity)),
+        "a_removed_event_is_not_readmitted",
+        "SY-40",
+    );
+}
+
+#[test]
+fn a_removed_event_is_not_readmitted_fails_a_store_that_skips_every_unheld_own_identity() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::SkipsEveryUnheldOwnIdentity)),
+        "a_removed_event_is_not_readmitted",
+        "SY-40",
+    );
+}
+
+/// The handle held across the removal skips; only the one connected after it
+/// shows the record was never the store's. The message names that half.
+#[test]
+fn a_removed_event_is_not_readmitted_fails_a_store_that_records_removals_per_handle() {
+    let all = outcomes(async || WrongFixture::new(Mistake::RecordsRemovalsPerHandle));
+    let verdicts: Vec<_> = all
+        .iter()
+        .map(|(name, outcome)| {
+            (
+                *name,
+                outcome.as_ref().copied().map_err(|violation| violation.clause()),
+            )
+        })
+        .collect();
+    fails_exactly(&verdicts, "a_removed_event_is_not_readmitted", "SY-40");
+    let (_, outcome) = all
+        .iter()
+        .find(|(name, _)| *name == "a_removed_event_is_not_readmitted")
+        .expect("the rule is in the enumeration");
+    let violation = outcome.as_ref().expect_err("the rule fails the mutant");
+    assert!(
+        violation
+            .message()
+            .contains("through a handle connected after the removal"),
+        "{violation}"
+    );
+}
+
+#[test]
+fn a_removed_event_is_not_readmitted_fails_a_store_that_compensates_a_removed_group() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::CompensatesARemovedGroup)),
+        "a_removed_event_is_not_readmitted",
+        "SY-40",
+    );
+}
+
+/// A fixture that grants removal and forgets to override it is refused by
+/// the rule, which asserts on the fixture's answer first.
+#[test]
+fn a_removed_event_is_not_readmitted_fails_a_fixture_that_removes_nothing() {
+    let outcome = block_on(ingest_rules::a_removed_event_is_not_readmitted(
+        async || ForgetsToRemove(WrongFixture::new(Mistake::Faithful)),
+    ));
+
+    let violation = outcome.expect_err("a removal that removed nothing proves nothing");
+    assert_eq!(violation.clause(), "SY-40");
+    assert!(violation.message().contains("Nothing"), "{violation}");
+}
+
+#[test]
+fn scratch_show_the_reds() {
+    let mut lines = Vec::new();
+    for mistake in [
+        Mistake::Resurrects,
+        Mistake::RefusesARemovedOwnIdentity,
+        Mistake::SkipsEveryUnheldOwnIdentity,
+        Mistake::RecordsRemovalsPerHandle,
+        Mistake::CompensatesARemovedGroup,
+        Mistake::DropsTheClaim,
+        Mistake::RecompensatesOnRedelivery,
+    ] {
+        let outcome = block_on(ingest_rules::a_removed_event_is_not_readmitted(
+            async move || WrongFixture::new(mistake),
+        ));
+        lines.push(format!("{mistake:?}: {outcome:?}"));
+    }
+    panic!("{}", lines.join("\n"));
+}
+
+/// The faithful store, granting removal and keeping the provided
+/// `remove_outside_port`.
+struct ForgetsToRemove(WrongFixture);
+
+impl IngestFixture for ForgetsToRemove {
+    type Store = WrongHandle;
+    const REMOVAL: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        self.0.connect().await
+    }
 }

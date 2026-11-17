@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use core::future::Future;
 use core::num::NonZeroUsize;
 
-use happenstance_testkit::Capability;
+use happenstance_testkit::{Capability, Removed};
 
 use crate::violation::{Violation, ensure};
 
@@ -50,6 +50,10 @@ use happenstance_sync::{
 /// * One per-call ceiling, [`MAX_TAGS_PER_BATCH`](Self::MAX_TAGS_PER_BATCH),
 ///   which VT-36's ingest rule holds to the whole call, compensation
 ///   included. `None` by default, for the same reason.
+/// * [`REMOVAL`](Self::REMOVAL) and
+///   [`remove_outside_port`](Self::remove_outside_port), which SY-40's rule
+///   needs. Declined by default, and silence there misstates nothing, so
+///   [`ingest_declensions_are_stated`] accepts it.
 pub trait IngestFixture {
     /// The store under test: an event store that also ingests.
     type Store: happenstance_core::EventStore + happenstance_sync::IngestStore;
@@ -135,7 +139,57 @@ pub trait IngestFixture {
             ),
         )))
     }
+
+    /// Whether this fixture can remove events from its store outside every
+    /// port, as an operator's `DELETE` would: what SY-40's rule needs to show
+    /// that a removed event is not taken back.
+    ///
+    /// Declined by default, in [`UNSTATED_INGEST_REMOVAL`]'s words, which say
+    /// the fixture has not answered and that the answer is a default. Those
+    /// words are true of every fixture that says nothing, so
+    /// [`ingest_declensions_are_stated`] does not hold a fixture to them, for
+    /// the reason `happenstance_testkit::Fixture::REMOVAL` gives. A fixture
+    /// that declares the capability and forgets
+    /// [`remove_outside_port`](Self::remove_outside_port) fails the rule on
+    /// every run, because the provided body answers
+    /// [`Removed::Nothing`](happenstance_testkit::Removed::Nothing).
+    const REMOVAL: Capability = Capability::declined(UNSTATED_INGEST_REMOVAL);
+
+    /// Removes the events this store holds at `positions` outside every port
+    /// (a raw `DELETE` on the adapter's own storage), and says whether it did.
+    ///
+    /// The contract is `happenstance_testkit::Fixture::remove_outside_port`'s,
+    /// restated: every named position is one the store holds, a position named
+    /// twice is removed once, and the rule names whole write groups. The
+    /// removal MUST reach a handle connected before it, and MUST NOT rewind the
+    /// position allocator or mint a new incarnation, because a removal that
+    /// did either would be a restore, which SY-38 refuses on and SY-40 does
+    /// not skip.
+    ///
+    /// The provided body removes nothing and answers
+    /// [`Removed::Nothing`](happenstance_testkit::Removed::Nothing); the rule
+    /// asserts on that answer before it reads anything back.
+    fn remove_outside_port(
+        &self,
+        positions: &[SequencePosition],
+    ) -> impl Future<Output = Removed> {
+        // `let _` is load-bearing: the body uses neither argument, and the gate
+        // denies `unused_variables`.
+        let _ = (self, positions);
+        core::future::ready(Removed::Nothing)
+    }
 }
+
+/// What [`IngestFixture::REMOVAL`] says when a fixture does not.
+///
+/// Like `happenstance_testkit::UNSTATED_REMOVAL`, its words are true of every
+/// fixture that inherits them, which is why [`ingest_declensions_are_stated`]
+/// does not hold a fixture to it. SY-40's rule reports a skip carrying these
+/// words against every fixture that says nothing.
+pub const UNSTATED_INGEST_REMOVAL: &str = "this fixture has not said whether it can remove events from its store \
+     outside the port; neither `EventStore` nor `IngestStore` has a delete, so a removal has to \
+     come from the adapter's own storage, and this is that answer given by default rather than \
+     by its author";
 
 /// What [`IngestFixture::MID_GROUP_FAULT`] says when a fixture says nothing.
 ///
@@ -220,12 +274,24 @@ impl IngestFixture for MemoryIngestFixture {
          SY-30's rule is proven against the faithful wrong store and the SQLite spike instead",
     );
 
+    /// Granted, through `MemoryIngestStore::remove`: it deletes from the one
+    /// log every handle shares, records each removed identity, and leaves the
+    /// allocator where it was.
+    const REMOVAL: Capability = Capability::SUPPORTED;
+
     fn connect(&self) -> impl Future<Output = Self::Store> {
         // Ready rather than `async`: a handle is a refcount bump, and this
         // says so where a real fixture's `connect` does I/O.
         core::future::ready(MemoryIngestHandle {
             store: Arc::clone(&self.store),
         })
+    }
+
+    fn remove_outside_port(&self, positions: &[SequencePosition]) -> impl Future<Output = Removed> {
+        // The count is not the answer: a rule names only held positions, and
+        // the rule reads the log back to see what went.
+        let _removed: usize = self.store.remove(positions);
+        core::future::ready(Removed::Deleted)
     }
 }
 
@@ -313,9 +379,12 @@ impl MemoryIngestHandle {
 mod tests {
     use core::future::Future;
 
-    use happenstance_testkit::Capability;
+    use happenstance_core::{Event, EventStore};
+    use happenstance_testkit::{Capability, Removed};
 
-    use super::{IngestFixture, MemoryIngestHandle, ingest_declensions_are_stated};
+    use super::{
+        IngestFixture, MemoryIngestHandle, UNSTATED_INGEST_REMOVAL, ingest_declensions_are_stated,
+    };
     use crate::MemoryIngestFixture;
 
     /// A fixture that declares nothing, so every item is the trait's default.
@@ -336,6 +405,52 @@ mod tests {
         );
 
         assert_eq!(armed.map_err(|violation| violation.clause()), Err("SY-30"));
+    }
+
+    /// A fixture that says nothing declines removal in this crate's words, and
+    /// its removal removes nothing, so a rule that ran anyway would see it.
+    #[test]
+    fn a_silent_fixture_declines_removal_and_removes_nothing() {
+        let silent = Silent(MemoryIngestFixture::new());
+
+        let removed = happenstance_testkit::block_on(silent.remove_outside_port(&[]));
+
+        assert_eq!(Silent::REMOVAL.reason(), Some(UNSTATED_INGEST_REMOVAL));
+        assert_eq!(removed, Removed::Nothing);
+    }
+
+    /// Silence on removal is not a misstatement, as the event-store family's
+    /// `UNSTATED_REMOVAL` is not: CF-18's check passes a fixture over it.
+    #[test]
+    fn the_declension_check_does_not_hold_a_fixture_to_removal() {
+        assert_eq!(
+            ingest_declensions_are_stated(async || States(MemoryIngestFixture::new())),
+            Ok(())
+        );
+    }
+
+    /// The reference grants removal, and its removal reaches a handle
+    /// connected before it.
+    #[test]
+    fn the_reference_fixture_removes_through_a_handle_it_already_gave_out() {
+        happenstance_testkit::block_on(async {
+            let fixture = MemoryIngestFixture::new();
+            let handle = fixture.connect().await;
+            let head = handle
+                .append(
+                    &[Event::new("Noted", &b"a"[..]).expect("a valid event")],
+                    None,
+                )
+                .await
+                .expect("an unconditional append lands");
+
+            let removed = fixture.remove_outside_port(&[head]).await;
+
+            assert_eq!(MemoryIngestFixture::REMOVAL, Capability::SUPPORTED);
+            assert_eq!(removed, Removed::Deleted);
+            let Ok(after) = handle.head().await;
+            assert_eq!(after, None, "the handle still sees the removed event");
+        });
     }
 
     #[test]

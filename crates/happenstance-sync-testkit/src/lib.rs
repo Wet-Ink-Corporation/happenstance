@@ -364,8 +364,8 @@ mod ingest_fixture;
 // to is one `cargo xtask spec-trace` refuses.
 mod ingest_suite;
 pub use ingest_fixture::{
-    IngestFixture, MemoryIngestFixture, MemoryIngestHandle, UNSTATED_MID_GROUP_FAULT,
-    ingest_declensions_are_stated,
+    IngestFixture, MemoryIngestFixture, MemoryIngestHandle, UNSTATED_INGEST_REMOVAL,
+    UNSTATED_MID_GROUP_FAULT, ingest_declensions_are_stated,
 };
 pub use ingest_suite::{
     MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON,

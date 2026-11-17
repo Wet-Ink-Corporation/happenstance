@@ -136,6 +136,8 @@ pub mod ingest_rules {
     mod seat_rule;
     // SY-14's call at VT-24's floor, and the first delivery scattered over it.
     mod bulk;
+    // SY-40's removed events, foreign and own, offered again.
+    mod removal;
 
     const SHIPPED: EventType = EventType::from_static("Shipped");
     const LOCAL: EventType = EventType::from_static("Local");
@@ -1460,6 +1462,65 @@ pub mod ingest_rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-40: an event removed from the store outside the port, offered
+    /// again, is skipped as held: never appended a second time, and never
+    /// refused as an unheld own identity. A claim on an identity the store
+    /// never held is still refused (SY-38).
+    ///
+    /// Nothing in the port removes an event, so the removal is the fixture's:
+    /// [`IngestFixture::REMOVAL`]. A fixture that declines it is reported
+    /// [`Skipped`](RuleOutcome::Skipped) with its stated reason. Four
+    /// arrangements, three fixtures, every removed position one the store
+    /// assigned and every event found by its bytes:
+    ///
+    /// 1. **A removed foreign event.** Three foreign events land, one group
+    ///    each, and the middle one is removed. The same three groups again,
+    ///    through the handle connected before the removal and then through one
+    ///    connected after it, are each three skips that change neither the log,
+    ///    the head nor the watermark, and the removed event stays unheld.
+    /// 2. **A removed own event.** Two local appends, and the first is removed.
+    ///    Its echo, in one group beside a new foreign event, is accepted: the
+    ///    foreign event lands, the echo is skipped, and it stays unheld.
+    /// 3. **SY-38 still fires.** On the same store, a claim three positions
+    ///    past the head, which the store never minted, heading a call with a
+    ///    foreign event behind it, refuses the whole call as
+    ///    [`IngestError::UnheldOwnIdentity`] naming it, and writes nothing.
+    /// 4. **No compensation for nothing.** Two foreign events land, one group
+    ///    each, and the first is removed. One group re-delivering both,
+    ///    carrying a compensation, is two skips and writes nothing (SY-11).
+    ///
+    /// # Rejects
+    ///
+    /// A store that dedupes only against what it holds, which re-admits a
+    /// removed foreign event at the tail, the shape every adapter shipped in
+    /// `0.7.0` (#483); one that refuses a removed own event as an unheld claim
+    /// and wedges its edge (#484); one that skips every unheld own claim, so a
+    /// restored store is no longer caught; one that keeps its record per
+    /// handle, so a handle connected later re-admits what was removed; and one
+    /// that writes a group's compensation because one of its events is not
+    /// held. `tests/wrong_ingest_stores.rs` carries all five.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-40 if the fixture removes nothing or the wrong
+    /// events, if a re-delivery appends, compensates or changes the store, if
+    /// the echo is refused or miscounted, or if the claim never held is not
+    /// refused whole.
+    pub async fn a_removed_event_is_not_readmitted<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        if let Some(reason) = F::REMOVAL.reason() {
+            return Ok(RuleOutcome::Skipped {
+                capability: "REMOVAL",
+                reason,
+            });
+        }
+        removal::a_removed_foreign_event(&open().await).await?;
+        removal::a_removed_own_event(&open().await).await?;
+        removal::a_removed_group_writes_no_compensation(&open().await).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// What a refused or skipped ingest must leave as it found it.
     #[derive(Debug, PartialEq)]
     struct Observed {
@@ -1766,6 +1827,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- A pulled batch at VT-24's floor lands in one call (SY-14) --
             bulk_ingest_is_idempotent_in_bounded_round_trips,
+
+            // --- A removed event is not taken back (SY-40) -----------------
+            a_removed_event_is_not_readmitted,
         }
     };
 }
@@ -1898,7 +1962,7 @@ fn no_orphan_ingest_rules() {
 mod tests {
     use core::future::Future;
 
-    use happenstance_testkit::{RuleOutcome, block_on};
+    use happenstance_testkit::{Capability, RuleOutcome, block_on};
 
     use super::{
         MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_PER_EVENT_LIMITS,
@@ -2018,6 +2082,52 @@ mod tests {
         assert!(
             violation.message().contains("below its own ceiling of 8"),
             "{violation}"
+        );
+    }
+
+    /// The oracle with removal declined in its own words.
+    struct DeclinesRemoval(MemoryIngestFixture);
+
+    /// What [`DeclinesRemoval`] says.
+    const REMOVAL_DECLINED: &str = "a test fixture over the oracle that withholds its removal seam";
+
+    impl IngestFixture for DeclinesRemoval {
+        type Store = MemoryIngestHandle;
+        const REMOVAL: Capability = Capability::declined(REMOVAL_DECLINED);
+
+        fn connect(&self) -> impl Future<Output = Self::Store> {
+            self.0.connect()
+        }
+    }
+
+    /// A fixture that declines removal has SY-40's rule reported as a skip
+    /// carrying its reason, not a pass and not a vanished test. The oracle's
+    /// store could remove, so a rule that ran would pass here instead.
+    #[test]
+    fn a_fixture_declining_removal_is_a_skip_with_its_reason() {
+        let outcome = block_on(ingest_rules::a_removed_event_is_not_readmitted(
+            async || DeclinesRemoval(MemoryIngestFixture::new()),
+        ));
+
+        assert_eq!(
+            outcome.map_err(|violation| violation.clause()),
+            Ok(RuleOutcome::Skipped {
+                capability: "REMOVAL",
+                reason: REMOVAL_DECLINED,
+            })
+        );
+    }
+
+    /// The oracle granting removal runs SY-40's rule rather than skipping it.
+    #[test]
+    fn the_oracle_runs_the_removal_rule() {
+        let outcome = block_on(ingest_rules::a_removed_event_is_not_readmitted(
+            async || MemoryIngestFixture::new(),
+        ));
+
+        assert_eq!(
+            outcome.map_err(|violation| violation.clause()),
+            Ok(RuleOutcome::Ran)
         );
     }
 
