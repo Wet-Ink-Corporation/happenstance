@@ -22,6 +22,9 @@
 //!   same identity check, with no condition evaluated (SY-1), compensation
 //!   written only for a group that landed something (SY-11), and the whole
 //!   call rolled back as `IngestError::UnheldOwnIdentity` on that field;
+//! * `event_store/removal.rs`'s `Probe`, which drops an event whose identity
+//!   migration 3's trigger recorded as removed before the insert, so it is a
+//!   skip and never that refusal (SY-40);
 //! * `ingest_groups` and `origin_watermark`, the `&self` entry points: the
 //!   ceilings and the lock, and `WATERMARK_SQL`, one `GROUP BY` over the
 //!   origin index, whose plan `plan_tests` asserts;

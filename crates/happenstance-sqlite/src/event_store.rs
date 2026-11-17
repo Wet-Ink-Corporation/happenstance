@@ -918,8 +918,15 @@ impl SqliteEventStore {
     /// re-mint (VT-6). The transaction is dropped uncommitted and the call fails
     /// as `IngestError::UnheldOwnIdentity` (SY-38). An own-identity row the
     /// store does hold meets the `UNIQUE` constraint and is an ordinary skip.
-    /// No lookup runs ahead of the insert, so the check costs nothing on the
-    /// path every echoed event takes.
+    /// No lookup runs ahead of the insert for that, so the check costs nothing
+    /// on the path every echoed event takes.
+    ///
+    /// One lookup does, and only in a store that has had a row deleted: an
+    /// event whose identity migration 3's trigger recorded as removed is
+    /// dropped before the insert and counted as skipped (SY-40), own or
+    /// foreign, so it neither lands again nor reads as an unheld own identity.
+    /// The first statement asks whether the record holds anything at all, so a
+    /// store nobody prunes runs no probe.
     ///
     /// A skip is not always a hold, though. This call's own compensation is
     /// stamped with this store's identity, so a claim on the position a

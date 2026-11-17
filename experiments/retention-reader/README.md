@@ -283,6 +283,27 @@ its first restart. Seams that could own a cure: the adapter's ingest (a record
 of pruned own positions where SY-38 is checked) and SY-38's wording, which
 today names only a restore or rewind. Not `EventStore`.
 
+**Addendum, 2026-11-17: F1 and F2 are fixed for SQLite, and this experiment
+stays a record of the tree it ran on** (#483, #484, SY-40, ADR-0110, proposed;
+D-7 of `.temper/plans/483-484-pruned-identity-tombstones.md`). The cure is the
+first seam named above, in the form of a trigger-written removal record:
+`happenstance-sqlite`'s migration 3 (`SCHEMA_VERSION` 3) records the origin
+identity of every deleted row, and ingest skips a recorded identity, counting
+it as skipped. Commit `b38eff0` on `claude/project-thread-qkv7ws-483-sqlite`
+made it. So `a_restored_edge_resurrects_pruned_foreign_events`,
+`a_restored_edge_stops_on_a_pruned_own_event` and
+`a_fresh_edge_pushing_into_a_pruned_hub_stops` assert hazards that no longer
+occur, and go red on a tree that has the fix. They are left as they are, with
+this crate's lockfile, because the criteria and the verdict above are true of
+`1cf9d418`, the tree they ran on. Their fixed forms, and the control, are
+regression tests in the gate: `crates/happenstance-sqlite/tests/pruned_replica.rs`
+(`a_restored_edge_does_not_resurrect_pruned_foreign_events`,
+`a_restored_edge_skips_a_pruned_own_event`,
+`a_fresh_edge_pushing_into_a_pruned_hub_is_a_no_op`,
+`control_a_fresh_edge_pushing_into_an_unpruned_hub_is_a_no_op`), and on the
+oracle, `crates/happenstance-sync/tests/runner/pruned.rs`. The other three
+adapters are fixed in their own changes.
+
 ### F3. A projection checkpoint is not pinned to its source store
 
 R1-4 (`a_source_switch_resumes_against_the_wrong_store`): one projection and

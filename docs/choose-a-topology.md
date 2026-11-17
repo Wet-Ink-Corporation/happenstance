@@ -158,11 +158,16 @@ ES-38 after rows are removed outside its interface, a condition over removed
 history passes rather than refusing
 ([ES-40](../spec/SPECIFICATION.md)), and an edge whose far side has forgotten
 history it has not reached stops with a retention gap rather than converging
-on a subset ([SY-32](../spec/SPECIFICATION.md)). Pruning a device that syncs is
-not yet safe: a pruned event can be pulled back in, and pruning one of the
-device's own events can stop its edge
-([#483](https://github.com/Wet-Ink-Corporation/happenstance/issues/483),
-[#484](https://github.com/Wet-Ink-Corporation/happenstance/issues/484)).
+on a subset ([SY-32](../spec/SPECIFICATION.md)). From `0.8` a SQLite device
+records the identity of every event pruned from it, by a trigger, so a pruned
+event pulled again is skipped rather than taken back, and a pruned own event no
+longer stops its edge ([SY-40](../spec/SPECIFICATION.md),
+[#483](https://github.com/Wet-Ink-Corporation/happenstance/issues/483),
+[#484](https://github.com/Wet-Ink-Corporation/happenstance/issues/484)). Prune
+with a plain `DELETE`; a restart pulls the pruned range again as skips, which
+costs a round trip and applies nothing twice. On the other three stores pruning
+a device that syncs is not yet safe, until their own releases carry the same
+record.
 
 ### Edge hubs close to your users
 

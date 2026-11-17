@@ -374,21 +374,21 @@ Each line names the red it must show first. "Wrong store X" means a store in
 
 ### PR 2: SQLite (`happenstance-sqlite`)
 
-- [ ] `tests/migration.rs::a_fresh_file_is_at_schema_version_three`. Red: 2.
-- [ ] `..::a_version_two_file_migrates_to_three_on_open_and_keeps_its_rows`.
-- [ ] `..::module_doc_schema_matches_sqlite_master`, extended to the table and the trigger.
-- [ ] `event_store` unit: `a_raw_delete_records_each_removed_identity`, covering own and
+- [x] `tests/migration.rs::a_fresh_file_is_at_schema_version_three`. Red: 2.
+- [x] `..::a_version_two_file_migrates_to_three_on_open_and_keeps_its_rows`.
+- [x] `..::module_doc_schema_matches_sqlite_master`, extended to the table and the trigger.
+- [x] `event_store` unit: `a_raw_delete_records_each_removed_identity`, covering own and
       foreign rows, deleted from a second `rusqlite` connection.
-- [ ] `..::a_rolled_back_delete_records_nothing`.
-- [ ] `ingest_spike` units mirroring PR 1's five oracle behaviours on SQLite. The reds are
+- [x] `..::a_rolled_back_delete_records_nothing`.
+- [x] `ingest_spike` units mirroring PR 1's five oracle behaviours on SQLite. The reds are
       `appended == 1` and `UnheldOwnIdentity`.
-- [ ] `..::a_skip_against_a_removal_burns_no_position_and_leaves_the_file_unchanged` (#359).
-- [ ] `plan_tests::the_removal_probe_seeks_the_primary_key` (`EXPLAIN QUERY PLAN`, the
+- [x] `..::a_skip_against_a_removal_burns_no_position_and_leaves_the_file_unchanged` (#359).
+- [x] `plan_tests::the_removal_probe_seeks_the_primary_key` (`EXPLAIN QUERY PLAN`, the
       `WATERMARK_SQL` precedent).
-- [ ] `SqliteIngestFixture` grants `REMOVAL` (a raw `DELETE` on the file, maintaining
+- [x] `SqliteIngestFixture` grants `REMOVAL` (a raw `DELETE` on the file, maintaining
       `event_tag` and `tag_cardinality` as `tests/support/mod.rs:304` does). The rule
       passes under the mounted `ingest_store_conformance!`.
-- [ ] `tests/pruned_replica.rs` (new; `#![cfg(feature = "sync")]`): the three experiment
+- [x] `tests/pruned_replica.rs` (new; `#![cfg(feature = "sync")]`): the three experiment
       scenarios as regression tests, ported from
       `experiments/retention-reader/tests/it/r2_ingest_destination.rs`, now asserting the
       fixed behaviour, with the control kept:
@@ -396,7 +396,7 @@ Each line names the red it must show first. "Wrong store X" means a store in
       `a_restored_edge_skips_a_pruned_own_event`,
       `a_fresh_edge_pushing_into_a_pruned_hub_is_a_no_op`,
       `control_a_fresh_edge_pushing_into_an_unpruned_hub_is_a_no_op`.
-- [ ] The existing `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` and
+- [x] The existing `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` and
       `a_claim_lands_as_foreign_after_the_store_is_reminted` stay green, unchanged.
 
 ### PR 3: Durable Object (`happenstance-cloudflare`, `harness/workerd`)
@@ -606,4 +606,39 @@ its five wrong stores.
   regression tests (I-4, I-5) until the ingest family has `REOPEN`.
   F6: the `SkipsEveryUnheldOwnIdentity` deviation from this list (it fails SY-40 alone, not
   also the SY-38 rule) goes to the owner for confirmation on the PR.
-
+- 2026-11-17, PR 2 (SQLite), on `claude/project-thread-qkv7ws-483-sqlite`, stacked on PR 1.
+  Reds, each shown by reverting the implementation and restored before the next step:
+  - `tests/migration.rs`, before migration 3: `a_fresh_file_is_at_schema_version_three` failed
+    `left: 2 right: 3` (the marker); `a_version_two_file_migrates_to_three_on_open_and_keeps_its_rows`
+    failed at its `expect_err` (`new` accepted a version-2 file).
+  - `removal::tests::a_raw_delete_records_each_removed_identity`, with the trigger's `WHEN`
+    made false: `left: [] right: [(<own store>, 1), ([0xF0; 16], 7)]`.
+  - `removal::tests::the_removal_probe_seeks_the_primary_key`, with the probe keyed on
+    `origin_position` alone: `["SCAN CONSTANT ROW", "SCALAR SUBQUERY 1", "SCAN event_removed"]`.
+  - `ingest_spike::tests::removal`, with `Probe::new` never preparing the probe (the `0.7.0`
+    ingest): `a_removed_foreign_event_is_skipped_on_redelivery` `(1, 2, 0)` vs `(0, 3, 0)` (#483);
+    `a_removed_own_event_is_skipped_not_refused` `UnheldOwnIdentity { .., position: 1 }` (#484);
+    `a_group_of_removed_and_held_events_writes_no_compensation` `(1, 1, 1)` vs `(0, 2, 0)`;
+    `a_group_with_one_new_event_lands_it_and_compensates_once` `(2, 0, 1)` vs `(1, 1, 1)`;
+    `the_record_reaches_every_handle_and_survives_reopen` `(1, 0, 0)` vs `(0, 1, 0)`;
+    `a_skip_against_a_removal_burns_no_position_and_leaves_the_file_unchanged` `(1, 0, 0)` vs
+    `(0, 1, 0)`. `an_own_claim_never_held_is_refused_after_a_removal` and
+    `a_restored_copy_rolls_the_record_back_with_the_allocator` stay green, as guards.
+  - The mounted rule `ingest_conformance::a_removed_event_is_not_readmitted`, same revert:
+    `SY-40 violated: ... counted as (1, 2, 0); it should be (0, 3, 0)`.
+  - `tests/pruned_replica.rs`, same revert: the experiment's three hazards, exactly.
+    `a_restored_edge_does_not_resurrect_pruned_foreign_events` `a pruned event was re-admitted,
+    left: 2 right: 0`; `a_restored_edge_skips_a_pruned_own_event`
+    `Ingest(UnheldOwnIdentity { .., position: 1 })`; `a_fresh_edge_pushing_into_a_pruned_hub_is_a_no_op`
+    `Push(Ingest(UnheldOwnIdentity { .., position: 1 }))`. The control passes either way.
+  - Decided without the owner: `pruned_replica` is a `[[test]]` with `required-features = ["sync"]`
+    rather than `#![cfg(feature = "sync")]`, for `ingest_port`'s stated reason (no empty binary);
+    I-4 and I-5 are unit tests in `ingest_spike/tests/removal.rs`, the restore being `VACUUM INTO`
+    and a file copy; the probe is prepared once per ingest call (`removal::Probe`), not cached,
+    because the workspace builds `rusqlite` without its `cache` feature.
+  - **Held for the owner (H-16, a changed test expectation):** five existing tests in
+    `tests/migration.rs` pin the version-2 schema and go red under D-3 A:
+    `migration_creates_the_amended_schema` (five objects), `concurrent_opens_of_a_fresh_file_agree_on_one_store_id`
+    (`len() == 5`), `migration_2_adds_write_groups_to_a_version_1_file` (`marker == 2`,
+    `SCHEMA_VERSION == 2`), `new_refuses_a_version_1_file_until_it_is_migrated` (`marker == 2`
+    after `open_on`) and `a_fresh_file_is_created_at_version_2_with_write_groups` (`marker == 2`).

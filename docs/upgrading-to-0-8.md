@@ -14,8 +14,15 @@ came from and refuses to resume it against another
 ([PS-40](../spec/SPECIFICATION.md#47-checkpoint-semantics)). The decision is
 [ADR-0109](../.kb/decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md).
 
-If your application does not run a typed projection, change the version number
-and you are done. No storage schema changes, and no store migrates.
+Separately, a SQLite event store migrates its file to schema version 3 on
+open, so that a replica pruned outside the port no longer takes back, or
+refuses, the events it pruned (SY-40). Nothing in your code changes for it,
+but older builds refuse the migrated file.
+
+If your application does not run a typed projection and does not open a SQLite
+event store, change the version number and you are done. The one schema change
+is SQLite's, and it migrates itself on open: see
+[a SQLite store migrates to version 3](#a-sqlite-store-migrates-to-schema-version-3-h4).
 
 ## How to use this page
 
@@ -28,6 +35,7 @@ why.
 | run a view whose checkpoint 0.7 wrote | [the first run adopts its store](#the-first-0-8-run-adopts-the-store-it-reads-h2) |
 | move a view to another event store, or restore one | [another store is refused](#a-run-against-another-store-is-refused-h2) |
 | wrote a `ProjectionStore` that counts its calls | [one more read and one more commit](#one-more-read-and-one-more-commit-h3) |
+| open a `SqliteEventStore` | [a SQLite store migrates to version 3](#a-sqlite-store-migrates-to-schema-version-3-h4) |
 
 Each heading ends with a bracketed id, such as **[H1]**. That is the row for
 this change in the `0.8.0` trace table, at the end of the
@@ -289,3 +297,40 @@ asserts that an idle run writes nothing. Update its expectation to include the
 pin. A store refusing the pin's commit is reported as
 `ProjectionError::RecordSource`, and one refusing its `begin` as
 `ProjectionError::Begin`, both with no progress.
+
+## A SQLite store migrates to schema version 3 **[H4]**
+
+**What changed.** `happenstance-sqlite`'s `SCHEMA_VERSION` is 3, was 2.
+`SqliteEventStore::open`, `open_on` and `open_in_memory` apply migration 3 on
+open: a table, `event_removed`, and an `AFTER DELETE` trigger on `event` that
+records the origin identity of every row deleted from the file, by this crate or
+by any other client. Ingest then skips an event whose identity is recorded,
+counting it in `Ingested::skipped`, where 0.7 took a removed foreign event back
+at the tail and refused a removed own event as `UnheldOwnIdentity` (SY-40,
+[ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md),
+proposed). The file is the only thing that changes; no signature does.
+
+**What to change.** Two things, both about deploying:
+
+- **Upgrade every process that opens the file before any of them opens it.** A
+  0.7 build refuses a file 0.8 has opened, with
+  `SqliteEventStoreError::UnsupportedSchemaVersion { found: 3, supported: 2 }`,
+  as 0.6 builds refused 0.7's version 2.
+- **If you wrap a connection with `SqliteEventStore::new`, open the file once
+  through `open_on` first.** `new` never migrates, so it refuses a file still at
+  2 with `SchemaNeedsMigration { found: 2, required: 3 }`.
+
+Rows deleted **before** the migration are not recorded, because nothing was
+listening. If you pruned a replica under 0.7 and it may be offered those events
+again, record each one by hand, its origin store's 16 bytes and its origin
+position. Not compiled here:
+
+```text
+INSERT INTO event_removed (origin_store, origin_position)
+VALUES (X'0123456789ABCDEF0123456789ABCDEF', 42);
+```
+
+The record grows by one small row per removed event and is kept for ever.
+Deleting a row of it lets that identity be ingested again, so do that only once
+no peer can offer the event. A restore from a copy of the file rolls the record
+back with the log, which is what keeps SY-38's refusal of a restored store true.
