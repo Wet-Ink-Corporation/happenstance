@@ -307,8 +307,8 @@ records the origin identity of every row deleted from the file, by this crate or
 by any other client. Ingest then skips an event whose identity is recorded,
 counting it in `Ingested::skipped`, where 0.7 took a removed foreign event back
 at the tail and refused a removed own event as `UnheldOwnIdentity` (SY-40,
-[ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md),
-proposed). The file is the only thing that changes; no signature does.
+[ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)).
+The file is the only thing that changes; no signature does.
 
 **What to change.** Two things, both about deploying:
 

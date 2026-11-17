@@ -1048,7 +1048,7 @@ the owner's acceptance. It supersedes nothing.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0110 | [`kb-decision-0110`](../decisions/0110-a-removed-event-is-not-readmitted.md) | A store that removed an event records it, and ingest skips it, and SY-40 is minted provisional | proposed | — | — |
+| ADR-0110 | [`kb-decision-0110`](../decisions/0110-a-removed-event-is-not-readmitted.md) | A store that removed an event records it, and ingest skips it, and SY-40 is minted provisional | accepted | — | — |
 
 ## Adding a row
 

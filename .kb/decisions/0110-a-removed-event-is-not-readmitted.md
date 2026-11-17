@@ -2,7 +2,7 @@
 id: kb-decision-0110
 title: A store that removed an event records it, and ingest skips it, and SY-40 is minted provisional
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0110
 reversibility: medium
@@ -10,7 +10,7 @@ phase: null
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed 2026-11-17 for #483 and #484, on the owner's answers D-1..D-10 all A. A store that
+  Accepted 2026-11-17 for #483 and #484 (the owner accepted its text on 2026-11-17), on the owner's answers D-1..D-10 all A. A store that
   implements ingest keeps a durable record of the EventId of every event removed from it by any
   means that keeps its position allocator (a raw DELETE, an operator's prune), written by a
   trigger on the events table, and ingest treats a recorded identity as held: skipped, counted
@@ -43,10 +43,10 @@ last_reviewed: 2026-11-17
 
 # A store that removed an event records it, and ingest skips it, and SY-40 is minted provisional
 
-**Proposed on 2026-11-17 for #483 and #484.** The owner answered the plan's ten questions
+**Accepted on 2026-11-17 for #483 and #484**, on the owner's yes to this text (proposed the
+same day). The owner answered the plan's ten questions
 (`.temper/plans/483-484-pruned-identity-tombstones.md`, D-1..D-10) "all as recommended" on
-2026-11-17, and this record writes them down. **Its text still needs the owner's yes**, as
-ADR-0098's did, before the edits under "What acceptance changes" bind. No long-form record
+2026-11-17, and this record writes them down. The edits under "What acceptance changes" bind. No long-form record
 exists; this atom is the record.
 
 **This record amends two `[FROZEN]` clauses, SY-1 and SY-38.** Skipping a removed event breaks

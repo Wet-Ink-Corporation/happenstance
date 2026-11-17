@@ -3,7 +3,7 @@
 Planned 2026-11-16 against `main` at `5f71d44f`. Status: **D-1 to D-10 and T1 to T7
 answered "A" by the owner on 2026-11-17 ("all as recommended"); PR 1 in progress on
 `claude/project-thread-qkv7ws-483`, cut from `origin/phase-21-prep` at `1b7c85d`.**
-ADR-0110's text still needs the owner's acceptance, so it is `proposed` in PR 1.
+ADR-0110 was `proposed` in PR 1 and is accepted (`0c4a96c`, 2026-11-17).
 
 ## Goal
 

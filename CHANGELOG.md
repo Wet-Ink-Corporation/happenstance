@@ -45,7 +45,7 @@ schema: it is one more checkpoint row, under an id of its own.
 
 A store that had events removed outside the port no longer takes them back, or
 refuses them, when they are offered again (#483, #484, SY-40,
-[ADR-0110](.kb/decisions/0110-a-removed-event-is-not-readmitted.md), proposed).
+[ADR-0110](.kb/decisions/0110-a-removed-event-is-not-readmitted.md)).
 `experiments/retention-reader` showed a restored edge re-admitting pruned foreign
 events at the tail, so a projection applied them twice, and refusing a pruned own
 event as `UnheldOwnIdentity`, which wedged the edge. Ingest now skips an event
@@ -135,7 +135,7 @@ process that opens a store before any of them opens it.
   build refuses a file at 3 with `UnsupportedSchemaVersion`. Rows deleted before
   the migration are not recorded, and the README gives the `INSERT` that records
   one by hand. See [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md#a-sqlite-store-migrates-to-schema-version-3-h4).
-- **SY-40 is minted `[PROVISIONAL]`** by ADR-0110 (proposed), and the frozen
+- **SY-40 is minted `[PROVISIONAL]`** by ADR-0110, and the frozen
   SY-1 and SY-38 are amended by it: a removed event is SY-1's second exception,
   and SY-38's refusal no longer covers an identity the store has recorded as
   removed. SY-11 and ES-39 point at it. `happenstance-sync`'s docs on
@@ -158,7 +158,7 @@ it reports that no row below covers becomes a **T** row.
 | H1 | `happenstance` | `run_projection`'s and `run_fan_out`'s first parameter is `Source<'_, S>`, was `&S` (signature) | hand | PS-40, ADR-0109 (#485, 485-Q1) | Changed |
 | H2 | `happenstance` | a run against a store other than the one its checkpoint was built from returns `ProjectionError::SourceChanged`, where it resumed; a `0.7.x` checkpoint is adopted on its first run (behaviour) | hand | PS-40, ADR-0109 (#485, 485-Q2, 485-Q3) | Changed |
 | H3 | `happenstance` | a view's first run commits its pin with an empty batch, and every run reads it, so a `ProjectionStore` sees one more `checkpoint` call per run and one more `begin` and `commit` per view (behaviour) | hand | ADR-0109 (#485) | Changed |
-| H4 | `happenstance-sqlite` | `SCHEMA_VERSION` 2 → 3: a file this release opens is migrated and refused by a `0.7` build, and `new` refuses a file at 2 (value, schema) | hand | SY-40, ADR-0110 proposed (#483, #484, D-3) | Changed |
+| H4 | `happenstance-sqlite` | `SCHEMA_VERSION` 2 → 3: a file this release opens is migrated and refused by a `0.7` build, and `new` refuses a file at 2 (value, schema) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 
 **Not breaks, recorded so the absence is a decision:** `SourceChanged` and
 `RecordSource` are new variants on the `#[non_exhaustive]` `ProjectionError`,

@@ -284,7 +284,7 @@ of pruned own positions where SY-38 is checked) and SY-38's wording, which
 today names only a restore or rewind. Not `EventStore`.
 
 **Addendum, 2026-11-17: F1 and F2 are fixed for SQLite, and this experiment
-stays a record of the tree it ran on** (#483, #484, SY-40, ADR-0110, proposed;
+stays a record of the tree it ran on** (#483, #484, SY-40, ADR-0110;
 D-7 of `.temper/plans/483-484-pruned-identity-tombstones.md`). The cure is the
 first seam named above, in the form of a trigger-written removal record:
 `happenstance-sqlite`'s migration 3 (`SCHEMA_VERSION` 3) records the origin
