@@ -379,8 +379,7 @@ mod test_support {
         /// the store, that waits out a concurrent writer for the shipped busy
         /// timeout as the store's own connections do.
         pub(crate) fn inspect(&self) -> rusqlite::Connection {
-            let connection =
-                rusqlite::Connection::open(&self.0).expect("the temporary file opens");
+            let connection = rusqlite::Connection::open(&self.0).expect("the temporary file opens");
             connection
                 .busy_timeout(std::time::Duration::from_millis(
                     crate::connection::BUSY_TIMEOUT_MS,
