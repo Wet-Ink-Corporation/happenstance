@@ -102,7 +102,11 @@ pub enum IngestError<E> {
     },
 
     /// An event claims this store's own identity at a position this store
-    /// does not hold.
+    /// does not hold and has not recorded as removed.
+    ///
+    /// A removed own event is a skip, not this refusal (SY-40, provisional): a
+    /// removal keeps the position allocator, so its identity can never be
+    /// minted again, and the event offered back is the one the store held.
     ///
     /// This store minted that identity, so holding nothing under it means the
     /// store was restored or rewound under an identity it should have re-minted

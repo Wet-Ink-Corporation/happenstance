@@ -19,7 +19,8 @@
 //! # What is not kept here
 //!
 //! The pull token. It saves a re-read of what was already ingested, and a
-//! re-read is harmless, because ingest skips what it holds (SY-11). An edge
+//! re-read is harmless, because ingest skips what it holds or has recorded as
+//! removed (SY-11, SY-40). An edge
 //! [`restored`](super::Edge::restored) from its watermark alone pulls from the
 //! start and pushes from the watermark.
 
