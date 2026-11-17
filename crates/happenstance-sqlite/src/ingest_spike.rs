@@ -963,6 +963,10 @@ mod tests {
         }
     }
 
+    // SY-40 (#483, #484): ingest over a store that had events removed by a
+    // raw `DELETE`, and the record's reopen and restore behaviour (I-4, I-5).
+    mod removal;
+
     /// `happenstance-sync-testkit`'s ingest family, against this adapter.
     ///
     /// Mounted here rather than in `tests/`, beside the unit tests whose
@@ -1014,9 +1018,29 @@ mod tests {
             const MAX_EVENT_DATA_LEN: Option<usize> = Some(SqliteEventStore::MAX_EVENT_DATA_LEN);
             const MAX_TAGS_PER_EVENT: Option<usize> = Some(SqliteEventStore::MAX_TAGS_PER_EVENT);
 
+            /// Supported, through a raw `DELETE` on a second connection: the
+            /// operator's removal migration 3's trigger records (SY-40).
+            /// `AUTOINCREMENT` keeps the allocator, and `store_meta` is not
+            /// touched, so the removal never mints a new incarnation.
+            const REMOVAL: Capability = Capability::SUPPORTED;
+
             async fn connect(&self) -> Self::Store {
                 SqliteEventStore::open(&self.file.0)
                     .expect("a fresh temporary file opens as a store")
+            }
+
+            /// Deletes the named events in one transaction on a second
+            /// connection, through the unit tests' `removal::remove`, which
+            /// keeps `event_tag` and `tag_cardinality` true as
+            /// `tests/support/mod.rs`'s event-store fixture does. It panics on
+            /// a position the store does not hold, for `connect`'s reason: the
+            /// rule names only positions it appended.
+            async fn remove_outside_port(
+                &self,
+                positions: &[happenstance_core::SequencePosition],
+            ) -> happenstance_testkit::Removed {
+                super::removal::remove(&self.file, positions);
+                happenstance_testkit::Removed::Deleted
             }
 
             /// Installs an `AFTER INSERT` trigger that raises once the

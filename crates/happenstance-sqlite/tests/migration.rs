@@ -744,7 +744,11 @@ fn documented_objects(source: &str) -> BTreeSet<(String, String)> {
 
     let mut out = BTreeSet::new();
     let upper = block.to_uppercase();
-    for (keyword, kind) in [("CREATE TABLE ", "table"), ("CREATE INDEX ", "index")] {
+    for (keyword, kind) in [
+        ("CREATE TABLE ", "table"),
+        ("CREATE INDEX ", "index"),
+        ("CREATE TRIGGER ", "trigger"),
+    ] {
         let mut cursor = 0;
         while let Some(offset) = upper[cursor..].find(keyword) {
             let start = cursor + offset + keyword.len();
@@ -1031,4 +1035,151 @@ fn a_rowid_table_without_autoincrement_hands_out_the_deleted_tails_position() {
             );
         }
     }
+}
+
+/// A file as a version-2 build left it: [`version_1_file`] with migration 2
+/// applied by hand and the marker at 2, the legacy row still in it.
+///
+/// Written out for [`version_1_file`]'s reason: no build of the crate under
+/// test leaves a file at 2 any more, and migration 2 as published at `0.7.0`
+/// is frozen.
+fn version_2_file(path: &Path) {
+    version_1_file(path);
+    raw(path)
+        .execute_batch(
+            "ALTER TABLE event ADD COLUMN write_group INTEGER;
+             ALTER TABLE event ADD COLUMN group_guard BLOB;
+             UPDATE store_meta SET v = 2 WHERE k = 'schema_version';",
+        )
+        .unwrap();
+}
+
+/// Whether `sqlite_master` holds an object of `kind` called `name`.
+fn has_object(path: &Path, kind: &str, name: &str) -> bool {
+    schema_objects(&raw(path)).contains(&(kind.to_owned(), name.to_owned()))
+}
+
+/// The removal record's rows, `(origin_store, origin_position)`, in key order.
+fn removal_record(path: &Path) -> Vec<(Vec<u8>, i64)> {
+    let connection = raw(path);
+    let mut statement = connection
+        .prepare(
+            "SELECT origin_store, origin_position FROM event_removed \
+             ORDER BY origin_store, origin_position",
+        )
+        .unwrap();
+    let rows = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap();
+    rows.map(Result::unwrap).collect()
+}
+
+/// #483, #484 — a fresh file lands at 3, with the removal record and the
+/// trigger that writes it (SY-40, ADR-0110).
+#[test]
+fn a_fresh_file_is_at_schema_version_three() {
+    let db = TempDb::new("fresh-v3");
+    let store = SqliteEventStore::open(db.path()).unwrap();
+    drop(store);
+
+    assert_eq!(SCHEMA_VERSION, 3);
+    assert_eq!(marker(db.path()), 3, "a fresh file is not at version 3");
+    assert!(
+        has_object(db.path(), "table", "event_removed"),
+        "no removal record"
+    );
+    assert!(
+        has_object(db.path(), "trigger", "event_record_removal"),
+        "no trigger writes the removal record"
+    );
+}
+
+/// #483, #484 — migration 3 adds the removal record to a version-2 file on
+/// open, raises the marker to 3 in the same transaction, and keeps every row.
+/// A second open changes nothing, and `new`, which never migrates, refuses
+/// the file until it is opened.
+///
+/// A row deleted before the migration is not recorded, because nothing was
+/// listening; a row deleted after it is, which the last assertion checks
+/// through a raw connection, as an operator's `DELETE` would arrive.
+#[test]
+fn a_version_two_file_migrates_to_three_on_open_and_keeps_its_rows() {
+    let db = TempDb::new("migration-3");
+    version_2_file(db.path());
+
+    let refused = SqliteEventStore::new(raw(db.path()))
+        .expect_err("`new` must refuse a file migration 3 has not reached");
+    assert!(
+        matches!(
+            refused,
+            SqliteEventStoreError::SchemaNeedsMigration {
+                found: 2,
+                required: SCHEMA_VERSION,
+                ..
+            }
+        ),
+        "expected SchemaNeedsMigration {{ found: 2, .. }}, got {refused:?}"
+    );
+
+    let store = SqliteEventStore::open(db.path()).unwrap();
+    drop(store);
+    let reopened =
+        SqliteEventStore::open(db.path()).expect("a second open of the migrated file must succeed");
+    assert_eq!(
+        reopened.store_id().to_bytes()[0],
+        0x01,
+        "the identity survives"
+    );
+    drop(reopened);
+
+    assert_eq!(marker(db.path()), 3, "the marker was not raised to 3");
+    assert_eq!(rows(db.path()), 1, "the legacy row did not survive");
+    assert!(has_object(db.path(), "table", "event_removed"));
+    assert!(has_object(db.path(), "trigger", "event_record_removal"));
+    assert_eq!(removal_record(db.path()), Vec::new(), "nothing was removed");
+
+    raw(db.path())
+        .execute("DELETE FROM event WHERE event_type = 'Legacy'", [])
+        .unwrap();
+    assert_eq!(
+        removal_record(db.path()),
+        vec![(
+            vec![
+                0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB,
+                0xCD, 0xEF
+            ],
+            1
+        )],
+        "the migrated file's trigger did not record the legacy row's identity"
+    );
+}
+
+/// D-3 — a build refuses a file a newer build has opened, which is what keeps
+/// a build that predates the removal record off a version-3 file: it would
+/// delete without recording and ingest without consulting the record.
+///
+/// Green from the start, as the mechanism predates migration 3; it pins the
+/// direction of the comparison, because the refusal is the whole upgrade
+/// story the CHANGELOG tells.
+#[test]
+fn a_file_a_newer_build_opened_is_refused() {
+    let db = TempDb::new("newer-build");
+    drop(SqliteEventStore::open(db.path()).unwrap());
+    raw(db.path())
+        .execute(
+            "UPDATE store_meta SET v = ? WHERE k = 'schema_version'",
+            [SCHEMA_VERSION + 1],
+        )
+        .unwrap();
+
+    let refused =
+        SqliteEventStore::open(db.path()).expect_err("a file from a newer build must be refused");
+    assert!(
+        matches!(
+            refused,
+            SqliteEventStoreError::UnsupportedSchemaVersion { found, supported }
+                if found == SCHEMA_VERSION + 1 && supported == SCHEMA_VERSION
+        ),
+        "got {refused:?}"
+    );
 }
