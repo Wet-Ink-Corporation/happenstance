@@ -134,6 +134,24 @@ pub(super) fn issued_since(sql: &SqlStorage, from: usize) -> Vec<String> {
         .collect()
 }
 
+/// Deletes the events at `positions` through the object's own SQL, as a
+/// retention job would: per position, the tag rows and then the event row,
+/// because `event_tag.position REFERENCES event(position)`. `store_meta` and
+/// `sqlite_sequence` are not touched, so this is a removal from the same store
+/// (ES-38), which the record's trigger hears (SY-40). The shape the event-store
+/// fixture's `remove_outside_port` uses in `tests/support/mod.rs`.
+pub(super) fn remove(sql: &SqlStorage, positions: &[SequencePosition]) {
+    for position in positions {
+        let at = [SqlValue::Integer(
+            i64::try_from(position.get()).expect("a SQLite position fits i64"),
+        )];
+        sql.exec("DELETE FROM event_tag WHERE position = ?", &at)
+            .expect("the tag rows go");
+        sql.exec("DELETE FROM event WHERE position = ?", &at)
+            .expect("the event row goes");
+    }
+}
+
 /// How many statements `sql` has been asked to run so far.
 pub(super) fn issued(sql: &SqlStorage) -> usize {
     statements(sql).len()

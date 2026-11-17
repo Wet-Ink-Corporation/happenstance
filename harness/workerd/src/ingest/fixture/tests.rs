@@ -2,7 +2,9 @@ use happenstance_cloudflare::TableNamespace;
 use happenstance_sync_testkit::IngestFixture;
 use happenstance_testkit::Fixture;
 
-use super::{MID_GROUP_FAULT_TEXT, WorkerdIngestFixture, mid_group_fault_statements};
+use super::{
+    MID_GROUP_FAULT_TEXT, WorkerdIngestFixture, mid_group_fault_statements, removal_statements,
+};
 use crate::fixture::WorkerdFixture;
 
 fn namespace() -> TableNamespace {
@@ -91,4 +93,54 @@ fn the_ingest_fixture_mirrors_the_event_store_fixtures_ceilings() {
         <WorkerdIngestFixture as IngestFixture>::MID_GROUP_FAULT.reason(),
         None
     );
+}
+
+/// SY-40's rule must run under `workerd`, never skip: `test/ingest.test.ts`
+/// tolerates no skipped ingest rule, so a fixture that kept the default
+/// declension would fail the job rather than pass it quietly.
+#[test]
+fn the_ingest_fixture_grants_removal() {
+    assert_eq!(
+        <WorkerdIngestFixture as IngestFixture>::REMOVAL.reason(),
+        None
+    );
+}
+
+/// The plausible wrong copy is the adapter's own `cfg(test)` removal, which
+/// deletes from the unprefixed tables: in a namespaced log it would remove
+/// nothing, and SY-40's rule would fail on a store that is right. Each
+/// distinct position is deleted once, tag rows first.
+#[test]
+fn the_removal_deletes_from_the_namespaced_tables_tags_first() {
+    let at = |position| happenstance_core::SequencePosition::new(position).expect("nonzero");
+
+    let statements =
+        removal_statements(&namespace(), &[at(5), at(2), at(5)]).expect("small positions fit");
+
+    let bound = happenstance_cloudflare::SqlValue::Integer;
+    let expected: Vec<_> = [2, 5]
+        .into_iter()
+        .flat_map(|position| {
+            [
+                (
+                    "DELETE FROM f3_event_tag WHERE position = ?".to_owned(),
+                    vec![bound(position)],
+                ),
+                (
+                    "DELETE FROM f3_event WHERE position = ?".to_owned(),
+                    vec![bound(position)],
+                ),
+            ]
+        })
+        .collect();
+    assert_eq!(statements, expected);
+}
+
+/// A position past `i64::MAX` cannot be one the store assigned, and the
+/// removal answers `None` for it rather than panicking.
+#[test]
+fn a_position_past_i64_is_refused_not_a_panic() {
+    let past = happenstance_core::SequencePosition::new(u64::MAX).expect("nonzero");
+
+    assert_eq!(removal_statements(&namespace(), &[past]), None);
 }

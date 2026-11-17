@@ -15,7 +15,9 @@ came from and refuses to resume it against another
 [ADR-0109](../.kb/decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md).
 
 If your application does not run a typed projection, change the version number
-and you are done. No storage schema changes, and no store migrates.
+and you are done. No store needs a migration step of yours: a Durable Object's
+`migrate` adds one table and one trigger on its next open, with no marker (see
+[the removal record](#a-durable-object-gains-the-removal-record)).
 
 ## How to use this page
 
@@ -28,6 +30,7 @@ why.
 | run a view whose checkpoint 0.7 wrote | [the first run adopts its store](#the-first-0-8-run-adopts-the-store-it-reads-h2) |
 | move a view to another event store, or restore one | [another store is refused](#a-run-against-another-store-is-refused-h2) |
 | wrote a `ProjectionStore` that counts its calls | [one more read and one more commit](#one-more-read-and-one-more-commit-h3) |
+| run a `CloudflareEventStore` that replicates | [the removal record](#a-durable-object-gains-the-removal-record) |
 
 Each heading ends with a bracketed id, such as **[H1]**. That is the row for
 this change in the `0.8.0` trace table, at the end of the
@@ -289,3 +292,19 @@ asserts that an idle run writes nothing. Update its expectation to include the
 pin. A store refusing the pin's commit is reported as
 `ProjectionError::RecordSource`, and one refusing its `begin` as
 `ProjectionError::Begin`, both with no progress.
+
+## A Durable Object gains the removal record
+
+**What changed.** `CloudflareEventStore::migrate` creates one more table,
+`event_removed`, and an `AFTER DELETE` trigger on the event table that records
+the identity of every event deleted from the log, so that ingest skips a pruned
+event offered again rather than taking it back or refusing it
+([SY-40](../spec/SPECIFICATION.md)). A namespaced log gets its own pair under
+its prefix. This is not a break, so it has no row in the trace table: `migrate`
+creates both `IF NOT EXISTS` on the next open, and an older build ignores them.
+
+**What to change.** Nothing in your code. Deploy 0.8 to every writer of an
+object before it serves replication again, because an older build ingests
+without consulting the record. Events your retention job deleted before the
+upgrade are not recorded; the crate README gives the `INSERT` that records one
+by hand.

@@ -96,6 +96,20 @@ entry below.
   compensates a group of removed and held events. **A new rule is a minor for
   this crate; pin it exactly.** It runs only against a fixture that grants
   `REMOVAL`, so no adapter's CI turns red until that adapter grants it.
+- `happenstance-cloudflare`: the removal record (#483, #484, SY-40). `migrate`
+  creates a table, `event_removed`, and an `AFTER DELETE` trigger on `event`,
+  `event_record_removal`, that records the origin identity of every event
+  deleted from the log by any statement the object runs; a namespaced log gets
+  its own pair under its prefix. Ingest skips a recorded identity, own or
+  foreign, and counts it in `Ingested::skipped`: it is dropped before it is
+  staged, so it spends no position, and an own claim the object never held is
+  still refused (SY-38). One `EXISTS` per ingest call while the record is
+  empty, and a point lookup on its key per event once it is not. Like the
+  write-group columns there is no schema marker: an older build ignores the
+  table and re-admits what it ingests, so deploy this build to every writer of
+  an object before it serves replication again. The ingest fixture, and
+  `harness/workerd`'s, grant `REMOVAL`, so `a_removed_event_is_not_readmitted`
+  runs on the gate's Node host and under `workerd`.
 
 ### Changed
 
