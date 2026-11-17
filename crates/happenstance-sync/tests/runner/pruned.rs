@@ -160,8 +160,12 @@ async fn a_restored_edge_over_a_pruned_memory_store_applies_nothing_twice() {
         stepped.ingested.appended, 0,
         "a pruned event was re-admitted"
     );
-    assert!(
-        stepped.ingested.skipped >= shipped.len(),
+    // The hub holds each shipped event once, as it was seeded: a push of a
+    // foreign event it already holds is not stored a second time, and its
+    // pages are read in seed order, so the re-pull offers each exactly once.
+    assert_eq!(
+        stepped.ingested.skipped,
+        shipped.len(),
         "the re-pull of the whole log was skipped, pruned events included: {stepped:?}"
     );
     assert_eq!(second_run, 0, "the projection had nothing new to apply");
