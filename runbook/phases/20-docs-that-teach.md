@@ -20,6 +20,13 @@ their stories at `report`, and three are not yet built: `HS-P0023`
 reach-and-adapter-path (blocked, after a `changes-requested` slice),
 `HS-P0024` comprehension-evidence and `HS-P0025` durable-audience-closeout.
 
+**For `HS-P0024`'s friction log (#174, 2026-11-18):** the reader now starts at the
+documentation site, `https://wet-ink-corporation.github.io/happenstance/`, not at
+`docs/` on GitHub. Both of `happenstance`'s crate-doc links into the guide point
+there, the front-door sentence (`crates/happenstance/src/lib.rs:66`) and the
+bridge link (`crates/happenstance/src/domain.rs:105`), so a walk that begins on
+docs.rs lands on the rendered page. Walk the log from the site.
+
 **Work carried in from phase 16**
 
 - [x] #149 · **ES-23's adapter half, for the next adapter author**
