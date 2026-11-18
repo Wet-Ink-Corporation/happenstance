@@ -192,6 +192,21 @@ deploy.
   violation. A coherent declaration too tight for the rule's own spread reports
   the rule skipped with `TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON`. Before this
   change, such a store failed the rule naming the wrong limit.
+- `happenstance`: `Projection::scopes`, a provided method returning `&[Tags]`,
+  so one projection can follow several tag sets at once, such as every case one
+  owner holds (PS-41, the owner's call D3 = A). Both runners read the union:
+  one query item per scope, each over the projection's `EVENT_TYPES`, so an
+  event matching any scope is applied once, in log order. The default is
+  `scope()` alone, so a projection that does not override it reads and keys
+  its checkpoint exactly as before. Adding or dropping a scope changes
+  `checkpoint_id` and `source_checkpoint_id`, and the view replays from the
+  start (PS-25); their order and a repeat do not. An empty slice is refused
+  before anything is read, as `ProjectionError::Boundary` holding
+  `InvalidQuery::NoItems`. A wrapper projection that forwards `scope()` should
+  forward `scopes()` too. PS-41's rule, `several_scopes_are_one_query`, is a
+  typed-layer test in `crates/happenstance/tests/projection_scopes.rs`, held
+  against both runners and against a runner reading `scope()` alone and one
+  dropping the event types.
 
 ### Changed
 
@@ -229,6 +244,10 @@ deploy.
   Postgres: send `migration::removal_record_request(&config)` after migrations
   1 and 3, then deploy. An ingest answer is now read from its second result set, after
   the lock's.
+- **PS-41 is minted `[PROVISIONAL]`**, with E2E-60, falsified by a projection
+  that needs different event types under different scopes.
+  `ProjectionError::Boundary` and `InvalidCheckpointId::Query` were documented
+  as unreachable; an empty `scopes` now reaches them, and their docs say so.
 - **SY-40 is minted `[PROVISIONAL]`** by ADR-0110, and the frozen
   SY-1 and SY-38 are amended by it: a removed event is SY-1's second exception,
   and SY-38's refusal no longer covers an identity the store has recorded as
@@ -265,6 +284,10 @@ unchanged, so no `0.7.x` checkpoint is orphaned. The adapters' new inherent
 `store_id` shadows `IngestStore::store_id` in method-call syntax on
 `PostgresEventStore` and `NeonEventStore`, with the same signature and the same
 answer, so a call written against the trait compiles and behaves unchanged.
+`Projection::scopes` is a provided method, which semver counts as a minor
+change: an existing implementation compiles and derives the same query and the
+same ids. The one way it can bite is a type that also has a method named
+`scopes` from another trait in scope, where a method call becomes ambiguous.
 
 **Pending:** the release's other entries.
 

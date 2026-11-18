@@ -9,9 +9,8 @@ use happenstance_core::{
     InvalidProjectionId, InvalidQuery, MAX_PROJECTION_ID_LEN, ProjectionId, Query, QueryItem,
 };
 
-use crate::boundary::{AtLeastOneType, derive_query};
-use crate::domain::DomainEvent;
-use crate::runner::Projection;
+use crate::boundary::AtLeastOneType;
+use crate::runner::{Projection, projection_query};
 
 /// The digest's rendering: `@` and 16 lowercase hex digits.
 const SUFFIX_LEN: usize = 1 + 16;
@@ -44,9 +43,10 @@ pub enum InvalidCheckpointId {
     /// The projection's query could not be derived.
     ///
     /// Absorbed rather than unwrapped, as
-    /// [`ProjectionError::Boundary`](crate::ProjectionError::Boundary) is:
-    /// unreachable for a projection whose event type declares at least one
-    /// type, which is a compile-time check.
+    /// [`ProjectionError::Boundary`](crate::ProjectionError::Boundary) is.
+    /// Reached only through an empty [`scopes`](Projection::scopes), as
+    /// [`InvalidQuery::NoItems`]: a projection's event type declares at least
+    /// one type, which is a compile-time check, so no item is unconstrained.
     #[error(transparent)]
     Query(#[from] InvalidQuery),
     /// The name is longer than [`MAX_CHECKPOINT_NAME_LEN`].
@@ -74,7 +74,7 @@ pub enum InvalidCheckpointId {
 ///
 /// It is the projection's [`id`](Projection::id), its name, followed by `@`
 /// and 16 lowercase hex digits: a digest of the [`Query`] the runner derives
-/// from the projection's event types and [`scope`](Projection::scope). A
+/// from the projection's event types and [`scopes`](Projection::scopes). A
 /// projection whose query changes therefore derives a new id, reads
 /// [`Checkpoint::NeverRun`] under it and replays from the start, rather than
 /// resuming past events its old query never nominated.
@@ -153,8 +153,10 @@ pub enum InvalidCheckpointId {
 /// Terminators rather than length prefixes, because a `usize` length hashes
 /// differently on `wasm32` and a 64-bit host, and the id must be the same on
 /// both. One item over two types and two items over one type each match the
-/// same events and digest differently. The runner only ever derives one item,
-/// and the cost of the difference would be a rebuild, never a wrong resume.
+/// same events and digest differently. The runner derives one item per
+/// [`scope`](Projection::scopes), each over every declared type, so it never
+/// splits a scope's types across items, and the cost of the difference would
+/// be a rebuild, never a wrong resume.
 ///
 /// # Why FNV-1a, and what is promised
 ///
@@ -252,13 +254,14 @@ pub enum InvalidCheckpointId {
 /// Returns [`InvalidCheckpointId::NameTooLong`] when the name is longer than
 /// [`MAX_CHECKPOINT_NAME_LEN`], [`InvalidCheckpointId::Refused`] when the
 /// name is a `sync/` watermark id, and [`InvalidCheckpointId::Query`] when
-/// the projection's query cannot be derived.
+/// the projection's query cannot be derived, which is when its
+/// [`scopes`](Projection::scopes) is empty.
 ///
 /// [`Checkpoint::NeverRun`]: happenstance_core::Checkpoint::NeverRun
 pub fn checkpoint_id<P: Projection>(projection: &P) -> Result<ProjectionId, InvalidCheckpointId> {
     // Reading the `const` is what evaluates it, as the runner does.
     let () = AtLeastOneType::<P::Event>::CHECKED;
-    let query = derive_query(P::Event::EVENT_TYPES, projection.scope())?;
+    let query = projection_query(projection)?;
     derive(projection.id(), &query)
 }
 
@@ -361,7 +364,7 @@ pub fn source_checkpoint_id<P: Projection>(
     projection: &P,
 ) -> Result<ProjectionId, InvalidCheckpointId> {
     let () = AtLeastOneType::<P::Event>::CHECKED;
-    let query = derive_query(P::Event::EVENT_TYPES, projection.scope())?;
+    let query = projection_query(projection)?;
     derive_pair(projection.id(), &query).map(|keys| keys.pin)
 }
 

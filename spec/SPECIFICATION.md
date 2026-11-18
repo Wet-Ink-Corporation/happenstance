@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 214 clause IDs, of which 207 are normative:
-**194 `[FROZEN]`**, **11 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
+As assembled, this document carries 215 clause IDs, of which 208 are normative:
+**194 `[FROZEN]`**, **12 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -6428,6 +6428,54 @@ and Postgres refuses; and W5, a record written after the first chunk commits,
 which a crash between the two leaves unrecorded and the next run adopts for
 whatever store it was handed.
 
+**PS-41 — A typed projection MAY follow several scopes. The runner MUST read
+their union: one item per scope, each over every event type the projection
+declares, so an event matching any scope is delivered once, in log order, and
+an event of an undeclared type never is. The checkpoint ids MUST be derived
+from that query, and an empty set of scopes MUST be refused before anything is
+read.**
+`[PROVISIONAL — falsified by a projection that needs different event types under
+different scopes, which a set of tag sets cannot express and the typed layer would
+then have to answer with items of its own]` — minted at `0.8.0` on the owner's
+call D3 = A (2026-11-16): an additive provided method, `Projection::scopes`, whose
+default is `scope()` alone, and frozen in the 1.0 freeze pass with the other rows
+that pass holds.
+A single scope is one conjunction of tags, so "every case one owner holds" took one
+projection and one checkpoint per case, or an owner tag that goes stale when a case
+changes hands. `Query` already ORs its items (VT-31), so nothing below the typed layer
+changes: the runners derive one `QueryItem` per scope where they derived one, and a
+projection that does not override `scopes` derives the same `Query`, so PS-25's id and
+goldens and PS-40's pin are unchanged for it. The digest already sorts and dedups item
+encodings (PS-25), so the order of the scopes and a repeated scope move no id; adding
+or dropping a scope moves both ids, and the view replays from the start, which is what
+a newly followed scope's history needs. The types go under every item rather than once
+around them because `Query` has no outer filter. An empty set is
+`InvalidQuery::NoItems`, reported as `ProjectionError::Boundary`: no `Query` nominates
+nothing, and reading everything would invert the request. The scopes are tag sets,
+never a `Query` of the projection's own, for the reason the derivation exists: the
+event types stay nameable in one place.
+**Rule:** `several_scopes_are_one_query` — a projection naming `case:c1` and `case:c2`
+over a log of a `c1` filing, a `c3` filing, an event of an undeclared type tagged `c1`,
+a `c2` filing and a filing tagged both: the run applies the three owned filings once
+each in log order, returns `Ok` reporting three, and leaves the checkpoint under the
+derived id at the last of them. Held through the fan-out runner by
+`several_scopes_are_one_query_in_a_fan_out`, and against the wrong runners below by
+`the_scopes_rule_rejects_a_runner_reading_only_scope` and
+`the_scopes_rule_rejects_a_runner_that_drops_the_types`; the ids by
+`the_ids_follow_the_set_of_scopes` and the refusal by
+`no_scopes_is_refused_before_anything_is_read`. A typed-layer rule, in
+`crates/happenstance/tests/projection_scopes.rs`. No adapter can fail it, so it is not
+a conformance rule.
+**Cases:** E2E-60.
+**Rejects:** W1, a runner that derives its query from `scope()` alone, which is every
+runner before `0.8.0` and any wrapper projection that forwards `scope()` but not
+`scopes()`; W2, one item per scope over the tags alone (`QueryItem::tagged`), which is
+handed an undeclared type and halts on its decode; W3, one read per scope with the
+results concatenated, which hands the filing tagged both scopes over twice and out of
+log order; and W4, an empty set read as `Query::All`. W1 and W2 are written as runners
+in the rule's file; W3 fails the rule's first leg and W4 the refusal's test, and
+neither is written out.
+
 ---
 
 ### 4.8 Failure policy
@@ -10610,10 +10658,10 @@ between them because its *shape* does not wait on a transport but its
 | §2.1–§2.6 value types | `VT` | 36 | 33 | 2 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
-| §4 `ProjectionStore` | `PS` | 40 | 33 | 2 | 0 | 5 |
+| §4 `ProjectionStore` | `PS` | 41 | 33 | 3 | 0 | 5 |
 | §5 `SyncPeer` | `SY` | 40 | 38 | 2 | 0 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **214** | **194** | **11** | **2** | **7** |
+| **Total** | | **215** | **194** | **12** | **2** | **7** |
 
 ### 7.2 The table
 
@@ -10767,6 +10815,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-38 | FROZEN | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint`, `fan_o… | E2E-15, E2E-17, E2E-23 |
 | PS-39 | FROZEN | `projection_ids_round_trip_by_bytes` | E2E-18 |
 | PS-40 | PROVISIONAL | `a_checkpoint_is_not_resumed_against_another_store` †, `source_mark_fits_a_sig… | E2E-59 |
+| PS-41 | PROVISIONAL | `several_scopes_are_one_query` †, `several_scopes_are_one_query_in_a_fan_out` … | E2E-60 |
 
 #### `SY` — the `SyncPeer` port (§5)
 
@@ -11166,8 +11215,9 @@ that nobody reads the unchanged number as evidence that nothing moved.
 
 ### 7.6 E2E cases no clause claims
 
-**None. All 59 cases are claimed by at least one clause.** E2E-59 joined at `0.8.0`,
-claimed by PS-40 alone (ADR-0109).
+**None. All 60 cases are claimed by at least one clause.** E2E-59 joined at `0.8.0`,
+claimed by PS-40 alone (ADR-0109), and E2E-60 in the same release, claimed by PS-41
+alone (the owner's call D3 = A).
 
 That result is suspicious enough to state how it was reached, because "the defect
 list is empty" is the shape of a list that was never computed.
@@ -11181,11 +11231,12 @@ with a stricter rule — discarding any `Cases:` line beginning with the word
 prose contributed nothing. The orphan set was empty under both readings.
 
 The distribution is uneven and the unevenness is informative rather than
-alarming. Five cases are claimed by exactly one clause each: **E2E-14** (SY-6),
-**E2E-31** (PS-31), **E2E-50** (PS-25), **E2E-51** (VT-18) and **E2E-59** (PS-40).
+alarming. Six cases are claimed by exactly one clause each: **E2E-14** (SY-6),
+**E2E-31** (PS-31), **E2E-50** (PS-25), **E2E-51** (VT-18), **E2E-59** (PS-40) and
+**E2E-60** (PS-41).
 Single-claim cases
 are the ones a later edit can orphan without anyone noticing. Three of the first four
-are lifecycle cases, and E2E-59's one clause is still provisional (PS-40). At the
+are lifecycle cases, and the last two cases' clauses are still provisional (PS-40, PS-41). At the
 other end, **E2E-42** — transitive convergence — is claimed by 26 clauses across
 four sections, which is what a case that exercises a whole design looks like.
 

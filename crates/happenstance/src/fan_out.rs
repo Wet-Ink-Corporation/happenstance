@@ -12,14 +12,13 @@ use happenstance_core::{
     SequencePosition, SequencedEvent, StoreId,
 };
 
-use crate::boundary::{AtLeastOneType, derive_query};
+use crate::boundary::AtLeastOneType;
 use crate::checkpoint::{self, Bound, Keys};
 use crate::chunk::Chunk;
 use crate::codec::Codec;
-use crate::domain::DomainEvent;
 use crate::runner::{
     Progressed, Projection, ProjectionError, StoreBatch, StoreError, Tally, apply_one,
-    considered_through, next_event,
+    considered_through, next_event, projection_query,
 };
 use crate::source::Source;
 
@@ -200,7 +199,7 @@ where
 ///
 /// One runner per `(store, checkpoint_id)` is the caller's to guarantee, as
 /// `run_projection`'s page explains, and that includes this call: two views
-/// in one slice with one name and one scope share a checkpoint id, and
+/// in one slice with one name and one set of scopes share a checkpoint id, and
 /// nothing here refuses them.
 ///
 /// # Example
@@ -398,7 +397,7 @@ impl<P: Projection> Lane<P> {
 
 /// Derives one view's query and its two ids, with `run_projection`'s arms.
 fn derive<P: Projection>(view: &P) -> Result<(Query, Keys), Stop<P>> {
-    let query = derive_query(P::Event::EVENT_TYPES, view.scope())?;
+    let query = projection_query(view)?;
     let keys = checkpoint::derive_pair(view.id(), &query).map_err(ProjectionError::CheckpointId)?;
     Ok((query, keys))
 }
