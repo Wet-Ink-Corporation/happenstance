@@ -51,9 +51,12 @@ events at the tail, so a projection applied them twice, and refusing a pruned ow
 event as `UnheldOwnIdentity`, which wedged the edge. Ingest now skips an event
 whose identity the store has recorded as removed. This release's first part is
 the oracle and the conformance rule; the four adapters follow, each with its own
-entry below. **`happenstance-postgres` and `happenstance-neon` add a migration
-4, which every process that ingests needs before it runs this build**: apply it,
-then deploy.
+entry below. **`happenstance-sqlite` migrates its file to schema
+version 3 on open, and a `0.7` build refuses a migrated file**; upgrade every
+process that opens a store before any of them opens it.
+**`happenstance-postgres` and `happenstance-neon` add a migration 4, which
+every process that ingests needs before it runs this build**: apply it, then
+deploy.
 
 ### Added
 
@@ -98,6 +101,31 @@ then deploy.
   compensates a group of removed and held events. **A new rule is a minor for
   this crate; pin it exactly.** It runs only against a fixture that grants
   `REMOVAL`, so no adapter's CI turns red until that adapter grants it.
+- `happenstance-sqlite`: the removal record (#483, #484, SY-40). Migration 3
+  adds a table, `event_removed`, and an `AFTER DELETE` trigger on `event` that
+  records the origin identity of every row deleted from the file, by any client.
+  Ingest skips a recorded identity, own or foreign, and counts it in
+  `Ingested::skipped`: it burns no position, a call that lands nothing still
+  leaves the file byte-identical (#359), and an own claim the store never held is
+  still refused (SY-38). The probe runs only once the record holds a row, and
+  seeks its primary key. The ingest fixture grants `REMOVAL`, so the mounted
+  ingest family runs `a_removed_event_is_not_readmitted`, and
+  `tests/pruned_replica.rs` holds `experiments/retention-reader`'s three R2-dst
+  scenarios as regression tests, fixed, with their control.
+- `happenstance-cloudflare`: the removal record (#483, #484, SY-40). `migrate`
+  creates a table, `event_removed`, and an `AFTER DELETE` trigger on `event`,
+  `event_record_removal`, that records the origin identity of every event
+  deleted from the log by any statement the object runs; a namespaced log gets
+  its own pair under its prefix. Ingest skips a recorded identity, own or
+  foreign, and counts it in `Ingested::skipped`: it is dropped before it is
+  staged, so it spends no position, and an own claim the object never held is
+  still refused (SY-38). One `EXISTS` per ingest call while the record is
+  empty, and a point lookup on its key per event once it is not. Like the
+  write-group columns there is no schema marker: an older build ignores the
+  table and re-admits what it ingests, so deploy this build to every writer of
+  an object before it serves replication again. The ingest fixture, and
+  `harness/workerd`'s, grant `REMOVAL`, so `a_removed_event_is_not_readmitted`
+  runs on the gate's Node host and under `workerd`.
 - `happenstance-postgres`: the removal record (#483, #484, SY-40). Migration 4,
   `migration::MIGRATION_4`, adds a table, `event_removed`, and a `BEFORE DELETE`
   row trigger on `event`, `event_record_removal`, that records the origin
@@ -155,6 +183,13 @@ then deploy.
   from each log's own `store_id`. No rule's verdict changes.
 - **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
   an identity that is not the store's.
+- **Breaking (schema): `happenstance-sqlite`: `SCHEMA_VERSION` is 3, was 2.**
+  `open`, `open_on` and `open_in_memory` apply migration 3 to a file at 2 and
+  raise its marker in the same transaction; `new`, which never migrates, refuses
+  a file at 2 with `SchemaNeedsMigration { found: 2, required: 3 }`; and a `0.7`
+  build refuses a file at 3 with `UnsupportedSchemaVersion`. Rows deleted before
+  the migration are not recorded, and the README gives the `INSERT` that records
+  one by hand. See [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md#a-sqlite-store-migrates-to-schema-version-3-h4).
 - **Breaking (schema): `happenstance-postgres`: migration 4, and
   `SCHEMA_VERSION` is 3, was 2.** Every ingest locks `event_removed` first, so
   this build's first ingest against a schema without migration 4 fails with an
@@ -189,6 +224,7 @@ it reports that no row below covers becomes a **T** row.
 | H1 | `happenstance` | `run_projection`'s and `run_fan_out`'s first parameter is `Source<'_, S>`, was `&S` (signature) | hand | PS-40, ADR-0109 (#485, 485-Q1) | Changed |
 | H2 | `happenstance` | a run against a store other than the one its checkpoint was built from returns `ProjectionError::SourceChanged`, where it resumed; a `0.7.x` checkpoint is adopted on its first run (behaviour) | hand | PS-40, ADR-0109 (#485, 485-Q2, 485-Q3) | Changed |
 | H3 | `happenstance` | a view's first run commits its pin with an empty batch, and every run reads it, so a `ProjectionStore` sees one more `checkpoint` call per run and one more `begin` and `commit` per view (behaviour) | hand | ADR-0109 (#485) | Changed |
+| H4 | `happenstance-sqlite` | `SCHEMA_VERSION` 2 → 3: a file this release opens is migrated and refused by a `0.7` build, and `new` refuses a file at 2 (value, schema) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 | H5 | `happenstance-postgres` | `SCHEMA_VERSION` 2 → 3, and every ingest locks migration 4's `event_removed`, so this build's first ingest against a schema without it fails with an undefined table: migrate, then deploy; an ingest role needs `SELECT, UPDATE` on `event_removed` (or `SELECT, MAINTAIN` on 17), a deleting role nothing more (value, schema, privileges) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 | H6 | `happenstance-neon` | as H5, through `migration::removal_record_request`: migrate, then deploy; the same grants, on `<event table>_removed` (schema, privileges) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 

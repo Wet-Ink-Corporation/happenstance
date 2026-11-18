@@ -209,6 +209,26 @@ object and writes rows that read as groups of one: deploy this build to every
 writer and peer of an object before it serves replication. The write-group
 family runs where the ingest family does.
 
+`migrate` also creates the **removal record** (#483, #484, SY-40): a table,
+`event_removed`, and an `AFTER DELETE` trigger on `event` that records the
+origin identity of every event deleted from the log, by this crate or by any
+other statement the object runs, such as a retention job's `DELETE`. Ingest
+skips an event whose identity is recorded there and counts it in
+`Ingested::skipped`, so a pruned object that re-pulls, or is re-pushed, what it
+pruned neither takes the events back nor refuses its own as
+`UnheldOwnIdentity`. A recorded event is dropped before it is staged, so it
+spends no position, and an own claim the object never held is still refused
+(SY-38). The probe runs only once the record holds a row. A namespaced log
+keeps its own, `{namespace}_event_removed`. Like the write-group columns it is
+created `IF NOT EXISTS`, with no schema marker, and an older build ignores it,
+re-admitting what it ingests: deploy this build to every writer of an object
+before it serves replication again. Rows deleted before this build migrated the
+object are not recorded; to record one by hand, run `INSERT INTO event_removed
+(origin_store, origin_position) VALUES (X'<origin store id, 16 bytes>',
+<origin position>)`. The record grows by one small row per removed event and is
+kept for ever: deleting a row of it lets that identity be ingested again, so do
+that only once no peer can offer the event.
+
 ### The object as a sync peer over HTTP
 
 `happenstance_cloudflare::sync_http` (#130) is the object's side of a network
@@ -307,8 +327,8 @@ it. A stored value that crossed the line is reported as
 A Durable Object's storage can be rolled back to a bookmark: `getBookmarkForTime`
 or `getCurrentBookmark`, then `onNextSessionRestoreBookmark(bookmark)` and a
 restart of the object. That rolls back everything this store keeps: its events,
-the `store_meta` row that holds its `StoreId`, and the counter that hands out
-positions. Without a re-mint, the restored object hands out positions it already
+the `store_meta` row that holds its `StoreId`, the counter that hands out
+positions and the removal record. Without a re-mint, the restored object hands out positions it already
 gave to events written after the bookmark, under the same `StoreId`, and every
 replication peer that saw those events drops the new ones as duplicates, with no
 error anywhere.

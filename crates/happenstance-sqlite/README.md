@@ -106,6 +106,23 @@ once through `open_on` first. A build older than this one refuses a file this
 one has opened, so upgrade every process that opens a store before any of them
 opens it. Rows written before the migration read back as groups of one.
 
+**Schema version 3.** The same three constructors apply migration 3 on open:
+a table, `event_removed`, and an `AFTER DELETE` trigger on `event` that
+records the origin identity of every row deleted from the file, by this crate
+or by any other client (`sqlite3`, a retention script). Ingest skips an event
+whose identity is recorded there and counts it in `Ingested::skipped`, so a
+pruned replica that re-pulls, or is re-pushed, what it pruned neither takes the
+events back nor refuses its own as `UnheldOwnIdentity` (SY-40, #483, #484).
+`new` refuses a file still at 2 with `SchemaNeedsMigration`, and a build older
+than this one refuses a file at 3, so upgrade every process that opens a store
+before any of them opens it. Rows deleted before the migration are not
+recorded; to record one by hand, run `INSERT INTO event_removed (origin_store,
+origin_position) VALUES (X'<origin store id, 16 bytes>', <origin position>)`.
+The record grows by one small row per removed event and is kept for ever:
+deleting a row of it lets that identity be ingested again, so do that only once
+no peer can offer the event. A restore from a copy of the file rolls the record
+back with the log.
+
 ## The shape it represents
 
 **Serialising, `Send`, native.** One `rusqlite::Connection` behind one `Mutex`,
