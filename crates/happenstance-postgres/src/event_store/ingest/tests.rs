@@ -28,6 +28,7 @@ mod family;
 mod groups;
 mod live;
 mod peer_family;
+mod removal;
 mod restore_family;
 mod server;
 
@@ -394,6 +395,7 @@ async fn postgres_errors_state_their_class() {
         (sqlstate("53300"), Transient),
         (sqlstate("40001"), Transient),
         (sqlstate("40P01"), Transient),
+        (sqlstate("55P03"), Transient),
         (sqlstate("57P01"), Transient),
         (sqlstate("57P02"), Transient),
         (sqlstate("57P03"), Transient),

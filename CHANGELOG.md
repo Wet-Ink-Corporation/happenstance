@@ -40,8 +40,8 @@ skip that store's events at or below its old checkpoint and apply
 again the ones above it, in silence (`experiments/retention-reader`'s R1-4). It
 now stops with `ProjectionError::SourceChanged` before it reads or applies
 anything. **This is a breaking change to `happenstance`'s two runners**; read
-[`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md). No schema changes and no
-store migrates: the pin is one more checkpoint row, under an id of its own.
+[`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md). The pin changes no
+schema: it is one more checkpoint row, under an id of its own.
 
 A store that had events removed outside the port no longer takes them back, or
 refuses them, when they are offered again (#483, #484, SY-40,
@@ -51,7 +51,9 @@ events at the tail, so a projection applied them twice, and refusing a pruned ow
 event as `UnheldOwnIdentity`, which wedged the edge. Ingest now skips an event
 whose identity the store has recorded as removed. This release's first part is
 the oracle and the conformance rule; the four adapters follow, each with its own
-entry below.
+entry below. **`happenstance-postgres` and `happenstance-neon` add a migration
+4, which every process that ingests needs before it runs this build**: apply it,
+then deploy.
 
 ### Added
 
@@ -96,6 +98,31 @@ entry below.
   compensates a group of removed and held events. **A new rule is a minor for
   this crate; pin it exactly.** It runs only against a fixture that grants
   `REMOVAL`, so no adapter's CI turns red until that adapter grants it.
+- `happenstance-postgres`: the removal record (#483, #484, SY-40). Migration 4,
+  `migration::MIGRATION_4`, adds a table, `event_removed`, and a `BEFORE DELETE`
+  row trigger on `event`, `event_record_removal`, that records the origin
+  identity of every row deleted from the log, by any client and whatever its
+  `search_path`. Every ingest takes `LOCK TABLE event_removed IN SHARE MODE` in
+  its first round trip, which is still one round trip, so a removal and an
+  ingest wait for each other rather than race; once the record holds a row, the
+  ingest reads the recorded identities among the offered ones and drops them
+  before writing. A dropped event draws no position, counts in
+  `Ingested::skipped`, and an own claim the store never held is still refused
+  (SY-38). The ingest fixture grants `REMOVAL`, so the mounted ingest family runs
+  `a_removed_event_is_not_readmitted` under `live-postgres`, and the restore
+  family's fixture rolls the record back with the log, as a real restore does.
+- `happenstance-neon`: the removal record (#483, #484, SY-40).
+  `migration::MIGRATION_4` creates the table, `<event table>_removed`, and
+  `migration::removal_trigger_statements` builds the `BEFORE DELETE` trigger
+  and its function as two whole statements, because the migration splitter
+  would cut a `plpgsql` body in half. The ingest request is still one round
+  trip, now of four statements: `LOCK TABLE ... IN SHARE MODE` first, and an
+  ingest statement that anti-joins the record before its `INSERT`. The ingest
+  fixture grants `REMOVAL`, so the rule runs under `live-neon`.
+- `happenstance-postgres`, `happenstance-neon`: SQLSTATE `55P03`
+  (`lock_not_available`) is classified as transient, so an ingest that gives up
+  waiting on a removal under a `lock_timeout` is retried rather than stopping
+  an edge.
 
 ### Changed
 
@@ -115,6 +142,18 @@ entry below.
   from each log's own `store_id`. No rule's verdict changes.
 - **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
   an identity that is not the store's.
+- **Breaking (schema): `happenstance-postgres`: migration 4, and
+  `SCHEMA_VERSION` is 3, was 2.** Every ingest locks `event_removed` first, so
+  this build's first ingest against a schema without migration 4 fails with an
+  undefined table: run `migration::apply`, then deploy. Appends do not read the
+  record. An older build keeps working against a migrated schema, but its
+  ingest ignores the record. See
+  [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md#postgres-and-neon-add-the-removal-record-h5-h6).
+- **Breaking (schema): `happenstance-neon`: migration 4 and its trigger.** As
+  Postgres: send `migration::request(MIGRATION_4, &config)` extended with
+  `migration::removal_trigger_statements(&config)` after migrations 1 and 3,
+  then deploy. An ingest answer is now read from its second result set, after
+  the lock's.
 - **SY-40 is minted `[PROVISIONAL]`** by ADR-0110, and the frozen
   SY-1 and SY-38 are amended by it: a removed event is SY-1's second exception,
   and SY-38's refusal no longer covers an identity the store has recorded as
@@ -138,6 +177,8 @@ it reports that no row below covers becomes a **T** row.
 | H1 | `happenstance` | `run_projection`'s and `run_fan_out`'s first parameter is `Source<'_, S>`, was `&S` (signature) | hand | PS-40, ADR-0109 (#485, 485-Q1) | Changed |
 | H2 | `happenstance` | a run against a store other than the one its checkpoint was built from returns `ProjectionError::SourceChanged`, where it resumed; a `0.7.x` checkpoint is adopted on its first run (behaviour) | hand | PS-40, ADR-0109 (#485, 485-Q2, 485-Q3) | Changed |
 | H3 | `happenstance` | a view's first run commits its pin with an empty batch, and every run reads it, so a `ProjectionStore` sees one more `checkpoint` call per run and one more `begin` and `commit` per view (behaviour) | hand | ADR-0109 (#485) | Changed |
+| H5 | `happenstance-postgres` | `SCHEMA_VERSION` 2 → 3, and every ingest locks migration 4's `event_removed`, so this build's first ingest against a schema without it fails with an undefined table: migrate, then deploy (value, schema) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
+| H6 | `happenstance-neon` | as H5, through `migration::MIGRATION_4` and `migration::removal_trigger_statements`: migrate, then deploy (schema) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 
 **Not breaks, recorded so the absence is a decision:** `SourceChanged` and
 `RecordSource` are new variants on the `#[non_exhaustive]` `ProjectionError`,

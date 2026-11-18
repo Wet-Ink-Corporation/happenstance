@@ -256,17 +256,34 @@ fn host_of(connection: &str) -> Option<String> {
 }
 
 /// A fresh schema's configuration, with the event log's migrations applied,
-/// 1 then 3 in one batch, and a transport onto it.
+/// 1, 3 and 4 and the removal record's trigger, in one batch, and a
+/// transport onto it.
 pub(super) async fn fresh_schema() -> (NeonConfig, LiveTransport) {
     let (config, transport) = empty_schema().await;
-    let both = format!("{}\n{}", migration::MIGRATION_1, migration::MIGRATION_3);
     execute(
         &transport,
-        migration::request(&both, &config),
-        "migrations 1 and 3",
+        event_log_request(&config),
+        "migrations 1, 3 and 4",
     )
     .await;
     (config, transport)
+}
+
+/// The event log's migrations as one batch: 1, 3 and 4 rendered and split,
+/// then the removal record's trigger statements, whole (#483, #484). The
+/// request a consumer sends to bring a schema to what this build expects.
+pub(super) fn event_log_request(config: &NeonConfig) -> SqlRequest {
+    let log = format!(
+        "{}\n{}\n{}",
+        migration::MIGRATION_1,
+        migration::MIGRATION_3,
+        migration::MIGRATION_4
+    );
+    let mut request = migration::request(&log, config);
+    request
+        .statements
+        .extend(migration::removal_trigger_statements(config));
+    request
 }
 
 /// A fresh schema's configuration with nothing applied, and a transport onto

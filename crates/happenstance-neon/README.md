@@ -202,6 +202,49 @@ it read back as groups of one, with no guard; nothing is backfilled. An older
 build keeps working against a migrated schema, and writes rows that read as
 groups of one.
 
+## Upgrading to the removal record: migrate, then deploy
+
+`0.8` adds `migration::MIGRATION_4` (`migrations/0004_removal_record.sql`) and
+`migration::removal_trigger_statements`. Together they create the **removal
+record** (#483, #484, SY-40): a table, `<event table>_removed`, and a
+`BEFORE DELETE` row trigger on the event table, `<event table>_record_removal`,
+that records the origin identity of every event deleted from the log, by this
+crate or by any other client (`psql`, the Neon console, a retention job).
+Ingest skips an event whose identity is recorded there and counts it in
+`Ingested::skipped`, so a pruned replica that re-pulls, or is re-pushed, what it
+pruned neither takes the events back nor refuses its own as
+`UnheldOwnIdentity`. An own claim the store never held is still refused (SY-38).
+
+The trigger's function has a `plpgsql` body that `migration::render`'s splitter
+would cut in half, so it is built as two whole statements rather than shipped in
+the file. Send both in one request, after migrations 1 and 3:
+
+```rust,ignore
+let mut request = migration::request(MIGRATION_4, &config);
+request.statements.extend(migration::removal_trigger_statements(&config));
+transport.round_trip(request).await?;
+```
+
+Every ingest's request now opens with `LOCK TABLE <event table>_removed IN SHARE
+MODE`, so **apply both before deploying this build to any process that
+ingests**: against a schema without the table, an ingest fails with an
+undefined-table error from the endpoint. Appends and reads do not touch the
+record. An older build keeps working against a migrated schema, but its ingest
+ignores the record and re-admits what was removed, so upgrade every process that
+replicates into the store. Both statements are idempotent; the trigger is
+created only when the table carries none of that name.
+
+The lock makes a removal and an ingest wait for each other rather than race; one
+that gives up under a `lock_timeout` fails with SQLSTATE `55P03`, which this
+crate classifies as transient. `TRUNCATE` fires no row trigger, so it records
+nothing. Rows deleted before the migration are not recorded either; to record
+one by hand, run `INSERT INTO <event table>_removed (origin_store,
+origin_position) VALUES ('\x<origin store id, 16 bytes>'::bytea, <origin
+position>) ON CONFLICT DO NOTHING`. The record grows by one small row per
+removed event and is kept for ever: deleting a row of it lets that identity be
+ingested again, so do that only once no peer can offer the event. A branch
+reset or a restore brings the record back with the log and the sequence.
+
 ## Re-mint every branch before its first append
 
 A Neon branch is a copy of its parent, so it carries the parent's store identity together with an

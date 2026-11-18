@@ -3,7 +3,7 @@
 Planned 2026-11-16 against `main` at `5f71d44f`. Status: **D-1 to D-10 and T1 to T7
 answered "A" by the owner on 2026-11-17 ("all as recommended"); PR 1 in progress on
 `claude/project-thread-qkv7ws-483`, cut from `origin/phase-21-prep` at `1b7c85d`.**
-ADR-0110's text still needs the owner's acceptance, so it is `proposed` in PR 1.
+ADR-0110 was `proposed` in PR 1 and is accepted (`0c4a96c`, 2026-11-17).
 
 ## Goal
 
@@ -374,21 +374,21 @@ Each line names the red it must show first. "Wrong store X" means a store in
 
 ### PR 2: SQLite (`happenstance-sqlite`)
 
-- [ ] `tests/migration.rs::a_fresh_file_is_at_schema_version_three`. Red: 2.
-- [ ] `..::a_version_two_file_migrates_to_three_on_open_and_keeps_its_rows`.
-- [ ] `..::module_doc_schema_matches_sqlite_master`, extended to the table and the trigger.
-- [ ] `event_store` unit: `a_raw_delete_records_each_removed_identity`, covering own and
+- [x] `tests/migration.rs::a_fresh_file_is_at_schema_version_three`. Red: 2.
+- [x] `..::a_version_two_file_migrates_to_three_on_open_and_keeps_its_rows`.
+- [x] `..::module_doc_schema_matches_sqlite_master`, extended to the table and the trigger.
+- [x] `event_store` unit: `a_raw_delete_records_each_removed_identity`, covering own and
       foreign rows, deleted from a second `rusqlite` connection.
-- [ ] `..::a_rolled_back_delete_records_nothing`.
-- [ ] `ingest_spike` units mirroring PR 1's five oracle behaviours on SQLite. The reds are
+- [x] `..::a_rolled_back_delete_records_nothing`.
+- [x] `ingest_spike` units mirroring PR 1's five oracle behaviours on SQLite. The reds are
       `appended == 1` and `UnheldOwnIdentity`.
-- [ ] `..::a_skip_against_a_removal_burns_no_position_and_leaves_the_file_unchanged` (#359).
-- [ ] `plan_tests::the_removal_probe_seeks_the_primary_key` (`EXPLAIN QUERY PLAN`, the
+- [x] `..::a_skip_against_a_removal_burns_no_position_and_leaves_the_file_unchanged` (#359).
+- [x] `plan_tests::the_removal_probe_seeks_the_primary_key` (`EXPLAIN QUERY PLAN`, the
       `WATERMARK_SQL` precedent).
-- [ ] `SqliteIngestFixture` grants `REMOVAL` (a raw `DELETE` on the file, maintaining
+- [x] `SqliteIngestFixture` grants `REMOVAL` (a raw `DELETE` on the file, maintaining
       `event_tag` and `tag_cardinality` as `tests/support/mod.rs:304` does). The rule
       passes under the mounted `ingest_store_conformance!`.
-- [ ] `tests/pruned_replica.rs` (new; `#![cfg(feature = "sync")]`): the three experiment
+- [x] `tests/pruned_replica.rs` (new; `#![cfg(feature = "sync")]`): the three experiment
       scenarios as regression tests, ported from
       `experiments/retention-reader/tests/it/r2_ingest_destination.rs`, now asserting the
       fixed behaviour, with the control kept:
@@ -396,45 +396,52 @@ Each line names the red it must show first. "Wrong store X" means a store in
       `a_restored_edge_skips_a_pruned_own_event`,
       `a_fresh_edge_pushing_into_a_pruned_hub_is_a_no_op`,
       `control_a_fresh_edge_pushing_into_an_unpruned_hub_is_a_no_op`.
-- [ ] The existing `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` and
+- [x] The existing `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` and
       `a_claim_lands_as_foreign_after_the_store_is_reminted` stay green, unchanged.
 
 ### PR 3: Durable Object (`happenstance-cloudflare`, `harness/workerd`)
 
-- [ ] `event_store::tests::migrate_creates_the_removal_record_idempotently`, for the
-      unprefixed log and a namespaced one.
-- [ ] `..::a_raw_delete_records_the_identity` through `SqlStorage::exec`.
-- [ ] Ingest units: the five behaviours, as in PR 2.
-- [ ] `..::a_restored_bookmark_rolls_the_record_back` (I-5): remove, bookmark-restore to
+- [x] `event_store::removal::tests::migrate_creates_the_removal_record_idempotently`, for
+      the unprefixed log and a namespaced one.
+- [x] `..::a_raw_delete_records_the_identity` through `SqlStorage::exec`, and
+      `..::a_row_that_is_not_an_event_records_nothing` (the trigger's `WHEN`, which
+      `append`'s ES-18 discard and ingest's staged-row discard rely on).
+- [x] Ingest units (`ingest/tests/removal.rs`): the five behaviours, as in PR 2, plus
+      `a_skip_against_a_removal_writes_nothing_and_spends_no_position`,
+      `the_record_reaches_every_handle_and_survives_reopen` (I-4) and
+      `the_removal_probe_seeks_the_primary_key`.
+- [x] `..::a_restored_bookmark_rolls_the_record_back` (I-5): remove, bookmark-restore to
       before the removal and the later appends, re-mint skipped. A claim on an own event
       minted after the bookmark is refused (SY-38), not skipped.
-- [ ] `CloudflareIngestFixture` and `WorkerdIngestFixture` grant `REMOVAL`. The rule is
-      green on the host shim in the gate and under `workerd` (local, cold, deployed) in the
-      `workerd` job.
+- [x] `CloudflareIngestFixture` and `WorkerdIngestFixture` grant `REMOVAL`. The rule is
+      green on the host shim and under local `workerd`, warm and cold, and through
+      `deployed.mjs` against `wrangler dev`; the deployed object is the `workerd` job's.
 
 ### PR 4: Postgres and Neon (`live-postgres`, `live-neon`)
 
-- [ ] Postgres `migration::tests`: `MIGRATION_4` is idempotent, `SCHEMA_VERSION == 3`, and
+- [x] Postgres `migration::tests`: `MIGRATION_4` is idempotent, `SCHEMA_VERSION == 3`, and
       `EVENT_LOG` contains it.
-- [ ] Postgres live: `a_raw_delete_records_the_identity_whatever_the_search_path` (the
+- [x] Postgres live: `a_raw_delete_records_the_identity_whatever_the_search_path` (the
       deleting session's `search_path` does not name the schema).
-- [ ] Postgres ingest units (`ingest/tests/`): the five behaviours; reds as in PR 2.
-- [ ] `..::a_removal_waits_for_an_ingest_in_flight`. Deterministic with no sleep (TST-10):
+- [x] Postgres ingest units (`ingest/tests/`): the five behaviours; reds as in PR 2.
+- [x] `..::a_removal_waits_for_an_ingest_in_flight`. Deterministic with no sleep (TST-10):
       transaction A takes the ingest's `SHARE` lock, and transaction B sets
       `lock_timeout = '50ms'` and `DELETE`s, failing with `55P03`.
-- [ ] `..::an_ingest_waits_for_a_removal_in_flight`: the mirror case.
-- [ ] `PostgresRestoreFixture::restore` rolls `event_removed` back to the backup (D-7). The
+- [x] `..::an_ingest_waits_for_a_removal_in_flight`: the mirror case.
+- [x] `PostgresRestoreFixture::restore` rolls `event_removed` back to the backup (D-7). The
       restore family stays green. Without this change it goes red, because the post-backup
       own events read as removed after the re-mint and are skipped rather than landing as
       foreign events, which SY-38's remedy sentence requires.
-- [ ] `PostgresIngestFixture` grants `REMOVAL`; the rule is green.
-- [ ] Neon scripted-transport units: the ingest request is one round trip whose first
+- [x] `PostgresIngestFixture` grants `REMOVAL`; the rule is green.
+- [x] Neon scripted-transport units: the ingest request is one round trip whose first
       statement is the `LOCK`, and whose ingest statement carries the anti-join. The
       migration request carries the trigger statements unsplit.
 - [ ] Neon live: the five behaviours, and the rule green with `NeonIngestFixture` granting
-      `REMOVAL`.
+      `REMOVAL`. Written and granted; **not run** (no endpoint credentials here). The SQL was
+      checked by hand against PostgreSQL 17.10 instead; see Progress.
 - [ ] Final step, in PR 4 or a one-line follow-up: SY-40 `[PROVISIONAL]` becomes `[FROZEN]`
-      if D-10 says it freezes on four green adapters.
+      if D-10 says it freezes on four green adapters. **Not taken in PR 4**: this branch does
+      not carry PR 2 or PR 3, and Neon's live run has not happened; see Progress.
 
 ## Decisions (H-16)
 
@@ -606,4 +613,199 @@ its five wrong stores.
   regression tests (I-4, I-5) until the ingest family has `REOPEN`.
   F6: the `SkipsEveryUnheldOwnIdentity` deviation from this list (it fails SY-40 alone, not
   also the SY-38 rule) goes to the owner for confirmation on the PR.
+- 2026-11-17, PR 2 (SQLite), on `claude/project-thread-qkv7ws-483-sqlite`, stacked on PR 1.
+  Reds, each shown by reverting the implementation and restored before the next step:
+  - `tests/migration.rs`, before migration 3: `a_fresh_file_is_at_schema_version_three` failed
+    `left: 2 right: 3` (the marker); `a_version_two_file_migrates_to_three_on_open_and_keeps_its_rows`
+    failed at its `expect_err` (`new` accepted a version-2 file).
+  - `removal::tests::a_raw_delete_records_each_removed_identity`, with the trigger's `WHEN`
+    made false: `left: [] right: [(<own store>, 1), ([0xF0; 16], 7)]`.
+  - `removal::tests::the_removal_probe_seeks_the_primary_key`, with the probe keyed on
+    `origin_position` alone: `["SCAN CONSTANT ROW", "SCALAR SUBQUERY 1", "SCAN event_removed"]`.
+  - `ingest_spike::tests::removal`, with `Probe::new` never preparing the probe (the `0.7.0`
+    ingest): `a_removed_foreign_event_is_skipped_on_redelivery` `(1, 2, 0)` vs `(0, 3, 0)` (#483);
+    `a_removed_own_event_is_skipped_not_refused` `UnheldOwnIdentity { .., position: 1 }` (#484);
+    `a_group_of_removed_and_held_events_writes_no_compensation` `(1, 1, 1)` vs `(0, 2, 0)`;
+    `a_group_with_one_new_event_lands_it_and_compensates_once` `(2, 0, 1)` vs `(1, 1, 1)`;
+    `the_record_reaches_every_handle_and_survives_reopen` `(1, 0, 0)` vs `(0, 1, 0)`;
+    `a_skip_against_a_removal_burns_no_position_and_leaves_the_file_unchanged` `(1, 0, 0)` vs
+    `(0, 1, 0)`. `an_own_claim_never_held_is_refused_after_a_removal` and
+    `a_restored_copy_rolls_the_record_back_with_the_allocator` stay green, as guards.
+  - The mounted rule `ingest_conformance::a_removed_event_is_not_readmitted`, same revert:
+    `SY-40 violated: ... counted as (1, 2, 0); it should be (0, 3, 0)`.
+  - `tests/pruned_replica.rs`, same revert: the experiment's three hazards, exactly.
+    `a_restored_edge_does_not_resurrect_pruned_foreign_events` `a pruned event was re-admitted,
+    left: 2 right: 0`; `a_restored_edge_skips_a_pruned_own_event`
+    `Ingest(UnheldOwnIdentity { .., position: 1 })`; `a_fresh_edge_pushing_into_a_pruned_hub_is_a_no_op`
+    `Push(Ingest(UnheldOwnIdentity { .., position: 1 }))`. The control passes either way.
+  - Decided without the owner: `pruned_replica` is a `[[test]]` with `required-features = ["sync"]`
+    rather than `#![cfg(feature = "sync")]`, for `ingest_port`'s stated reason (no empty binary);
+    I-4 and I-5 are unit tests in `ingest_spike/tests/removal.rs`, the restore being `VACUUM INTO`
+    and a file copy; the probe is prepared once per ingest call (`removal::Probe`), not cached,
+    because the workspace builds `rusqlite` without its `cache` feature.
+  - **Held for the owner (H-16, a changed test expectation):** five existing tests in
+    `tests/migration.rs` pin the version-2 schema and go red under D-3 A:
+    `migration_creates_the_amended_schema` (five objects), `concurrent_opens_of_a_fresh_file_agree_on_one_store_id`
+    (`len() == 5`), `migration_2_adds_write_groups_to_a_version_1_file` (`marker == 2`,
+    `SCHEMA_VERSION == 2`), `new_refuses_a_version_1_file_until_it_is_migrated` (`marker == 2`
+    after `open_on`) and `a_fresh_file_is_created_at_version_2_with_write_groups` (`marker == 2`).
+- 2026-11-17, the five version-2 tests: **the owner chose B** ("old tests still check the
+  v1-to-v2 step through an intermediate state; new tests cover v3"). `migrate`'s steps are now
+  `apply_baseline`, `migrate_to_2`, `migrate_to_3`, `mint_identity` (no behaviour change), and
+  `src/event_store/write_group/tests/version_2.rs` composes them stopping after migration 2,
+  holding every version-2 assertion against a real version-2 file: the five-object set, marker 2,
+  the eight-way race at five objects, write groups added to a v1 file twice with identity and
+  legacy row intact, `WRITE_GROUP_SCHEMA_VERSION == 2`, a migrated v1 file at 2, a fresh file at 2
+  with `write_group`. Red: with `migrate_to_2` skipped, four of the five fail `left: 1 right: 2`;
+  the race test, like its original, does not depend on migration 2. The five integration tests
+  assert version 3 on the public path, each pointing at its version-2 half. One v2 assertion is
+  unreachable: `new` accepting a migrated file at 2, because this build's `new` accepts only 3,
+  so that line stays in the integration test at 3 (option A for that line only).
+  `a_fresh_file_is_created_at_version_2_with_write_groups` is renamed `..._version_3_...`.
+  ADR-0110 accepted (`0c4a96c`), merged; "proposed" dropped from PR 2's text.
+- 2026-11-17, review of part 2 (approved at `ba8a559e758721ec`), minors fixed: F1 the spec's
+  shorthand siblings of `event_store.rs:365` repointed (`:372`, `:381`; `:790`, `:796`, `:783`);
+  F2 the `migrate` comment names `write_group/tests/version_2.rs`; F3 each `Relaxed` counter
+  says why; F4 one `TempFile` in `lib.rs`'s `#[cfg(test)] mod test_support`, used by
+  `removal/tests.rs`, `write_group/tests/version_2.rs` and `ingest_spike.rs`'s tests (inline in
+  `lib.rs` because the edit hook classifies a `src/test_support.rs` file as production code); F5
+  `WRITE_GROUP_SCHEMA_VERSION` is `pub(super)` and `removal.rs` imports it; F6 the experiment
+  addendum cites tests and issues, not a branch commit.
+- 2026-11-17, PR 3 (Durable Object), on `claude/project-thread-qkv7ws-483-do`, stacked on PR 1
+  (`0c4a96c`), not on PR 2. Reds, each run on `wasm32` under the Node 24 shim
+  (`wasm-bindgen-test-runner` 0.2.126); a red that needed dead code to compile ran with
+  `RUSTFLAGS=""` for that run only, never in the gate:
+  - `removal::tests`, with `removal::create` not yet called from `migrate`:
+    `migrate_creates_the_removal_record_idempotently` `the record, once, left: [] right:
+    [("table", "event_removed")]`; `a_raw_delete_records_the_identity` and
+    `a_row_that_is_not_an_event_records_nothing` `no such table: event_removed`.
+  - `ingest::tests::removal`, with the table and trigger in place and the probe not yet
+    consulted by `write_group` (the `0.7.0` ingest):
+    `a_removed_foreign_event_is_skipped_on_redelivery` `(1, 2, 0)` vs `(0, 3, 0)` (#483);
+    `a_removed_own_event_is_skipped_not_refused` `UnheldOwnIdentity { .., position: 2 }`
+    (#484, the removed event being the head); `a_group_of_removed_and_held_events_writes_no_compensation`
+    `(1, 1, 1)` vs `(0, 2, 0)`; `a_group_with_one_new_event_lands_it_and_compensates_once`
+    `(2, 0, 1)` vs `(1, 1, 1)`; `the_record_reaches_every_handle_and_survives_reopen`
+    `through the earlier handle, (1, 0, 0)` vs `(0, 1, 0)`;
+    `a_skip_against_a_removal_writes_nothing_and_spends_no_position` `(1, 0, 0)` vs `(0, 1, 0)`.
+    `an_own_claim_never_held_is_refused_after_a_removal`, `a_restored_bookmark_rolls_the_record_back`
+    and `the_removal_probe_seeks_the_primary_key` green from the start, as guards.
+  - The mounted rule `ingest_conformance::a_removed_event_is_not_readmitted`, with `Probe::open`
+    forced unarmed: `SY-40 violated: the same three groups again, one of them removed was
+    counted as (appended, skipped, compensated) (1, 2, 0); it should be (0, 3, 0)`.
+  - `harness/workerd` `the_ingest_fixture_grants_removal`, with `REMOVAL` not declared: the
+    default `UNSTATED_INGEST_REMOVAL` reason where `None` was expected.
+  - Green: the crate's `wasm32` lib suite 209 passed, its event-store conformance target 101;
+    `harness/workerd` locally `npx vitest run` 16 files, 361 tests, the rule `ran` warm and
+    cold; `deployed.mjs` against `wrangler dev`: ingest 13 of 13, event store 101 of 101,
+    0 failed.
+  - **One existing assertion amended (option B, for the owner to confirm):**
+    `ingest::tests::writes::ingest_writes_a_foreign_row_with_appends_insert_text` pinned
+    `ingest.len() == 4`. The record's fast path is a fifth statement, which this plan's
+    design row accepts ("one extra row read per call"). The four old assertions (`len == 4`,
+    identity read first, append's `INSERT` byte for byte, the stamp, the tag rows) now hold
+    over every statement but the fast path, and two are added: `len == 5` in all, and the
+    fast path's exact text second. No state is reachable in which the call issues the old
+    four alone.
+  - Extended, not changed: `namespace::tests::a_namespace_prefixes_every_name` and
+    `distinct_namespaces_share_no_table` gain the two new names.
+  - Decided without the owner: the record's statements live in `event_store/removal.rs`'s
+    own `migration(tables) -> [String; 2]`, applied by `migrate` after the write-group
+    columns, rather than growing the event store's `migration` to six as the Placement
+    section said. `write_group/tests.rs` and `write_group/read/tests.rs` stand an object
+    from before #420 up from that function, so growing it would have put the record into
+    their "old build" schema; kept at four, those tests still describe the state they
+    claim to. The fast-path `EXISTS` is its own statement, not folded into the identity
+    read, so `incarnation` stays the read `append` shares. The test-only `remove` helper
+    lives in `ingest/tests/support.rs` and the shim fixture calls it; the `workerd`
+    fixture's statements are a pure `removal_statements` builder with host tests.
+  - Not done here, because PR 2 edits the same text and this branch does not carry it:
+    SY-40's "Green on" sentence and `docs/choose-a-topology.md`'s pruning paragraph. Both
+    should name the Durable Object once PR 2 and this PR are merged.
+- 2026-11-18, PR 4 (Postgres and Neon), on `claude/project-thread-qkv7ws-483-pg`, stacked on
+  PR 1 (`0c4a96c`), not on PR 2 or PR 3. Live Postgres was PostgreSQL 17.10 in the
+  testcontainers image, and the crate's lib suite also passed on 16. Reds, each shown by
+  reverting the implementation and restored before the next step:
+  - Postgres `migration::tests`: a compile red first (unresolved `MIGRATION_4`,
+    `WRITE_GROUP_SCHEMA_VERSION`, `WRITE_GROUP_LOG`).
+  - Postgres `ingest::tests::removal`, with `drop_removed` disabled (the `0.7.0` ingest behind
+    the new lock): `a_removed_foreign_event_is_skipped_on_redelivery` `(1, 2, 0)` vs `(0, 3, 0)`
+    (#483); `a_removed_own_event_is_skipped_not_refused` `UnheldOwnIdentity { .., position: 1 }`
+    (#484); `a_group_of_removed_and_held_events_writes_no_compensation` `(1, 1, 1)` vs
+    `(0, 2, 0)`; `a_group_with_one_new_event_lands_it_and_compensates_once` `(2, 0, 1)` vs
+    `(1, 1, 1)`; `a_skip_against_a_removal_draws_no_position` `(1, 0, 0)` vs `(0, 1, 0)`;
+    `the_record_reaches_every_handle_and_survives_reopen` `through the earlier handle,
+    (1, 0, 0)` vs `(0, 1, 0)`. `an_own_claim_never_held_is_refused_after_a_removal` stays green,
+    as a guard.
+  - `a_raw_delete_records_the_identity_whatever_the_search_path`, with the trigger's `INSERT`
+    static rather than `EXECUTE format(.., TG_TABLE_SCHEMA)`: `left: []`, the identities landing
+    in the decoy schema on the deleting session's `search_path`.
+  - `a_removal_waits_for_an_ingest_in_flight`, with the `LOCK` replaced by `SET LOCAL
+    application_name` (replacing it with `SELECT 1` made `fetch_one` return that row instead):
+    the `DELETE` succeeded, `rows_affected: 1`. `an_ingest_waits_for_a_removal_in_flight`, same
+    revert: the patient ingest counted `(1, 0, 0)`, should be `(0, 1, 0)`. Both also red on class
+    `Stop` vs `Transient` before `55P03` was classified.
+  - **The first version of `an_ingest_waits_for_a_removal_in_flight` was decorative**: it passed
+    without the lock, because `ON CONFLICT DO NOTHING` already waits on a row an in-progress
+    transaction is deleting, so an impatient ingest fails `55P03` either way. It now also spawns
+    a patient ingest, waits (no sleep, under a deadline) until `pg_blocking_pids` shows it
+    behind the deleter, commits the deleter, and asserts the skip. That half is what goes red.
+  - The mounted rule `ingest_conformance::a_removed_event_is_not_readmitted`, with the probe
+    disabled: `SY-40 violated: ... (1, 2, 0); it should be (0, 3, 0)`.
+  - **This plan's D-7 prediction was wrong.** The restore family does *not* go red without
+    D-7(i): its rule never ingests after the restore. A direct I-5 test,
+    `a_restore_rolls_the_removal_record_back_with_the_allocator` (Remint and NothingMore), was
+    red without the fixture change: `the restore kept a record the backup did not have,
+    left: 1 right: 0`.
+  - Neon scripted, before the implementation: `the_ingest_statement_drops_recorded_identities_before_its_insert`
+    panicked `the write builds ins` (statement 1 did not exist yet);
+    `the_ingest_request_locks_the_record_first_in_one_round_trip` `MissingColumn { appended }`;
+    `an_answer_without_the_locks_set_is_named` returned `Ok(Ingested { 2, 1, 1 })`. The Neon
+    migration tests' red was not captured: their production code was written first.
+  - Green: the Postgres crate's every binary against 17.10 (lib 132, conformance 117 among them);
+    `harness/sync-round-trip`'s three `postgres::` cases; the Neon lib 125 passed, 62 ignored
+    (live). The Neon SQL was checked by hand against 17.10, as no Neon endpoint is here: the
+    rendered migrations 1, 3 and 4 plus both trigger statements applied twice (idempotent, one
+    trigger), and in a `REPEATABLE READ` transaction `LOCK ... IN SHARE MODE` then the
+    anti-join returned the offered pairs minus the one a `DELETE` had recorded.
+  - **Existing expectations changed, owner rule B** (each old assertion kept where it still
+    holds, new ones added beside it, none dropped or loosened):
+    - Postgres `the_schema_version_counts_the_write_group_migration`: `SCHEMA_VERSION == 2` →
+      `WRITE_GROUP_SCHEMA_VERSION == 2` (the version-2 state, still named), plus new
+      `the_schema_version_counts_the_removal_record` (`SCHEMA_VERSION == 3`).
+    - Postgres `apply_sends_migration_1_then_migration_3`: runs on the test-only
+      `WRITE_GROUP_LOG` (1 + 3, the version-2 lineage) rather than `EVENT_LOG`, plus new
+      `apply_sends_migrations_1_and_3_then_migration_4` on `EVENT_LOG`.
+    - Postgres and Neon class tests: `55P03 → Transient` added.
+    - Postgres restore fixture: rolls `event_removed` back (D-7(i), a fixture behaviour).
+    - Neon, every test that indexed the ingest request: the old indices and the old count of 3
+      (`STATEMENTS_PER_PUSH = 5` on a push) hold over `after_lock(..)`, every statement but the
+      lock, and a whole-request count (4, or 6 on a push) is asserted beside it. Tests:
+      `the_refusal_is_raised..`, `an_unidentified_store..`, `a_refusal_answer_names_the_claim_it_carries`,
+      `ingest_batch_is_one_statement_regardless_of_size`, `ingest_carries_foreign_origin..`,
+      `rotors_ingest..`, `write_group::the_ingest_request_ends_with_the_stamp_after_the_refusal`,
+      `every_ingested_row_is_written_under_a_provisional_tag`.
+    - Neon scripted answers (`LANDED`, `NO_COMPENSATED`, `landed_push`, `a_push_is_one_request..`):
+      a lock result set prepended, since a real answer now carries one.
+    - Neon `a_push_answered_with_the_wrong_number..`: `expected: 5` → `5 + LOCK`, actual
+      `(4, 6)` → `(4 + LOCK, 6 + LOCK)`, `remove(3)` → `remove(3 + LOCK)`, with `LOCK = 1`
+      named. No state is reachable in which a push sends the old five alone.
+  - Decided without the owner: `55P03` classified transient in both adapters (the Errors
+    section assumed it; a classification change); the trigger's `WHEN` guards both origin
+    columns, mirroring `event_origin_idx`'s predicate, where the design named `origin_store`
+    alone; the trigger is created by a `DO` block guarded by `pg_trigger`, not `DROP` +
+    `CREATE`, so a reapply takes no lock on `event`; Neon's anti-join is a `LEFT JOIN .. IS
+    NULL`, because an existing test forbids `NOT EXISTS` in an ingest (SY-1), and its record,
+    function and trigger names derive from `event_table`, so `NeonConfig` gains nothing; Neon
+    still draws positions for every offered row (`fp` counts the batch), so a removed row
+    leaves a gap there, which the design required of Postgres only; Postgres's probe is a child
+    module, `ingest/removal.rs`; `WRITE_GROUP_LOG` is `cfg(test)`. `RawSql::fetch_one`'s
+    future fails the `Executor` HRTB check under `spawn`, so the first round trip goes through
+    `Executor::fetch_one` on `&mut PgConnection`.
+  - CHANGELOG rows **H5** (Postgres) and **H6** (Neon) assume PR 2's SQLite row keeps **H4**;
+    renumber on merge if it does not.
+  - **SY-40 not frozen.** D-10 freezes it on four green adapters. This branch carries two of
+    them, and Neon's is unrun. ADR-0107 and ADR-0108 each recorded a freeze in an ADR of its own,
+    so the freeze is a follow-up after PR 2, PR 3 and a `live-neon` run, with the ADR that
+    names it.
 

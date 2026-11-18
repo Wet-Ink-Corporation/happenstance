@@ -6,7 +6,7 @@
 //! `_sqlx_migrations` table is *per schema*, one per fixture instance, about a
 //! history this crate makes moot: every migration is `IF NOT EXISTS`, so `apply`
 //! runs them all against any schema, fresh or migrated by an older build. Since
-//! #420 the log has two, `MIGRATION_1` and `MIGRATION_3` (named: `event-store`).
+//! #483 the log has three, `MIGRATION_1`, `_3` and `_4` (named: `event-store`).
 //!
 //! # Why the SQL is `include_str!`d rather than written inline
 //!
@@ -55,25 +55,68 @@ pub const MIGRATION_1: &str = include_str!("../migrations/0001_event_log.sql");
 #[cfg(feature = "event-store")]
 pub const MIGRATION_3: &str = include_str!("../migrations/0003_write_group.sql");
 
-/// What [`apply`] sends: [`MIGRATION_1`], then [`MIGRATION_3`], as one batch.
+/// The event log's third migration, as SQL: the removal record (#483, #484,
+/// ADR-0110).
 ///
-/// `concat!` over the two `include_str!`s, so the batch is one constant
-/// compiled in and not a string assembled per call.
+/// The `event_removed` table, keyed by the origin pair, and a `BEFORE DELETE`
+/// row trigger on `event` that records the identity of every row deleted from
+/// it, by any client, through the table's own schema whatever the deleting
+/// session's `search_path`. An ingest treats a recorded identity as one the
+/// store holds (SY-40), so a pruned replica that re-pulls, or is re-pushed, its
+/// removed events skips them instead of appending them again or refusing them
+/// as an unheld own identity.
+///
+/// **Apply it before deploying this build**: every ingest this build sends
+/// locks `event_removed` first, and fails against a schema without it. Append
+/// and the reads do not touch it. Idempotent, as [`MIGRATION_1`] is.
+///
+/// A `TRUNCATE` fires no row trigger and records nothing, and a removal made
+/// before this migration ran is not recorded either; the file shows the
+/// `INSERT` an operator runs to record one by hand. The record grows by one
+/// row per removal and is kept for ever: deleting a row from it lets that
+/// identity be ingested again.
+#[cfg(feature = "event-store")]
+pub const MIGRATION_4: &str = include_str!("../migrations/0004_removal_record.sql");
+
+/// What [`apply`] sends: [`MIGRATION_1`], [`MIGRATION_3`], then
+/// [`MIGRATION_4`], as one batch.
+///
+/// `concat!` over the three `include_str!`s, so the batch is one constant
+/// compiled in and not a string assembled per call. It begins with
+/// [`WRITE_GROUP_LOG`], byte for byte.
 #[cfg(feature = "event-store")]
 const EVENT_LOG: &str = concat!(
     include_str!("../migrations/0001_event_log.sql"),
     "\n",
     include_str!("../migrations/0003_write_group.sql"),
+    "\n",
+    include_str!("../migrations/0004_removal_record.sql"),
 );
+
+/// What a version-2 build's [`apply`] sent: [`MIGRATION_1`], then
+/// [`MIGRATION_3`]. Kept for the tests that stand a version-2 schema up, as
+/// an older build left it, and check this build's batch begins with it.
+#[cfg(all(test, feature = "event-store"))]
+pub(crate) const WRITE_GROUP_LOG: &str = concat!(
+    include_str!("../migrations/0001_event_log.sql"),
+    "\n",
+    include_str!("../migrations/0003_write_group.sql"),
+);
+
+/// The version a schema is at once [`MIGRATION_1`] and [`MIGRATION_3`] are
+/// on it: what the write-group build's [`apply`] left, and what
+/// [`SCHEMA_VERSION`] read until migration 4.
+#[cfg(feature = "event-store")]
+const WRITE_GROUP_SCHEMA_VERSION: u32 = 2;
 
 /// The **event log's** schema version.
 ///
-/// Two: [`MIGRATION_1`] and [`MIGRATION_3`]. It was one through first
-/// publish, while the slice that wired ADR-0024's mechanism could still add
-/// its column to [`MIGRATION_1`] in place, because no deployed table existed to
-/// alter. That licence ended at this crate's first publish, so write groups,
-/// the first change to the log after it, are a migration of their own and a
-/// version of their own.
+/// Three: [`MIGRATION_1`], [`MIGRATION_3`] and [`MIGRATION_4`]. It was one
+/// through first publish, while the slice that wired ADR-0024's mechanism could
+/// still add its column to [`MIGRATION_1`] in place, because no deployed table
+/// existed to alter. That licence ended at this crate's first publish, so write
+/// groups, the first change to the log after it, are a migration of their own
+/// and a version of their own (two), and so is the removal record (three).
 ///
 /// Nothing stores this number in the database: a schema carries no marker, and
 /// [`apply`] is idempotent, so bringing a schema up to this version is running
@@ -87,10 +130,10 @@ const EVENT_LOG: &str = concat!(
 /// that a DBA applying the files in order gets a working database for whichever
 /// roles they use.
 #[cfg(feature = "event-store")]
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = WRITE_GROUP_SCHEMA_VERSION + 1;
 
-/// Applies [`MIGRATION_1`] and then [`MIGRATION_3`] to whatever schema
-/// `executor` resolves against.
+/// Applies [`MIGRATION_1`], [`MIGRATION_3`] and then [`MIGRATION_4`] to
+/// whatever schema `executor` resolves against.
 ///
 /// Which schema that is depends on the connection's `search_path`, and this
 /// function deliberately does not set it: a caller pointing a pool at one schema
@@ -101,11 +144,13 @@ pub const SCHEMA_VERSION: u32 = 2;
 ///
 /// # Upgrading a schema an older build migrated
 ///
-/// Run this against it, then deploy. Both migrations are idempotent, so on
-/// such a schema only [`MIGRATION_3`] does anything. Its `ALTER TABLE`s take
-/// a brief exclusive lock on `event`, and its index build blocks writes while
-/// it runs; `migrations/0003_write_group.sql` says how to build the index
-/// beforehand without blocking them.
+/// Run this against it, then deploy. Every migration is idempotent, so on
+/// such a schema only the ones it lacks do anything. [`MIGRATION_3`]'s `ALTER
+/// TABLE`s take a brief exclusive lock on `event`, and its index build blocks
+/// writes while it runs; `migrations/0003_write_group.sql` says how to build
+/// the index beforehand without blocking them. [`MIGRATION_4`] creates a small
+/// table and a trigger, whose creation briefly blocks writes to `event`; on a
+/// schema that has the trigger it takes no lock on `event` at all.
 ///
 /// # Errors
 ///
@@ -181,7 +226,7 @@ where
 #[cfg(test)]
 mod tests {
     #[cfg(feature = "event-store")]
-    use super::{MIGRATION_1, SCHEMA_VERSION};
+    use super::{MIGRATION_1, MIGRATION_4, SCHEMA_VERSION, WRITE_GROUP_SCHEMA_VERSION};
 
     #[cfg(feature = "event-store")]
     /// [`MIGRATION_1`] with its `--` line comments removed.
@@ -281,9 +326,104 @@ mod tests {
     /// this crate's first publish. Write groups are the first change to the
     /// log after it, so they are a second migration and a second version,
     /// which is what the expectation now pins.
+    ///
+    /// Since migration 4 (#483, #484) the version-2 state is the one an
+    /// older build's `apply` leaves, named [`WRITE_GROUP_SCHEMA_VERSION`], and
+    /// this asserts its number there; the current version is pinned by
+    /// `the_schema_version_counts_the_removal_record`.
     #[test]
     fn the_schema_version_counts_the_write_group_migration() {
-        assert_eq!(SCHEMA_VERSION, 2);
+        assert_eq!(WRITE_GROUP_SCHEMA_VERSION, 2);
+    }
+
+    #[cfg(feature = "event-store")]
+    /// The event log's lineage is at three once migration 4, the removal
+    /// record, is on it (#483, #484, ADR-0110): one past the write-group
+    /// version.
+    #[test]
+    fn the_schema_version_counts_the_removal_record() {
+        assert_eq!(SCHEMA_VERSION, 3);
+        assert_eq!(SCHEMA_VERSION, WRITE_GROUP_SCHEMA_VERSION + 1);
+    }
+
+    #[cfg(feature = "event-store")]
+    /// [`MIGRATION_4`] with its `--` line comments removed, as [`statements`]
+    /// strips migration 1.
+    fn migration_4_statements() -> String {
+        MIGRATION_4
+            .lines()
+            .map(|line| line.split_once("--").map_or(line, |(code, _)| code))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[cfg(feature = "event-store")]
+    /// Migration 4 creates the record keyed by the origin pair, the function
+    /// that writes it through the firing table's own schema, and a `BEFORE
+    /// DELETE` row trigger guarded by the origin index's predicate. Every
+    /// object is created so that applying it twice is a no-op: the table `IF
+    /// NOT EXISTS`, the function `OR REPLACE`, and the trigger only when the
+    /// table carries none of that name.
+    ///
+    /// Rejects an `AFTER` trigger, which deadlocks a removal against an ingest
+    /// holding the record's lock; a static `INSERT`, which resolves the record
+    /// through the deleting session's `search_path`; and an unguarded or
+    /// conflict-intolerant insert, which fails a `DELETE` of an unstamped row or
+    /// of an identity recorded once already.
+    #[test]
+    fn migration_4_creates_the_record_and_its_trigger_idempotently() {
+        let statements = migration_4_statements();
+        assert!(
+            !statements.contains("ADR-0110"),
+            "prose survived the strip, so the assertions below are scanning comments"
+        );
+        for expected in [
+            "CREATE TABLE IF NOT EXISTS event_removed (",
+            "origin_store    bytea   NOT NULL,",
+            "origin_position bigint  NOT NULL,",
+            "PRIMARY KEY (origin_store, origin_position)",
+            "CREATE OR REPLACE FUNCTION event_record_removal() RETURNS trigger",
+            "'INSERT INTO %I.event_removed (origin_store, origin_position) '",
+            "'VALUES ($1, $2) ON CONFLICT DO NOTHING',",
+            "TG_TABLE_SCHEMA",
+            "USING OLD.origin_store, OLD.origin_position;",
+            "RETURN OLD;",
+            "WHERE tgrelid = 'event'::regclass AND tgname = 'event_record_removal'",
+            "BEFORE DELETE ON event",
+            "FOR EACH ROW",
+            "WHEN (OLD.origin_store IS NOT NULL AND OLD.origin_position IS NOT NULL)",
+            "EXECUTE FUNCTION event_record_removal();",
+        ] {
+            assert!(
+                statements.contains(expected),
+                "migration 4 has lost `{expected}`"
+            );
+        }
+        for forbidden in ["AFTER DELETE", "DROP TRIGGER", "TRUNCATE", "bigserial"] {
+            assert!(
+                !statements.contains(forbidden),
+                "migration 4 contains `{forbidden}`"
+            );
+        }
+    }
+
+    #[cfg(feature = "event-store")]
+    /// `apply` sends migrations 1, 3 and 4, in one batch, so one implicit
+    /// transaction: a schema it reaches has all three or none. The first two
+    /// are exactly what an older build's `apply` sent.
+    #[test]
+    fn apply_sends_migrations_1_and_3_then_migration_4() {
+        let batch = super::EVENT_LOG;
+        assert!(
+            batch.starts_with(super::WRITE_GROUP_LOG),
+            "migrations 1 and 3 go first, as a version-2 build sent them"
+        );
+        assert!(batch.ends_with(MIGRATION_4), "migration 4 goes last");
+        assert_eq!(
+            batch.len(),
+            super::WRITE_GROUP_LOG.len() + 1 + MIGRATION_4.len(),
+            "the batch is the three migrations and the lines between them, nothing else"
+        );
     }
 
     #[cfg(feature = "event-store")]
@@ -346,9 +486,14 @@ mod tests {
     #[cfg(feature = "event-store")]
     /// `apply` sends migration 1 and then migration 3, in one batch, so one
     /// implicit transaction: a schema it reaches has both or neither.
+    ///
+    /// Since migration 4 this holds of the version-2 batch an older build's
+    /// `apply` sent, [`WRITE_GROUP_LOG`](super::WRITE_GROUP_LOG), which this
+    /// build's batch begins with
+    /// (`apply_sends_migrations_1_and_3_then_migration_4`).
     #[test]
     fn apply_sends_migration_1_then_migration_3() {
-        let batch = super::EVENT_LOG;
+        let batch = super::WRITE_GROUP_LOG;
         assert!(batch.starts_with(MIGRATION_1), "migration 1 goes first");
         assert!(batch.ends_with(super::MIGRATION_3), "migration 3 goes last");
         assert_eq!(
@@ -390,6 +535,8 @@ mod tests {
             #[cfg(feature = "event-store")]
             MIGRATION_1,
             super::MIGRATION_2,
+            #[cfg(feature = "event-store")]
+            MIGRATION_4,
         ] {
             assert!(
                 !sql.contains("projection_probe"),
