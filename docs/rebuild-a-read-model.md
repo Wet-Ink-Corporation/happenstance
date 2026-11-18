@@ -80,6 +80,14 @@ changes, so does the id, and the next run starts from the beginning. A
 projection that starts reading a new event type therefore sees every older
 event of that type.
 
+The same holds for a projection that follows several tag sets through
+`Projection::scopes`, such as every case one owner holds
+([PS-41](../spec/SPECIFICATION.md#47-checkpoint-semantics)). Adding or
+dropping a scope is a query change, so the view replays from the beginning,
+and the new scope's history is applied. Reordering the scopes, or naming one
+twice, is not. If the set changes often, one projection per scope replays
+less.
+
 Nothing notices when what a projection *does* with its events has changed,
 though. A changed fold over an unchanged query resumes from its old checkpoint,
 so choosing a new name, or resetting the view, is up to you.

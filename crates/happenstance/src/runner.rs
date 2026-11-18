@@ -12,7 +12,7 @@ use happenstance_core::{
     ReadOptions, SequencePosition, SequencedEvent, StoreId, Tags,
 };
 
-use crate::boundary::{AtLeastOneType, derive_query};
+use crate::boundary::{AtLeastOneType, derive_scoped_query};
 use crate::checkpoint::{self, InvalidCheckpointId, SourceMark};
 use crate::chunk::Chunk;
 use crate::codec::{Codec, CodecError, decode_event};
@@ -25,6 +25,21 @@ use crate::source::Source;
 pub(crate) type StoreError<P> = <<P as Projection>::Store as ProjectionStore>::Error;
 /// The write set a projection's `apply` writes into.
 pub(crate) type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::Batch;
+
+/// The query a projection's runs read, and its checkpoint ids digest.
+///
+/// The one derivation both runners and both id functions call, so the read,
+/// the main key and the pin always follow the same [`Projection::scopes`].
+///
+/// # Errors
+///
+/// As [`derive_scoped_query`]: [`InvalidQuery::NoItems`] for an empty
+/// `scopes`.
+pub(crate) fn projection_query<P: Projection>(
+    projection: &P,
+) -> Result<happenstance_core::Query, InvalidQuery> {
+    derive_scoped_query(P::Event::EVENT_TYPES, projection.scopes())
+}
 
 /// A read model an application builds from its own decoded events.
 ///
@@ -40,6 +55,11 @@ pub(crate) type StoreBatch<P> = <<P as Projection>::Store as ProjectionStore>::B
 /// a query of the projection's own: it makes the event set nameable in two
 /// places, and the day they disagree the read model silently stops seeing a
 /// variant its fold still handles.
+///
+/// A projection that follows several tag sets at once, "every case I own",
+/// overrides [`scopes`](Self::scopes) and is handed an event matching any of
+/// them (PS-41). It still names tags, never a query: the event types stay
+/// `EVENT_TYPES`, under every scope.
 ///
 /// # Why `Store` is an associated type
 ///
@@ -273,6 +293,126 @@ pub trait Projection {
     /// somewhere, and the somewhere is always library code.
     fn scope(&self) -> &Tags;
 
+    /// The tag sets this projection follows, any one of which selects.
+    ///
+    /// An event matching **any** of them is handed to
+    /// [`apply`](Self::apply) (PS-41).
+    ///
+    /// Provided; the default is [`scope`](Self::scope) alone, so a projection
+    /// that does not override it reads, and keys its checkpoint, exactly as
+    /// it did before this method existed. Override it for a projection over
+    /// several tag sets at once, such as every case one owner holds, where
+    /// [`scope`](Self::scope)'s one set, whose tags an event must carry all
+    /// of, cannot say "this case or that one".
+    ///
+    /// The runners derive one query item per scope, each over
+    /// [`Self::Event`]'s `EVENT_TYPES`, so a scope narrows by tags and never
+    /// widens the types. An event matching several scopes is handed over
+    /// once, in log order. An empty `Tags` in the slice matches every event
+    /// of those types, as an empty [`scope`](Self::scope) does.
+    ///
+    /// The checkpoint id is derived from the whole set (PS-25): the order of
+    /// the scopes and a repeated scope do not change it, but adding or
+    /// dropping one does, and the view then replays from the start. That is
+    /// what a newly owned case needs, its history applied; for a set that
+    /// changes often, one projection per scope replays less.
+    ///
+    /// An empty slice is refused before anything is read, with
+    /// [`ProjectionError::Boundary`] holding [`InvalidQuery::NoItems`], since
+    /// a query cannot nominate nothing, and reading everything instead would
+    /// be the opposite of following no tag set.
+    ///
+    /// [`scope`](Self::scope) is still required. Once this method is
+    /// overridden no runner reads it; answering the tags every scope shares,
+    /// [`Tags::empty`] when they share none, keeps it true for anyone who
+    /// does. A wrapper that forwards to another projection forwards both, or
+    /// it narrows the inner one to its [`scope`](Self::scope).
+    ///
+    /// ```
+    /// # use happenstance::{bytes::Bytes, Codec, CodecError, DomainEvent};
+    /// # use happenstance::{Event, EventStore, EventType, Json};
+    /// # use happenstance::{MemoryEventStore, MemoryProjectionBatch};
+    /// # use happenstance::{MemoryProjectionStore, MemoryProjectionStoreError};
+    /// use happenstance::{Chunk, Delivered, Projection, ProjectionId, Tags};
+    /// use happenstance::run_projection;
+    /// # use std::error::Error;
+    /// # #[tokio::main] async fn main() -> Result<(), Box<dyn Error>> {
+    /// # #[derive(serde::Serialize, serde::Deserialize)]
+    /// # struct Filed { case: String }
+    /// # const FILED: EventType = EventType::from_static("DocumentFiled");
+    /// # impl DomainEvent for Filed {
+    /// #     const EVENT_TYPES: &'static [EventType] = &[FILED];
+    /// #     fn event_type(&self) -> EventType { FILED }
+    /// #     fn tags(&self) -> Tags { Tags::empty() }
+    /// #     fn encode<C: Codec>(&self, c: &C) -> Result<Bytes, CodecError> {
+    /// #         c.encode(self)
+    /// #     }
+    /// #     fn decode<C: Codec>(c: &C, _t: &EventType, d: &Bytes)
+    /// #         -> Result<Self, CodecError> { c.decode(d) }
+    /// # }
+    ///
+    /// /// Every document filed against a case one owner holds.
+    /// struct Docket {
+    ///     id: ProjectionId,
+    ///     common: Tags,
+    ///     cases: Vec<Tags>,
+    ///     filed: u64,
+    /// }
+    ///
+    /// impl Projection for Docket {
+    ///     type Event = Filed;
+    ///     type Store = MemoryProjectionStore;
+    ///     type Error = MemoryProjectionStoreError;
+    ///     fn id(&self) -> &ProjectionId { &self.id }
+    ///     fn scope(&self) -> &Tags { &self.common }
+    ///     fn scopes(&self) -> &[Tags] { &self.cases }
+    ///     async fn apply(
+    ///         &mut self,
+    ///         _: Delivered<Filed>,
+    ///         batch: &mut MemoryProjectionBatch,
+    ///     ) -> Result<(), MemoryProjectionStoreError> {
+    ///         self.filed += 1;
+    ///         batch.write("filed", self.filed);
+    ///         Ok(())
+    ///     }
+    /// }
+    ///
+    /// let events = MemoryEventStore::new();
+    /// for case in ["c1", "c2", "c3"] {
+    ///     let filed = Filed { case: case.to_owned() };
+    ///     let event = Event::new(FILED, Json.encode(&filed)?)?
+    ///         .with_tags(Tags::from_pairs([("case", case)])?);
+    ///     events.append(&[event], None).await?;
+    /// }
+    ///
+    /// let models = MemoryProjectionStore::new();
+    /// let mut docket = Docket {
+    ///     id: ProjectionId::new("docket")?,
+    ///     common: Tags::empty(),
+    ///     cases: vec![
+    ///         Tags::from_pairs([("case", "c1")])?,
+    ///         Tags::from_pairs([("case", "c3")])?,
+    ///     ],
+    ///     filed: 0,
+    /// };
+    /// let chunk = Chunk::of(64.try_into()?);
+    /// let done =
+    ///     run_projection((&events).into(), &models, &mut docket, &Json, chunk)
+    ///         .await?;
+    /// assert_eq!(done.applied, 2, "c1 and c3, not c2");
+    /// # Ok(()) }
+    /// ```
+    //
+    // `&[Tags]` rather than `-> impl Iterator<Item = &Tags>`: trait_variant
+    // 0.1.3 adds `+ Send` to every `-> impl Trait` it copies into
+    // `SendProjection`, a bound this method has no use for, and the default
+    // borrows `scope()` as a one-element slice without allocating. Not a
+    // `Query` or its items either, for the reason above: the types would
+    // become nameable in a second place.
+    fn scopes(&self) -> &[Tags] {
+        core::slice::from_ref(self.scope())
+    }
+
     /// Applies one delivered event into the store's open write set.
     ///
     /// The event arrives as a [`Delivered`] of [`Self::Event`]:
@@ -422,11 +562,14 @@ where
     W: core::error::Error + 'static,
     A: core::error::Error + 'static,
 {
-    /// The projection constrains neither event types nor tags.
+    /// The projection's query could not be derived.
     ///
-    /// Absorbed rather than unwrapped: the derivation is fallible and library
-    /// code here does not `unwrap`, even where the arm is unreachable for a
-    /// well-formed projection.
+    /// In practice [`InvalidQuery::NoItems`], from an empty
+    /// [`Projection::scopes`]: nothing was read and nothing was applied. The
+    /// other refusal, an item constraining neither event types nor tags, is
+    /// unreachable, because a projection's event type declares at least one
+    /// type. Absorbed rather than unwrapped: the derivation is fallible and
+    /// library code here does not `unwrap`.
     #[error(transparent)]
     Boundary(#[from] InvalidQuery),
 
@@ -924,7 +1067,7 @@ where
     // nothing.
     let () = AtLeastOneType::<P::Event>::CHECKED;
 
-    let query = derive_query(P::Event::EVENT_TYPES, projection.scope())?;
+    let query = projection_query(projection)?;
     // Keyed on the name **and** the query (PS-25), so a projection whose query
     // changed reads `NeverRun` and replays, instead of resuming past events
     // its old query never nominated. Read and commit share this one value.

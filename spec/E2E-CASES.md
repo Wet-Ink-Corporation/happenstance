@@ -39,7 +39,7 @@ types, errors, in-memory store — is `happenstance-core`, and that is what a
 | Group | Cases |
 |---|---|
 | [A — Event store semantics](#a--event-store-semantics) | E2E-01 … E2E-14 |
-| [B — Projections and the runner](#b--projections-and-the-runner) | E2E-15 … E2E-32 |
+| [B — Projections and the runner](#b--projections-and-the-runner) | E2E-15 … E2E-32, E2E-60 |
 | [C — Sync and convergence](#c--sync-and-convergence) | E2E-33 … E2E-45 |
 | [D — Lifecycle and evolution](#d--lifecycle-and-evolution) | E2E-46 … E2E-51, E2E-59 |
 | [E — Edge and `!Send`](#e--edge-and-send) | E2E-52 … E2E-58 |
@@ -847,6 +847,33 @@ passes every rule in the suite and breaks the runner: SPECIFICATION.md's ES-15
 says in terms that no order-invariance rule can catch it, because sorting the
 items is precisely what makes their order stop mattering. VT-31's
 `query_union_is_item_concatenation` is the rule that would, and it landed at phase 4.
+
+---
+
+### E2E-60 — One projection over every case an owner holds
+
+- **From:** the deployment-patterns review (P5, gap 1: "all cases I own" is an OR over
+  many case tags); serves **PS-41**
+- **Level:** contract
+- **Spans:** `happenstance`, `happenstance-core`
+
+**GIVEN** a projection over one event type that names two scopes, `case:c1` and `case:c2`,
+and a log holding a `c1` filing, a `c3` filing, an event of another type tagged `c1`, a
+`c2` filing and one filing tagged both `c1` and `c2`.
+**WHEN** it is run, alone or as one view of a fan-out.
+**THEN** it is handed the three owned filings, once each and in log order, and never the
+`c3` filing or the other type; its checkpoint, under the id derived from both scopes,
+stands at the last of them.
+
+**Falsifies:** that a typed projection's subscription is one conjunction of tags.
+`Query` ORs its items (VT-31), but the typed layer derived one item
+from `scope()`, so following several cases took one projection and one checkpoint per
+case, or an owner tag that stops being true when a case changes hands.
+
+**Rejects:** a runner that reads `scope()` alone, which is every runner before `0.8.0` and
+any wrapper that forwards `scope()` but not `scopes()`: it applies what the one scope
+nominates and commits under another id. And a runner that ORs the scopes' tags without the
+event types, which is handed a type the projection cannot decode.
 
 ---
 

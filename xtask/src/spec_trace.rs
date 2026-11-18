@@ -1029,7 +1029,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 65] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 71] = [
     // ---- VT: value types -------------------------------------------------
     // VT-6's `restored_peer_does_not_reissue_identities` left this table at
     // #133, in the change that wrote it as the restore family's rule: a name
@@ -1348,6 +1348,38 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 65] = [
         "PS-40",
         "source_mark_fits_a_signed_sixty_four_bit_column",
         Unresolvable::Elsewhere("crates/happenstance/src/checkpoint/tests.rs"),
+    ),
+    (
+        // A typed-layer rule, as PS-40's: no adapter can fail it, because the
+        // union is derived above the port and `Query` already ORs its items.
+        "PS-41",
+        "several_scopes_are_one_query",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
+        "PS-41",
+        "several_scopes_are_one_query_in_a_fan_out",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
+        "PS-41",
+        "the_scopes_rule_rejects_a_runner_reading_only_scope",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
+        "PS-41",
+        "the_scopes_rule_rejects_a_runner_that_drops_the_types",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
+        "PS-41",
+        "the_ids_follow_the_set_of_scopes",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
+        "PS-41",
+        "no_scopes_is_refused_before_anything_is_read",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
     ),
     (
         "PS-26",
