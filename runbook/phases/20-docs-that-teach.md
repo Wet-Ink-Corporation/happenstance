@@ -22,10 +22,11 @@ reach-and-adapter-path (blocked, after a `changes-requested` slice),
 
 **For `HS-P0024`'s friction log (#174, 2026-11-18):** the reader now starts at the
 documentation site, `https://wet-ink-corporation.github.io/happenstance/`, not at
-`docs/` on GitHub. Both of `happenstance`'s crate-doc links into the guide point
-there, the front-door sentence (`crates/happenstance/src/lib.rs:66`) and the
-bridge link (`crates/happenstance/src/domain.rs:105`), so a walk that begins on
-docs.rs lands on the rendered page. Walk the log from the site.
+`docs/` on GitHub. Every link from `happenstance`'s crate docs into the site points
+there: the guide root (`crates/happenstance/src/lib.rs:23`), the front-door
+sentence (`lib.rs:66`) and the bridge link (`crates/happenstance/src/domain.rs:105`),
+so a walk that begins on docs.rs lands on the rendered page. Walk the log from the
+site.
 
 **Work carried in from phase 16**
 
