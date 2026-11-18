@@ -7,7 +7,6 @@
 use std::io::Write;
 use std::path::Path;
 
-use happenstance::CommandOutcome;
 use happenstance_sync::FailureClass;
 
 use crate::domain::{Device, Place, ShowLedger};
@@ -105,7 +104,7 @@ async fn offline<W: Write>(scenario: &mut Scenario, out: &mut W) -> Result<(), S
 }
 
 /// The signal returns: both devices push, central holds four sales for three
-/// seats, and central keeps its rule.
+/// seats, and the push that oversold the show landed with central's refund.
 async fn back_online<W: Write>(scenario: &mut Scenario, out: &mut W) -> Result<(), StoryError> {
     writeln!(out, "\n== the signal returns ==")?;
     for device in [Device::Tablet, Device::Phone] {
@@ -120,17 +119,21 @@ async fn back_online<W: Write>(scenario: &mut Scenario, out: &mut W) -> Result<(
     writeln!(
         out,
         "   {} sales for {CAPACITY} seats: each device was right about what it knew,",
-        ledger.held()
+        ledger.sales().count()
     )?;
     writeln!(out, "   and ingest refused neither (SY-1)")?;
 
     writeln!(out, "\n== central keeps its rule ==")?;
-    if scenario.adjudicate().await? == CommandOutcome::Nothing {
+    if ledger.refunded().count() != 1 {
         return Err(StoryError::Contradicted {
             claim: "central refunds the seat sold twice",
         });
     }
-    let ledger = scenario.ledger(Place::Central).await?;
+    writeln!(
+        out,
+        "   central judged each push as it landed: the sale past capacity\n   \
+         landed with its refund, in one write (SY-2)"
+    )?;
     for sale in ledger.sales() {
         if let Some(reason) = ledger.refund_reason(&sale.sale) {
             writeln!(
@@ -140,7 +143,7 @@ async fn back_online<W: Write>(scenario: &mut Scenario, out: &mut W) -> Result<(
             )?;
         }
     }
-    if scenario.adjudicate().await? != CommandOutcome::Nothing {
+    if scenario.judge_again().await? != 0 {
         return Err(StoryError::Contradicted {
             claim: "central's rule, applied twice, refunds once",
         });

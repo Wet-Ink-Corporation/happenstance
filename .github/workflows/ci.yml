@@ -2099,7 +2099,21 @@ jobs:
           token=$(openssl rand -hex 32)
           echo "::add-mask::$token"
           echo "HARNESS_TOKEN=$token" >> "$GITHUB_ENV"
-          npx wrangler deploy --name "$WORKER_NAME" --var "HARNESS_TOKEN:$token" | tee deploy.txt
+          # Cloudflare sometimes answers `code: 10007` ("This Worker does not
+          # exist") on the call right after a fresh script's upload: a race on
+          # its side, not a defect here (#479). Retry that answer alone, three
+          # attempts in all with a short backoff; any other failure fails now.
+          for attempt in 1 2 3; do
+            status=0
+            npx wrangler deploy --name "$WORKER_NAME" --var "HARNESS_TOKEN:$token" > deploy.txt 2>&1 || status=$?
+            cat deploy.txt
+            if [ "$status" -eq 0 ] || ! grep -q 'code: 10007' deploy.txt || [ "$attempt" -eq 3 ]; then
+              break
+            fi
+            echo "::warning::wrangler deploy hit Cloudflare 10007 (attempt $attempt of 3); retrying"
+            sleep $((attempt * 10))
+          done
+          test "$status" -eq 0 || { echo "::error::wrangler deploy failed (exit $status)"; exit "$status"; }
           url=$(grep -oE 'https://[a-z0-9.-]+\.workers\.dev' deploy.txt | head -1)
           test -n "$url" || { echo "::error::wrangler printed no workers.dev URL"; exit 1; }
           echo "url=$url" >> "$GITHUB_OUTPUT"
