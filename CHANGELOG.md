@@ -119,6 +119,19 @@ then deploy.
   trip, now of four statements: `LOCK TABLE ... IN SHARE MODE` first, and an
   ingest statement that anti-joins the record before its `INSERT`. The ingest
   fixture grants `REMOVAL`, so the rule runs under `live-neon`.
+- `happenstance-neon`: `migration::removal_record_request(&config)`, a new
+  public function that returns migration 4 whole, the table and the trigger
+  statements, as one request. Sending `MIGRATION_4` through `migration::request`
+  alone creates the table and no trigger, so ingests lock it and succeed while
+  nothing records a removal; this is the request to send. Additive.
+- `happenstance-postgres`, `happenstance-neon`: the trigger's function is
+  `SECURITY DEFINER SET search_path = pg_catalog, pg_temp`, with `EXECUTE`
+  revoked from `PUBLIC`, so a role that deletes needs nothing on the record. A
+  role that ingests needs `SELECT, UPDATE` on it (`SELECT, MAINTAIN` on
+  Postgres 17), because `LOCK ... IN SHARE MODE` needs one of `UPDATE`,
+  `DELETE`, `TRUNCATE` or `MAINTAIN`. Both READMEs say so, and that an open
+  transaction holding a `DELETE` holds every ingest under the default
+  `lock_timeout = 0`.
 - `happenstance-postgres`, `happenstance-neon`: SQLSTATE `55P03`
   (`lock_not_available`) is classified as transient, so an ingest that gives up
   waiting on a removal under a `lock_timeout` is retried rather than stopping
@@ -150,9 +163,8 @@ then deploy.
   ingest ignores the record. See
   [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md#postgres-and-neon-add-the-removal-record-h5-h6).
 - **Breaking (schema): `happenstance-neon`: migration 4 and its trigger.** As
-  Postgres: send `migration::request(MIGRATION_4, &config)` extended with
-  `migration::removal_trigger_statements(&config)` after migrations 1 and 3,
-  then deploy. An ingest answer is now read from its second result set, after
+  Postgres: send `migration::removal_record_request(&config)` after migrations
+  1 and 3, then deploy. An ingest answer is now read from its second result set, after
   the lock's.
 - **SY-40 is minted `[PROVISIONAL]`** by ADR-0110, and the frozen
   SY-1 and SY-38 are amended by it: a removed event is SY-1's second exception,
@@ -177,8 +189,8 @@ it reports that no row below covers becomes a **T** row.
 | H1 | `happenstance` | `run_projection`'s and `run_fan_out`'s first parameter is `Source<'_, S>`, was `&S` (signature) | hand | PS-40, ADR-0109 (#485, 485-Q1) | Changed |
 | H2 | `happenstance` | a run against a store other than the one its checkpoint was built from returns `ProjectionError::SourceChanged`, where it resumed; a `0.7.x` checkpoint is adopted on its first run (behaviour) | hand | PS-40, ADR-0109 (#485, 485-Q2, 485-Q3) | Changed |
 | H3 | `happenstance` | a view's first run commits its pin with an empty batch, and every run reads it, so a `ProjectionStore` sees one more `checkpoint` call per run and one more `begin` and `commit` per view (behaviour) | hand | ADR-0109 (#485) | Changed |
-| H5 | `happenstance-postgres` | `SCHEMA_VERSION` 2 → 3, and every ingest locks migration 4's `event_removed`, so this build's first ingest against a schema without it fails with an undefined table: migrate, then deploy (value, schema) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
-| H6 | `happenstance-neon` | as H5, through `migration::MIGRATION_4` and `migration::removal_trigger_statements`: migrate, then deploy (schema) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
+| H5 | `happenstance-postgres` | `SCHEMA_VERSION` 2 → 3, and every ingest locks migration 4's `event_removed`, so this build's first ingest against a schema without it fails with an undefined table: migrate, then deploy; an ingest role needs `SELECT, UPDATE` on `event_removed` (or `SELECT, MAINTAIN` on 17), a deleting role nothing more (value, schema, privileges) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
+| H6 | `happenstance-neon` | as H5, through `migration::removal_record_request`: migrate, then deploy; the same grants, on `<event table>_removed` (schema, privileges) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 
 **Not breaks, recorded so the absence is a decision:** `SourceChanged` and
 `RecordSource` are new variants on the `#[non_exhaustive]` `ProjectionError`,

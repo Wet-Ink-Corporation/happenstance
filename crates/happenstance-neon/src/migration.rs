@@ -155,18 +155,17 @@ pub fn remint_statement(config: &NeonConfig) -> SqlStatement {
 /// The trigger's function has a `plpgsql` body, which [`render`]'s splitter
 /// would cut in half, so it is not in this file: this module's doc names the
 /// statement-per-constant builder as the honest move, and that is what
-/// [`removal_trigger_statements`] is. Apply both in one batch, after
-/// [`MIGRATION_1`] and [`MIGRATION_3`]:
+/// [`removal_trigger_statements`] is. [`removal_record_request`] sends both
+/// in one batch; send it after [`MIGRATION_1`] and [`MIGRATION_3`]. Sending
+/// this table through [`request`] alone is a silent failure: an ingest takes
+/// the lock and succeeds, and nothing records a removal.
 ///
 /// ```
 /// use happenstance_neon::NeonConfig;
-/// use happenstance_neon::migration::{self, MIGRATION_4};
+/// use happenstance_neon::migration;
 ///
 /// let config = NeonConfig::default().with_schema("app");
-/// let mut request = migration::request(MIGRATION_4, &config);
-/// request
-///     .statements
-///     .extend(migration::removal_trigger_statements(&config));
+/// let request = migration::removal_record_request(&config);
 /// assert_eq!(request.statements.len(), 3, "the table, the function, the trigger");
 /// ```
 ///
@@ -198,36 +197,99 @@ pub const MIGRATION_4: &str = include_str!("../migrations/0004_removal_record.sq
 /// named `{event_table}_record_removal`, in the configured schema, and so is
 /// the trigger.
 ///
+/// The function is `SECURITY DEFINER`, so its insert runs as the role that
+/// owns it, the one that applied the migration, and a role that deletes from
+/// the event table needs nothing on the record. That is safe because the
+/// function can do one thing, insert the deleted row's origin pair into the
+/// record: it takes no argument, it runs only as a trigger, and the `DO` block
+/// revokes `EXECUTE` from `PUBLIC`, so no other role can attach it to a table of
+/// its own (firing a trigger checks no `EXECUTE`; creating one does). Its
+/// `search_path` is pinned to `pg_catalog, pg_temp`, and every name its body
+/// uses is qualified or a PL/pgSQL variable. Each body's dollar-quote tag is
+/// chosen so that no configured name can close it early.
+///
 /// Each statement carries a dollar-quoted body and must be sent whole, as one
-/// entry of a batch: never through [`render`]. [`MIGRATION_4`] shows the
-/// batch.
+/// entry of a batch: never through [`render`]. [`removal_record_request`]
+/// builds the batch with the table, and is what a consumer sends.
 #[must_use]
 pub fn removal_trigger_statements(config: &NeonConfig) -> [SqlStatement; 2] {
     let event = config.qualified_event();
     let name = format!("{}_record_removal", config.event_table);
     let function = format!("{}.{}", quote_ident(&config.schema), quote_ident(&name));
+    let head = format!(
+        "CREATE OR REPLACE FUNCTION {function}() RETURNS trigger \
+         LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp AS "
+    );
+    let body = format!(
+        " BEGIN \
+         INSERT INTO {removed} (origin_store, origin_position) \
+         VALUES (OLD.origin_store, OLD.origin_position) ON CONFLICT DO NOTHING; \
+         RETURN OLD; END ",
+        removed = qualified_removed(config),
+    );
+    let block = format!(
+        " BEGIN REVOKE EXECUTE ON FUNCTION {function}() FROM PUBLIC; \
+         IF NOT EXISTS (SELECT 1 FROM pg_trigger \
+         WHERE tgrelid = {event_literal}::regclass \
+         AND tgname = {name_literal}) THEN \
+         CREATE TRIGGER {trigger} BEFORE DELETE ON {event} \
+         FOR EACH ROW \
+         WHEN (OLD.origin_store IS NOT NULL AND OLD.origin_position IS NOT NULL) \
+         EXECUTE FUNCTION {function}(); END IF; END ",
+        event_literal = quote_literal(&event),
+        name_literal = quote_literal(&name),
+        trigger = quote_ident(&name),
+    );
+    let record = dollar_tag("record", &[&head, &body]);
+    let trigger = dollar_tag("trigger", &[&block]);
     [
-        SqlStatement::new(format!(
-            "CREATE OR REPLACE FUNCTION {function}() RETURNS trigger \
-             LANGUAGE plpgsql AS $record$ BEGIN \
-             INSERT INTO {removed} (origin_store, origin_position) \
-             VALUES (OLD.origin_store, OLD.origin_position) ON CONFLICT DO NOTHING; \
-             RETURN OLD; END $record$",
-            removed = qualified_removed(config),
-        )),
-        SqlStatement::new(format!(
-            "DO $trigger$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger \
-             WHERE tgrelid = {event_literal}::regclass \
-             AND tgname = {name_literal}) THEN \
-             CREATE TRIGGER {trigger} BEFORE DELETE ON {event} \
-             FOR EACH ROW \
-             WHEN (OLD.origin_store IS NOT NULL AND OLD.origin_position IS NOT NULL) \
-             EXECUTE FUNCTION {function}(); END IF; END $trigger$",
-            event_literal = quote_literal(&event),
-            name_literal = quote_literal(&name),
-            trigger = quote_ident(&name),
-        )),
+        SqlStatement::new(format!("{head}{record}{body}{record}")),
+        SqlStatement::new(format!("DO {trigger}{block}{trigger}")),
     ]
+}
+
+/// A dollar-quote tag that occurs in none of `texts`: `$base$`, or, when one
+/// of them carries it, `base` padded with `_` past their combined length.
+///
+/// The configured names reach a body through [`quote_ident`], which doubles a
+/// `"` and leaves a `$` alone, so a table named `e$record$x` would otherwise
+/// close the function's body inside the identifier. A tag longer than every
+/// text cannot occur in any of them, so the padded one is safe by length
+/// alone, with no search; this crate escapes at emission rather than
+/// validating names (see [`NeonConfig`]), and this keeps that rule total. Only
+/// a name with a `$` in it changes the tag.
+fn dollar_tag(base: &str, texts: &[&str]) -> String {
+    let tag = format!("${base}$");
+    if texts.iter().any(|text| text.contains(&tag)) {
+        let length: usize = texts.iter().map(|text| text.len()).sum();
+        format!("${base}{}$", "_".repeat(length))
+    } else {
+        tag
+    }
+}
+
+/// The whole of migration 4 as one request: [`MIGRATION_4`]'s table, then
+/// [`removal_trigger_statements`]' function and trigger, in one
+/// non-interactive transaction at [`request`]'s isolation level.
+///
+/// Send this, not [`request`]`(MIGRATION_4, ..)`. The table alone is enough
+/// for an ingest to take its lock and succeed, while nothing writes the
+/// record, so every removal would go unrecorded in silence. Send it after
+/// [`MIGRATION_1`] and [`MIGRATION_3`]; it is idempotent, as they are.
+///
+/// ```
+/// use happenstance_neon::NeonConfig;
+/// use happenstance_neon::migration;
+///
+/// let config = NeonConfig::default().with_schema("app");
+/// let request = migration::removal_record_request(&config);
+/// assert_eq!(request.statements.len(), 3, "the table, the function, the trigger");
+/// ```
+#[must_use]
+pub fn removal_record_request(config: &NeonConfig) -> SqlRequest {
+    let mut whole = request(MIGRATION_4, config);
+    whole.statements.extend(removal_trigger_statements(config));
+    whole
 }
 
 /// [`MIGRATION_4`]'s record, quoted and schema-qualified:
@@ -261,9 +323,10 @@ fn split(sql: &str) -> Vec<String> {
 mod tests {
     use super::{
         MIGRATION_1, MIGRATION_2, MIGRATION_3, MIGRATION_4, qualified_removed,
-        removal_trigger_statements, render, split,
+        removal_record_request, removal_trigger_statements, render, split,
     };
     use crate::config::NeonConfig;
+    use crate::transport::IsolationLevel;
 
     /// The splitter's own precondition, asserted rather than assumed.
     ///
@@ -414,7 +477,11 @@ mod tests {
     /// holding the record's lock; an unqualified record, which the endpoint
     /// has no `search_path` to resolve; and an unguarded or
     /// conflict-intolerant insert, which fails a `DELETE` of an unstamped row
-    /// or of an identity recorded once already.
+    /// or of an identity recorded once already. And rejects a function that
+    /// runs as the deleting role, which fails a retention role's `DELETE` for
+    /// want of `INSERT` on the record (review F1), or one that resolves names
+    /// through a caller's `search_path`, or that any role may attach to a
+    /// table of its own and so write the record through.
     #[test]
     fn the_trigger_statements_are_whole_and_qualified() {
         let config = NeonConfig::default().with_schema("hs_5");
@@ -423,14 +490,17 @@ mod tests {
         assert_eq!(
             function.query,
             "CREATE OR REPLACE FUNCTION \"hs_5\".\"event_record_removal\"() RETURNS trigger \
-             LANGUAGE plpgsql AS $record$ BEGIN \
+             LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp \
+             AS $record$ BEGIN \
              INSERT INTO \"hs_5\".\"event_removed\" (origin_store, origin_position) \
              VALUES (OLD.origin_store, OLD.origin_position) ON CONFLICT DO NOTHING; \
              RETURN OLD; END $record$"
         );
         assert_eq!(
             trigger.query,
-            "DO $trigger$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_trigger \
+            "DO $trigger$ BEGIN \
+             REVOKE EXECUTE ON FUNCTION \"hs_5\".\"event_record_removal\"() FROM PUBLIC; \
+             IF NOT EXISTS (SELECT 1 FROM pg_trigger \
              WHERE tgrelid = '\"hs_5\".\"event\"'::regclass \
              AND tgname = 'event_record_removal') THEN \
              CREATE TRIGGER \"event_record_removal\" BEFORE DELETE ON \"hs_5\".\"event\" \
@@ -478,6 +548,71 @@ mod tests {
             "{}",
             trigger.query
         );
+    }
+
+    /// A table name carrying a dollar-quote tag cannot end a body early
+    /// (review F2): each statement's tag occurs exactly twice, opening and
+    /// closing its body, whatever the name holds. [`quote_ident`] doubles a
+    /// `"` but leaves a `$` alone, as Postgres' quoting rule does, so the
+    /// defence is the tag, not the quoting.
+    ///
+    /// Rejects fixed `$record$` and `$trigger$` tags: with this name the
+    /// function's body would close at the identifier, and the rest of the
+    /// statement, the table name's tail included, would be parsed as SQL.
+    ///
+    /// [`quote_ident`]: crate::config::quote_ident
+    #[test]
+    fn the_trigger_statements_choose_a_tag_the_table_name_cannot_close() {
+        let config = NeonConfig::default()
+            .with_schema("s")
+            .with_event_table("e$record$$trigger$x");
+        let [function, trigger] = removal_trigger_statements(&config);
+
+        for (statement, opening) in [(&function.query, " AS $"), (&trigger.query, "DO $")] {
+            let (_, after) = statement
+                .split_once(opening)
+                .unwrap_or_else(|| panic!("no dollar quote opens: {statement}"));
+            let (name, _) = after
+                .split_once('$')
+                .unwrap_or_else(|| panic!("the opening tag is unterminated: {statement}"));
+            let tag = format!("${name}$");
+            assert_eq!(statement.matches(&tag).count(), 2, "{tag} in {statement}");
+            assert!(statement.ends_with(&tag), "{statement}");
+            assert!(
+                statement.contains(r#""e$record$$trigger$x_record_removal""#),
+                "the name is still one identifier: {statement}"
+            );
+        }
+    }
+
+    /// The whole of migration 4, in one request a consumer sends as it is
+    /// (review F3): the table, then the function, then the trigger, at the
+    /// isolation level [`request`](super::request) uses for every migration.
+    ///
+    /// Rejects a helper that sends the table alone, which leaves an ingest
+    /// able to take the record's lock while nothing writes it: a silent
+    /// failure, as every removal goes unrecorded.
+    #[test]
+    fn the_removal_record_request_is_the_table_then_its_trigger() {
+        let config = NeonConfig::default().with_schema("hs_6");
+        let request = removal_record_request(&config);
+
+        let queries: Vec<&str> = request
+            .statements
+            .iter()
+            .map(|statement| statement.query.as_str())
+            .collect();
+        let [function, trigger] = removal_trigger_statements(&config);
+        let table = render(MIGRATION_4, &config);
+        let want: Vec<&str> = table
+            .iter()
+            .map(String::as_str)
+            .chain([function.query.as_str(), trigger.query.as_str()])
+            .collect();
+        assert_eq!(queries, want);
+        assert_eq!(queries.len(), 3, "the table, the function, the trigger");
+        assert_eq!(request.isolation, IsolationLevel::ReadCommitted);
+        assert!(!request.read_only);
     }
 
     #[test]

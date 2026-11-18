@@ -28,6 +28,7 @@ mod family;
 mod groups;
 mod live;
 mod peer_family;
+mod privileges;
 mod removal;
 mod restore_family;
 mod server;

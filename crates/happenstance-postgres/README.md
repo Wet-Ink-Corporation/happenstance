@@ -229,9 +229,32 @@ upgrade every process that replicates into the store. `apply` is idempotent; on
 a schema at version 2 its only lasting lock is the trigger's creation, which
 blocks writes to `event` for a moment.
 
-The lock makes a removal and an ingest wait for each other rather than race. A
-`DELETE` or an ingest that gives up under a `lock_timeout` fails with SQLSTATE
-`55P03`, which this crate classifies as transient: retry it. `TRUNCATE` fires no
+### Privileges
+
+A role that deletes from `event`, a retention job granted `SELECT, DELETE` on
+it, needs **nothing** more: the trigger's function is `SECURITY DEFINER`, so its
+insert into `event_removed` runs as the role that ran the migration. A role that
+ingests needs `SELECT` and `UPDATE` on `event_removed`, on top of what it held
+under `0.7`: `SELECT` for the lookup, and `UPDATE` because Postgres admits
+`LOCK TABLE ... IN SHARE MODE` only to a role holding `UPDATE`, `DELETE`,
+`TRUNCATE` or, from Postgres 17, `MAINTAIN`. On 17, `SELECT, MAINTAIN` is the
+narrower grant, as it writes nothing:
+
+```sql
+GRANT SELECT, UPDATE ON event_removed TO <ingest role>;
+```
+
+### A session holding a `DELETE` holds every ingest
+
+The lock makes a removal and an ingest wait for each other rather than race,
+and Postgres' default `lock_timeout` is `0`, which waits for ever. So a `psql`
+session that runs a `DELETE` on `event` inside a transaction and leaves it open
+stops every ingest into the store until it commits or rolls back. Set a
+`lock_timeout` on the ingesting role, `ALTER ROLE <ingest role> SET
+lock_timeout = '5s'`, or on its connections, `options=-c lock_timeout=5s` in
+the URL. An ingest that gives up then fails with SQLSTATE `55P03`,
+which this crate classifies as transient, so the runner retries it rather than
+stopping the edge. The crate sets no bound of its own. `TRUNCATE` fires no
 row trigger, so it records nothing. Rows deleted before the migration are not
 recorded either; to record one by hand, run
 `INSERT INTO event_removed (origin_store, origin_position) VALUES ('\x<origin store id, 16 bytes>'::bytea, <origin position>) ON CONFLICT DO NOTHING`.

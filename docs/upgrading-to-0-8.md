@@ -321,13 +321,26 @@ On Postgres, `migration::apply` sends migrations 1, 3 and 4. Not compiled here:
 happenstance_postgres::migration::apply(&pool).await?;
 ```
 
-On Neon, send the new migration with its two trigger statements in one
-request, after migrations 1 and 3. Not compiled here:
+On Neon, send `migration::removal_record_request`, the new table with its
+two trigger statements in one request, after migrations 1 and 3. Sending
+`migration::request(MIGRATION_4, &config)` alone creates the table and no
+trigger, and nothing records a removal. Not compiled here:
 
 ```text
-let mut request = migration::request(MIGRATION_4, &config);
-request.statements.extend(migration::removal_trigger_statements(&config));
-transport.round_trip(request).await?;
+transport.round_trip(migration::removal_record_request(&config)).await?;
+```
+
+**Grant the ingesting role two privileges on the record.** Every ingest locks it
+`IN SHARE MODE`, which Postgres admits only to a role holding `UPDATE`,
+`DELETE`, `TRUNCATE` or, from 17, `MAINTAIN`, and reads it, which needs
+`SELECT`. A role that deletes from the log needs nothing more: the trigger
+runs as the role that applied the migration. On Neon the table is
+`<event table>_removed`. Not compiled here:
+
+```text
+GRANT SELECT, UPDATE ON event_removed TO <ingest role>;
+-- or, on Postgres 17 and later, a grant that writes nothing:
+GRANT SELECT, MAINTAIN ON event_removed TO <ingest role>;
 ```
 
 Both are idempotent. Appends and reads do not touch the record, so a process
@@ -336,9 +349,13 @@ working against a migrated schema, but its ingest ignores the record and
 re-admits what was removed, so upgrade every process that replicates into the
 store.
 
-A removal and an ingest now wait for each other. One that gives up under a
-`lock_timeout` fails with SQLSTATE `55P03`, which both adapters now classify as
-transient, so the runner retries it. `TRUNCATE` fires no row trigger and
+A removal and an ingest now wait for each other, and under Postgres' default
+`lock_timeout` of `0` an ingest waits for ever: a `psql` session left open
+after a `DELETE` on the log holds every ingest until it ends. Set a
+`lock_timeout` on the ingesting role (`ALTER ROLE <ingest role> SET
+lock_timeout = '5s'`) or, on Postgres, on its connections. An ingest that gives
+up fails with SQLSTATE `55P03`, which both adapters now classify as transient,
+so the runner retries it. `TRUNCATE` fires no row trigger and
 records nothing. Rows deleted **before** the migration are not recorded; if you
 pruned a replica under 0.7 and it may be offered those events again, record each
 one by hand, its origin store's 16 bytes and its origin position. On Neon the

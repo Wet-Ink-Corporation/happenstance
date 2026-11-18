@@ -818,22 +818,18 @@ async fn settle_probe(probe: &str) -> bool {
         == Some("true")
 }
 
-/// The event log's migrations, 1, 3 and 4, rendered and split, then the
-/// removal record's trigger statements whole (#483, #484): what this build
-/// expects of a schema, applied in one batch so a schema has all of it or
-/// none. Twinned with the library target's `endpoint.rs`, in another crate.
+/// The event log's migrations, 1 and 3 rendered and split, then
+/// `migration::removal_record_request`'s table and trigger (#483, #484): what
+/// this build expects of a schema, applied in one batch so a schema has all of
+/// it or none. Twinned with the library target's `endpoint.rs`, in another
+/// crate.
 ///
 /// Defined last, so the lines above keep the numbers the knowledge base cites.
 fn event_log_request(config: &NeonConfig) -> SqlRequest {
-    let log = format!(
-        "{}\n{}\n{}",
-        migration::MIGRATION_1,
-        migration::MIGRATION_3,
-        migration::MIGRATION_4
-    );
+    let log = format!("{}\n{}", migration::MIGRATION_1, migration::MIGRATION_3);
     let mut request = migration::request(&log, config);
     request
         .statements
-        .extend(migration::removal_trigger_statements(config));
+        .extend(migration::removal_record_request(config).statements);
     request
 }

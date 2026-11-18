@@ -70,6 +70,11 @@ pub const MIGRATION_3: &str = include_str!("../migrations/0003_write_group.sql")
 /// locks `event_removed` first, and fails against a schema without it. Append
 /// and the reads do not touch it. Idempotent, as [`MIGRATION_1`] is.
 ///
+/// **Grant an ingesting role `SELECT, UPDATE` on `event_removed`**: its
+/// `LOCK ... IN SHARE MODE` needs one of `UPDATE`, `DELETE`, `TRUNCATE` or,
+/// from Postgres 17, `MAINTAIN`. A deleting role needs nothing more, as the
+/// trigger's function is `SECURITY DEFINER`; the file says why that is safe.
+///
 /// A `TRUNCATE` fires no row trigger and records nothing, and a removal made
 /// before this migration ran is not recorded either; the file shows the
 /// `INSERT` an operator runs to record one by hand. The record grows by one
@@ -329,8 +334,9 @@ mod tests {
     ///
     /// Since migration 4 (#483, #484) the version-2 state is the one an
     /// older build's `apply` leaves, named [`WRITE_GROUP_SCHEMA_VERSION`], and
-    /// this asserts its number there; the current version is pinned by
-    /// `the_schema_version_counts_the_removal_record`.
+    /// this asserts its number there. The public value, [`SCHEMA_VERSION`],
+    /// is no longer asserted here: `the_schema_version_counts_the_removal_record`
+    /// pins it, at 3.
     #[test]
     fn the_schema_version_counts_the_write_group_migration() {
         assert_eq!(WRITE_GROUP_SCHEMA_VERSION, 2);
@@ -369,7 +375,11 @@ mod tests {
     /// holding the record's lock; a static `INSERT`, which resolves the record
     /// through the deleting session's `search_path`; and an unguarded or
     /// conflict-intolerant insert, which fails a `DELETE` of an unstamped row or
-    /// of an identity recorded once already.
+    /// of an identity recorded once already. And rejects a function that runs
+    /// as the deleting role, which fails a retention role's `DELETE` for want
+    /// of `INSERT` on the record, or one that resolves `format` through a
+    /// caller's `search_path` or that any role may attach to its own table;
+    /// `ingest::tests::privileges` shows the first live.
     #[test]
     fn migration_4_creates_the_record_and_its_trigger_idempotently() {
         let statements = migration_4_statements();
@@ -383,6 +393,8 @@ mod tests {
             "origin_position bigint  NOT NULL,",
             "PRIMARY KEY (origin_store, origin_position)",
             "CREATE OR REPLACE FUNCTION event_record_removal() RETURNS trigger",
+            "LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp",
+            "REVOKE EXECUTE ON FUNCTION event_record_removal() FROM PUBLIC;",
             "'INSERT INTO %I.event_removed (origin_store, origin_position) '",
             "'VALUES ($1, $2) ON CONFLICT DO NOTHING',",
             "TG_TABLE_SCHEMA",

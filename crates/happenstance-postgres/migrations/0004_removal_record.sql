@@ -23,6 +23,27 @@
 -- statement because PL/pgSQL caches a static statement's plan per session, and
 -- the plan would bind whichever `event_removed` the first call resolved.
 --
+-- The function is `SECURITY DEFINER`, so its insert runs as the role that owns
+-- it, the one that ran this migration, and a role that deletes from `event`
+-- needs nothing on `event_removed`: a retention role granted `SELECT, DELETE`
+-- on `event` under 0.7 keeps working. That is safe because the function can do
+-- one thing, insert the deleted row's own origin pair into the record of the
+-- table it fired on: it takes no argument, it can only run as a trigger, and
+-- `EXECUTE` is revoked from `PUBLIC`, so no other role can attach it to a table
+-- of its own (firing a trigger checks no `EXECUTE`; creating one does). Its
+-- `search_path` is pinned to `pg_catalog, pg_temp`, `pg_temp` last, so a role
+-- that can create objects cannot shadow `format`: every other name in the body
+-- is a PL/pgSQL variable (`TG_TABLE_SCHEMA`, `OLD`) or the record, which
+-- `%I` qualifies.
+--
+-- An ingest role needs `SELECT, UPDATE` on `event_removed`, on top of what it
+-- held under 0.7: `SELECT` for the lookup, and `UPDATE` because Postgres admits
+-- `LOCK TABLE ... IN SHARE MODE`, stronger than `ROW EXCLUSIVE`, only to a role
+-- holding `UPDATE`, `DELETE`, `TRUNCATE` or, from Postgres 17, `MAINTAIN`. On 17
+-- `SELECT, MAINTAIN` is the narrower grant, as it lets the role write nothing:
+--
+--     GRANT SELECT, UPDATE ON event_removed TO <ingest role>;
+--
 -- What does NOT record: `TRUNCATE`, which fires no row trigger (it voids the
 -- record for everything it removes, and `TRUNCATE ... RESTART IDENTITY` is a
 -- rewind, already outside ES-38); and a removal made before this migration ran,
@@ -50,7 +71,8 @@ CREATE TABLE IF NOT EXISTS event_removed (
 );
 
 CREATE OR REPLACE FUNCTION event_record_removal() RETURNS trigger
-    LANGUAGE plpgsql AS $record$
+    LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, pg_temp
+    AS $record$
 BEGIN
     EXECUTE format(
         'INSERT INTO %I.event_removed (origin_store, origin_position) '
@@ -60,6 +82,8 @@ BEGIN
     RETURN OLD;
 END
 $record$;
+
+REVOKE EXECUTE ON FUNCTION event_record_removal() FROM PUBLIC;
 
 DO $trigger$
 BEGIN

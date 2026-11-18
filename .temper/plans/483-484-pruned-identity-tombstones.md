@@ -809,3 +809,55 @@ its five wrong stores.
     so the freeze is a follow-up after PR 2, PR 3 and a `live-neon` run, with the ADR that
     names it.
 
+
+- 2026-11-18, PR 4 review fixes (review at fingerprint `c4e8edcbcaafa10b`, changes requested),
+  on the same branch, by a second implementer; the first was unreachable. Live Postgres was
+  17.10 in the reused testcontainers container, every live run `--test-threads=1`.
+  - **F1, privileges.** Verified by hand first, on 17.10 with `SET ROLE`: a role holding
+    `SELECT, DELETE` on `event` fails its `DELETE` with `permission denied for table
+    event_removed`; a role holding `SELECT` on the record cannot `LOCK ... IN SHARE MODE`, and
+    one holding `SELECT, UPDATE` or `SELECT, MAINTAIN` can. Firing a trigger checks no
+    `EXECUTE` on its function, and creating one does, so `REVOKE EXECUTE ... FROM PUBLIC`
+    stops a role attaching the definer function to a table of its own and breaks no deleter.
+    New live tests in `ingest/tests/privileges.rs`, each logging in as a `LOGIN` role it
+    creates and drops:
+    - `a_deleter_holding_only_select_and_delete_is_recorded`, **red** before `SECURITY
+      DEFINER`: `the deleter's DELETE commits: error returned from database: permission denied
+      for table event_removed`. Green after.
+    - `an_ingest_role_needs_select_and_update_on_the_record`: `SELECT` alone on the record is
+      refused `42501` naming `event_removed`, and adding `UPDATE` lands the batch. It pins the
+      documented set, so it went green with the docs rather than with code; its first run was
+      red on the test's own arrangement (`permission denied for table event`: a `0.7` ingest
+      already needed `UPDATE` on `event`, the write-group stamp), which the grant list now
+      says.
+    - Both adapters' function: `SECURITY DEFINER SET search_path = pg_catalog, pg_temp`
+      (`pg_temp` last, the manual's form), `EXECUTE` revoked from `PUBLIC` (Postgres: a
+      statement in the migration; Neon: first in the `DO` block, as the request is fixed at
+      two statements). Unit assertions added in `migration_4_creates_the_record..`; Neon's
+      `the_trigger_statements_are_whole_and_qualified` text, **red**: `left: ".. LANGUAGE
+      plpgsql AS $record$ .."` without `SECURITY DEFINER`. That exact-text expectation was
+      rewritten, because the SQL it pins changed by the review's request.
+  - **F2, dollar tags.** Neon keeps "escape at emission" (`config.rs` rejects validating
+    names), so the tag is chosen: `$record$`/`$trigger$`, or, when the statement's text
+    carries it, the base padded with `_` past the text's length, which no substring can
+    match. New `the_trigger_statements_choose_a_tag_the_table_name_cannot_close`, table
+    `e$record$$trigger$x`, **red**: `$record$ in CREATE OR REPLACE FUNCTION .. left: 4 right:
+    2`. A separate test rather than a case inside `..quote_a_hostile_table_name`, one
+    behaviour per test.
+  - **F3.** `migration::removal_record_request(&config) -> SqlRequest`, beside `request`.
+    **Red**: `error[E0432]: unresolved import super::removal_record_request` in
+    `the_removal_record_request_is_the_table_then_its_trigger`. Used by the `MIGRATION_4`
+    doctest, a new doctest on the function, the README, the upgrade guide and the three
+    private copies.
+  - **F4.** Documented in both READMEs and the upgrade guide: an open transaction holding a
+    `DELETE` holds every ingest under `lock_timeout = 0`; set one on the role (or, on
+    Postgres, the connection); `55P03` is then transient and retried. No `SET LOCAL
+    lock_timeout` added: an open option for the owner.
+  - **F5.** The doc on `the_schema_version_counts_the_write_group_migration` names the test
+    that now pins `SCHEMA_VERSION`.
+  - The Neon SQL was applied by hand to 17.10 (no endpoint here), rendered by a script
+    mirroring the `format!`s, for the default table and for `e$record$$trigger$x` with the
+    padded tags: applied twice, one trigger, `EXECUTE` not held by another role, and a
+    `DELETE` by a role holding only `SELECT, DELETE` recorded the identity.
+  - Green: Postgres lib 134 (all 74 live among them) and every integration binary under
+    `--ignored` (conformance 114); Neon lib 127 passed, 62 ignored (live).
