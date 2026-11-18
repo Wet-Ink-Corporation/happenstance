@@ -135,3 +135,14 @@ New file `crates/happenstance/tests/projection_scopes.rs`; a rule fn held agains
 - Docs: rustdoc on `scopes` with a doctest; `ProjectionError::Boundary` and
   `InvalidCheckpointId::Query` docs; `checkpoint_id` docs; fan-out's one-runner-per-view note;
   `docs/rebuild-a-read-model.md`; CHANGELOG Added / Changed / trace note.
+- Review of `cec1714` (changes requested), addressed:
+  - F1: red `the_real_documents_orphan_no_case` failed `left: 60, right: 59` at
+    `xtask/src/spec_trace.rs:4177`; the count and the quoted §7.6 sentence are now 60.
+  - F3: `scopes` rustdoc and the rebuild how-to say a scope-set change re-applies every
+    still-followed scope onto the rows already built and leaves a dropped scope's rows, and
+    name the three remedies (clear rows in the reset batch, a new id, an idempotent fold).
+  - F4: the companion test's citation is `spec_trace.rs:3853-3869` (the fn through its
+    closing brace; `3873` would run past it).
+  - F6: the default's doc states the contract, not the history.
+  - F7: `the_send_flavour_forwards_an_overridden_scopes` (characterization: green on first run).
+  - F5 left as a follow-up and F2 kept as built, per the coordinator.

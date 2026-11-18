@@ -299,8 +299,9 @@ pub trait Projection {
     /// [`apply`](Self::apply) (PS-41).
     ///
     /// Provided; the default is [`scope`](Self::scope) alone, so a projection
-    /// that does not override it reads, and keys its checkpoint, exactly as
-    /// it did before this method existed. Override it for a projection over
+    /// that does not override it derives the same query, and the same
+    /// checkpoint ids, as a projection with that one scope. Override it for a
+    /// projection over
     /// several tag sets at once, such as every case one owner holds, where
     /// [`scope`](Self::scope)'s one set, whose tags an event must carry all
     /// of, cannot say "this case or that one".
@@ -316,6 +317,15 @@ pub trait Projection {
     /// dropping one does, and the view then replays from the start. That is
     /// what a newly owned case needs, its history applied; for a set that
     /// changes often, one projection per scope replays less.
+    ///
+    /// The replay does not clear the view. It applies every scope still
+    /// followed again, onto the rows the old id already built, and it leaves
+    /// a dropped scope's rows where they are. So before the first run under
+    /// the new set, either clear the view's rows in the same batch that
+    /// resets the new [`checkpoint_id`](crate::checkpoint_id), as
+    /// [`source_checkpoint_id`](crate::source_checkpoint_id)'s example
+    /// does, or build the view under a new [`id`](Self::id), or write an
+    /// [`apply`](Self::apply) that is idempotent per event.
     ///
     /// An empty slice is refused before anything is read, with
     /// [`ProjectionError::Boundary`] holding [`InvalidQuery::NoItems`], since

@@ -4166,7 +4166,7 @@ mod tests {
     }
 
     /// The whole of check 10 against the real documents. §7.6 states the result
-    /// this asserts — *"None. All 59 cases are claimed by at least one clause."*
+    /// this asserts — *"None. All 60 cases are claimed by at least one clause."*
     /// — and until this check that sentence was a hand computation nothing
     /// reproduced.
     #[test]
@@ -4174,7 +4174,7 @@ mod tests {
         let root = workspace_root().unwrap();
         let clauses = parse_clauses(&read(&root, SPEC).unwrap());
         let cases = collect_cases(&read(&root, CASES).unwrap());
-        assert_eq!(cases.len(), 59, "§7.6's count of the document");
+        assert_eq!(cases.len(), 60, "§7.6's count of the document");
 
         let mut problems = Vec::new();
         check_case_ownership(&clauses, &cases, &mut problems);

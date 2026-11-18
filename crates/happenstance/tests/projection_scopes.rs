@@ -584,3 +584,51 @@ fn the_send_flavour_provides_scopes() {
     assert_eq!(SendProjection::scopes(&one), [case("c1")]);
     assert_eq!(Projection::scopes(&one), [case("c1")]);
 }
+
+/// A `Send` projection that overrides `scopes` as well as `scope`.
+struct SendOwner {
+    id: ProjectionId,
+    scope: Tags,
+    owned: [Tags; 2],
+}
+
+impl SendProjection for SendOwner {
+    type Event = Filed;
+    type Store = MemoryProjectionStore;
+    type Error = MemoryProjectionStoreError;
+
+    fn id(&self) -> &ProjectionId {
+        &self.id
+    }
+
+    fn scope(&self) -> &Tags {
+        &self.scope
+    }
+
+    fn scopes(&self) -> &[Tags] {
+        &self.owned
+    }
+
+    async fn apply(
+        &mut self,
+        _: Delivered<Filed>,
+        _: &mut MemoryProjectionBatch,
+    ) -> Result<(), MemoryProjectionStoreError> {
+        Ok(())
+    }
+}
+
+/// The blanket `Projection` impl forwards an override, not only the default:
+/// a runner bound on `Projection` reads the scopes a `Send` projection names.
+/// A blanket impl that left `scopes` to its own default would read `scope`
+/// alone here.
+#[test]
+fn the_send_flavour_forwards_an_overridden_scopes() {
+    let owner = SendOwner {
+        id: ProjectionId::from_static("owner"),
+        scope: case("c3"),
+        owned: [case("c1"), case("c2")],
+    };
+    assert_eq!(SendProjection::scopes(&owner), [case("c1"), case("c2")]);
+    assert_eq!(Projection::scopes(&owner), [case("c1"), case("c2")]);
+}

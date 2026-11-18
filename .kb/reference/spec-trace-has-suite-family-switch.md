@@ -81,7 +81,7 @@ before this workspace noticed.
 (`xtask/src/spec_trace.rs:3838-3845`) now asserts `has_suite("PS-1")` and `has_suite("PS-37")`
 directly, so a future regression — narrowing the prefix list back to exclude `PS` — fails the build
 rather than silently reopening the blind spot. The companion test,
-`the_replication_family_is_checked_and_cf_still_abstains` (`xtask/src/spec_trace.rs:3807-3823`),
+`the_replication_family_is_checked_and_cf_still_abstains` (`xtask/src/spec_trace.rs:3853-3869`),
 asserts `has_suite("SY-1")` and pins `CF-1`'s abstention, on the ground that `CF` clauses are about
 the suite rather than checked by it. Widening `has_suite` to admit every family unconditionally is
 therefore a build failure today, not a judgement call left to the next editor.

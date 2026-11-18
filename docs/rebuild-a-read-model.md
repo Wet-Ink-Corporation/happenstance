@@ -88,6 +88,14 @@ and the new scope's history is applied. Reordering the scopes, or naming one
 twice, is not. If the set changes often, one projection per scope replays
 less.
 
+The replay does not clear the view. Every scope still followed is applied
+again, onto the rows already built under the old id, and a dropped scope's
+rows stay where they are. So before the first run under the new set, do one
+of three things. You can clear the view's rows in the same batch that resets
+the new checkpoint id, as `source_checkpoint_id`'s example does. You can build
+the view under a new name. Or you can write an `apply` that gives the same
+result when it sees an event twice.
+
 Nothing notices when what a projection *does* with its events has changed,
 though. A changed fold over an unchanged query resumes from its old checkpoint,
 so choosing a new name, or resetting the view, is up to you.
