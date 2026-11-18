@@ -230,7 +230,7 @@ impl RecordingProjectionStore {
     ///
     /// A handle rather than a constructor, so a test can set state up through
     /// an unarmed handle and then meet it through this one. Only reads fail:
-    /// commits and resets under `id` still land, and `self` stays unarmed.
+    /// commits and resets under `id` still land, and `self` is unchanged.
     /// The handle keeps `self`'s other injected failures.
     #[must_use]
     pub fn failing_checkpoint_reads_of(&self, id: ProjectionId) -> Self {
