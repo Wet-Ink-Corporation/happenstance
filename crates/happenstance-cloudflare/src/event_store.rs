@@ -84,6 +84,13 @@
 //! that read as groups of one. Deploy this build to every writer and peer of
 //! an object before it serves replication.
 //!
+//! **A table and a trigger record removals** (#483, #484, SY-40):
+//! `event_removed` holds the origin identity of every event deleted from
+//! `event`, written by `event_record_removal`, an `AFTER DELETE` trigger, and
+//! ingest skips an identity recorded there. Both are created `IF NOT EXISTS`
+//! after the columns above, with no marker either; the `removal` module
+//! carries their statements and says why.
+//!
 //! [`contains_event_id`]: EventStore::contains_event_id
 //!
 //! # Why the whole object is one consistency boundary
@@ -212,6 +219,7 @@ fn migration(tables: &Tables) -> [String; 4] {
         event_tag,
         store_meta,
         event_type_idx,
+        ..
     } = tables;
     [
         format!(
@@ -589,6 +597,8 @@ impl CloudflareEventStore {
         }
         // The write-group columns (#420), added to a table that lacks them.
         write_group::add_columns(&self.sql, &self.tables)?;
+        // The removal record and its trigger (SY-40), `IF NOT EXISTS`.
+        removal::create(&self.sql, &self.tables)?;
         // `randomblob` is SQLite's own CSPRNG. Sixteen bytes of entropy from the
         // engine already under the object, weighed against adding a crate for
         // them: `happenstance-core` mints nothing because it is `no_std`-capable
@@ -5239,3 +5249,8 @@ mod write_group;
 // The incarnation read with no feature (#485): what a typed view's `Source` is
 // built from. A child for `ingest`'s reason, and declared last for the same one.
 mod identity;
+
+// The removal record (#483, #484, SY-40): the table and trigger `migrate`
+// creates, and the probe ingest consults. A child for `ingest`'s reason, and
+// declared last for the same one.
+mod removal;

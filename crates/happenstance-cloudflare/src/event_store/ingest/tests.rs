@@ -362,3 +362,7 @@ mod writes;
 // above moves.
 #[cfg(target_arch = "wasm32")]
 mod served;
+// SY-40 (#483, #484): ingest over an object whose rows were deleted outside
+// the port, and the record's reopen and restore behaviour (I-4, I-5).
+#[cfg(target_arch = "wasm32")]
+mod removal;

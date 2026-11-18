@@ -15,6 +15,7 @@ use wasm_bindgen_test::wasm_bindgen_test;
 
 use super::support::{Opened, at, issued, issued_since, local, log, minted, open, raw};
 use crate::event_store::ingest::{StoredOrigin, model, stamp_foreign_sql};
+use crate::event_store::removal::any_removed_sql;
 use crate::event_store::{Ceilings, CloudflareEventStoreError, insert_statement};
 use crate::host::{arm_throw, statements};
 use crate::namespace::Tables;
@@ -63,6 +64,17 @@ async fn ingest_writes_a_foreign_row_with_appends_insert_text() {
         .find(|statement| statement.starts_with("INSERT INTO event ("))
         .expect("an append inserts an event row");
     assert_eq!(append_insert, insert_statement(&Tables::UNPREFIXED));
+    // SY-40 (ADR-0110 item 3) adds one read ahead of the write, of the removal
+    // record and never of the log: its fast path, second, after the identity.
+    // The four statements this test pinned before the record are asserted
+    // unchanged over everything else the call issued.
+    let any_removed = any_removed_sql(&Tables::UNPREFIXED);
+    assert_eq!(ingest.len(), 5, "{ingest:#?}");
+    assert_eq!(ingest[1], any_removed, "the record's fast path, once");
+    let ingest: Vec<String> = ingest
+        .into_iter()
+        .filter(|statement| *statement != any_removed)
+        .collect();
     assert_eq!(ingest.len(), 4, "{ingest:#?}");
     assert!(ingest[0].starts_with("SELECT v AS store_id FROM store_meta"));
     assert_eq!(ingest[1], append_insert, "append's INSERT, byte for byte");

@@ -401,16 +401,21 @@ Each line names the red it must show first. "Wrong store X" means a store in
 
 ### PR 3: Durable Object (`happenstance-cloudflare`, `harness/workerd`)
 
-- [ ] `event_store::tests::migrate_creates_the_removal_record_idempotently`, for the
-      unprefixed log and a namespaced one.
-- [ ] `..::a_raw_delete_records_the_identity` through `SqlStorage::exec`.
-- [ ] Ingest units: the five behaviours, as in PR 2.
-- [ ] `..::a_restored_bookmark_rolls_the_record_back` (I-5): remove, bookmark-restore to
+- [x] `event_store::removal::tests::migrate_creates_the_removal_record_idempotently`, for
+      the unprefixed log and a namespaced one.
+- [x] `..::a_raw_delete_records_the_identity` through `SqlStorage::exec`, and
+      `..::a_row_that_is_not_an_event_records_nothing` (the trigger's `WHEN`, which
+      `append`'s ES-18 discard and ingest's staged-row discard rely on).
+- [x] Ingest units (`ingest/tests/removal.rs`): the five behaviours, as in PR 2, plus
+      `a_skip_against_a_removal_writes_nothing_and_spends_no_position`,
+      `the_record_reaches_every_handle_and_survives_reopen` (I-4) and
+      `the_removal_probe_seeks_the_primary_key`.
+- [x] `..::a_restored_bookmark_rolls_the_record_back` (I-5): remove, bookmark-restore to
       before the removal and the later appends, re-mint skipped. A claim on an own event
       minted after the bookmark is refused (SY-38), not skipped.
-- [ ] `CloudflareIngestFixture` and `WorkerdIngestFixture` grant `REMOVAL`. The rule is
-      green on the host shim in the gate and under `workerd` (local, cold, deployed) in the
-      `workerd` job.
+- [x] `CloudflareIngestFixture` and `WorkerdIngestFixture` grant `REMOVAL`. The rule is
+      green on the host shim and under local `workerd`, warm and cold, and through
+      `deployed.mjs` against `wrangler dev`; the deployed object is the `workerd` job's.
 
 ### PR 4: Postgres and Neon (`live-postgres`, `live-neon`)
 
@@ -672,3 +677,54 @@ its five wrong stores.
   spike `TempFile` hid it with `let _ = remove_file`. Fix in this crate only: `Drop` leaves a
   Windows sharing violation (`cfg!(windows)`, raw code 32) to the temp-dir cleanup; `remove`
   (and so `new`) still panics on every error. No red here: Linux unlinks an open file.
+- 2026-11-17, PR 3 (Durable Object), on `claude/project-thread-qkv7ws-483-do`, stacked on PR 1
+  (`0c4a96c`), not on PR 2. Reds, each run on `wasm32` under the Node 24 shim
+  (`wasm-bindgen-test-runner` 0.2.126); a red that needed dead code to compile ran with
+  `RUSTFLAGS=""` for that run only, never in the gate:
+  - `removal::tests`, with `removal::create` not yet called from `migrate`:
+    `migrate_creates_the_removal_record_idempotently` `the record, once, left: [] right:
+    [("table", "event_removed")]`; `a_raw_delete_records_the_identity` and
+    `a_row_that_is_not_an_event_records_nothing` `no such table: event_removed`.
+  - `ingest::tests::removal`, with the table and trigger in place and the probe not yet
+    consulted by `write_group` (the `0.7.0` ingest):
+    `a_removed_foreign_event_is_skipped_on_redelivery` `(1, 2, 0)` vs `(0, 3, 0)` (#483);
+    `a_removed_own_event_is_skipped_not_refused` `UnheldOwnIdentity { .., position: 2 }`
+    (#484, the removed event being the head); `a_group_of_removed_and_held_events_writes_no_compensation`
+    `(1, 1, 1)` vs `(0, 2, 0)`; `a_group_with_one_new_event_lands_it_and_compensates_once`
+    `(2, 0, 1)` vs `(1, 1, 1)`; `the_record_reaches_every_handle_and_survives_reopen`
+    `through the earlier handle, (1, 0, 0)` vs `(0, 1, 0)`;
+    `a_skip_against_a_removal_writes_nothing_and_spends_no_position` `(1, 0, 0)` vs `(0, 1, 0)`.
+    `an_own_claim_never_held_is_refused_after_a_removal`, `a_restored_bookmark_rolls_the_record_back`
+    and `the_removal_probe_seeks_the_primary_key` green from the start, as guards.
+  - The mounted rule `ingest_conformance::a_removed_event_is_not_readmitted`, with `Probe::open`
+    forced unarmed: `SY-40 violated: the same three groups again, one of them removed was
+    counted as (appended, skipped, compensated) (1, 2, 0); it should be (0, 3, 0)`.
+  - `harness/workerd` `the_ingest_fixture_grants_removal`, with `REMOVAL` not declared: the
+    default `UNSTATED_INGEST_REMOVAL` reason where `None` was expected.
+  - Green: the crate's `wasm32` lib suite 209 passed, its event-store conformance target 101;
+    `harness/workerd` locally `npx vitest run` 16 files, 361 tests, the rule `ran` warm and
+    cold; `deployed.mjs` against `wrangler dev`: ingest 13 of 13, event store 101 of 101,
+    0 failed.
+  - **One existing assertion amended (option B, for the owner to confirm):**
+    `ingest::tests::writes::ingest_writes_a_foreign_row_with_appends_insert_text` pinned
+    `ingest.len() == 4`. The record's fast path is a fifth statement, which this plan's
+    design row accepts ("one extra row read per call"). The four old assertions (`len == 4`,
+    identity read first, append's `INSERT` byte for byte, the stamp, the tag rows) now hold
+    over every statement but the fast path, and two are added: `len == 5` in all, and the
+    fast path's exact text second. No state is reachable in which the call issues the old
+    four alone.
+  - Extended, not changed: `namespace::tests::a_namespace_prefixes_every_name` and
+    `distinct_namespaces_share_no_table` gain the two new names.
+  - Decided without the owner: the record's statements live in `event_store/removal.rs`'s
+    own `migration(tables) -> [String; 2]`, applied by `migrate` after the write-group
+    columns, rather than growing the event store's `migration` to six as the Placement
+    section said. `write_group/tests.rs` and `write_group/read/tests.rs` stand an object
+    from before #420 up from that function, so growing it would have put the record into
+    their "old build" schema; kept at four, those tests still describe the state they
+    claim to. The fast-path `EXISTS` is its own statement, not folded into the identity
+    read, so `incarnation` stays the read `append` shares. The test-only `remove` helper
+    lives in `ingest/tests/support.rs` and the shim fixture calls it; the `workerd`
+    fixture's statements are a pure `removal_statements` builder with host tests.
+  - Not done here, because PR 2 edits the same text and this branch does not carry it:
+    SY-40's "Green on" sentence and `docs/choose-a-topology.md`'s pruning paragraph. Both
+    should name the Durable Object once PR 2 and this PR are merged.

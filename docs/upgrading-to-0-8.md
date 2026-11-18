@@ -20,9 +20,12 @@ refuses, the events it pruned (SY-40). Nothing in your code changes for it,
 but older builds refuse the migrated file.
 
 If your application does not run a typed projection and does not open a SQLite
-event store, change the version number and you are done. The one schema change
-is SQLite's, and it migrates itself on open: see
+event store, change the version number and you are done. No store needs a
+migration step of yours. SQLite's schema change migrates itself on open: see
 [a SQLite store migrates to version 3](#a-sqlite-store-migrates-to-schema-version-3-h4).
+A Durable Object's `migrate` adds one table and one trigger on its next open,
+with no marker: see
+[the removal record](#a-durable-object-gains-the-removal-record).
 
 ## How to use this page
 
@@ -36,6 +39,7 @@ why.
 | move a view to another event store, or restore one | [another store is refused](#a-run-against-another-store-is-refused-h2) |
 | wrote a `ProjectionStore` that counts its calls | [one more read and one more commit](#one-more-read-and-one-more-commit-h3) |
 | open a `SqliteEventStore` | [a SQLite store migrates to version 3](#a-sqlite-store-migrates-to-schema-version-3-h4) |
+| run a `CloudflareEventStore` that replicates | [the removal record](#a-durable-object-gains-the-removal-record) |
 
 Each heading ends with a bracketed id, such as **[H1]**. That is the row for
 this change in the `0.8.0` trace table, at the end of the
@@ -334,3 +338,18 @@ The record grows by one small row per removed event and is kept for ever.
 Deleting a row of it lets that identity be ingested again, so do that only once
 no peer can offer the event. A restore from a copy of the file rolls the record
 back with the log, which is what keeps SY-38's refusal of a restored store true.
+## A Durable Object gains the removal record
+
+**What changed.** `CloudflareEventStore::migrate` creates one more table,
+`event_removed`, and an `AFTER DELETE` trigger on the event table that records
+the identity of every event deleted from the log, so that ingest skips a pruned
+event offered again rather than taking it back or refusing it
+([SY-40](../spec/SPECIFICATION.md)). A namespaced log gets its own pair under
+its prefix. This is not a break, so it has no row in the trace table: `migrate`
+creates both `IF NOT EXISTS` on the next open, and an older build ignores them.
+
+**What to change.** Nothing in your code. Deploy 0.8 to every writer of an
+object before it serves replication again, because an older build ingests
+without consulting the record. Events your retention job deleted before the
+upgrade are not recorded; the crate README gives the `INSERT` that records one
+by hand.

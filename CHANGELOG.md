@@ -55,6 +55,16 @@ entry below. **`happenstance-sqlite` migrates its file to schema
 version 3 on open, and a `0.7` build refuses a migrated file**; upgrade every
 process that opens a store before any of them opens it.
 
+A store that had events removed outside the port no longer takes them back, or
+refuses them, when they are offered again (#483, #484, SY-40,
+[ADR-0110](.kb/decisions/0110-a-removed-event-is-not-readmitted.md)).
+`experiments/retention-reader` showed a restored edge re-admitting pruned foreign
+events at the tail, so a projection applied them twice, and refusing a pruned own
+event as `UnheldOwnIdentity`, which wedged the edge. Ingest now skips an event
+whose identity the store has recorded as removed. This release's first part is
+the oracle and the conformance rule; the four adapters follow, each with its own
+entry below.
+
 ### Added
 
 - `happenstance`: `Source<'a, S>`, an event store paired with its `StoreId`, the
@@ -109,6 +119,20 @@ process that opens a store before any of them opens it.
   ingest family runs `a_removed_event_is_not_readmitted`, and
   `tests/pruned_replica.rs` holds `experiments/retention-reader`'s three R2-dst
   scenarios as regression tests, fixed, with their control.
+- `happenstance-cloudflare`: the removal record (#483, #484, SY-40). `migrate`
+  creates a table, `event_removed`, and an `AFTER DELETE` trigger on `event`,
+  `event_record_removal`, that records the origin identity of every event
+  deleted from the log by any statement the object runs; a namespaced log gets
+  its own pair under its prefix. Ingest skips a recorded identity, own or
+  foreign, and counts it in `Ingested::skipped`: it is dropped before it is
+  staged, so it spends no position, and an own claim the object never held is
+  still refused (SY-38). One `EXISTS` per ingest call while the record is
+  empty, and a point lookup on its key per event once it is not. Like the
+  write-group columns there is no schema marker: an older build ignores the
+  table and re-admits what it ingests, so deploy this build to every writer of
+  an object before it serves replication again. The ingest fixture, and
+  `harness/workerd`'s, grant `REMOVAL`, so `a_removed_event_is_not_readmitted`
+  runs on the gate's Node host and under `workerd`.
 
 ### Changed
 
