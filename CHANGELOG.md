@@ -40,8 +40,8 @@ skip that store's events at or below its old checkpoint and apply
 again the ones above it, in silence (`experiments/retention-reader`'s R1-4). It
 now stops with `ProjectionError::SourceChanged` before it reads or applies
 anything. **This is a breaking change to `happenstance`'s two runners**; read
-[`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md). No schema changes and no
-store migrates: the pin is one more checkpoint row, under an id of its own.
+[`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md). The pin changes no
+schema: it is one more checkpoint row, under an id of its own.
 
 A store that had events removed outside the port no longer takes them back, or
 refuses them, when they are offered again (#483, #484, SY-40,
@@ -51,7 +51,9 @@ events at the tail, so a projection applied them twice, and refusing a pruned ow
 event as `UnheldOwnIdentity`, which wedged the edge. Ingest now skips an event
 whose identity the store has recorded as removed. This release's first part is
 the oracle and the conformance rule; the four adapters follow, each with its own
-entry below.
+entry below. **`happenstance-sqlite` migrates its file to schema
+version 3 on open, and a `0.7` build refuses a migrated file**; upgrade every
+process that opens a store before any of them opens it.
 
 ### Added
 
@@ -96,6 +98,17 @@ entry below.
   compensates a group of removed and held events. **A new rule is a minor for
   this crate; pin it exactly.** It runs only against a fixture that grants
   `REMOVAL`, so no adapter's CI turns red until that adapter grants it.
+- `happenstance-sqlite`: the removal record (#483, #484, SY-40). Migration 3
+  adds a table, `event_removed`, and an `AFTER DELETE` trigger on `event` that
+  records the origin identity of every row deleted from the file, by any client.
+  Ingest skips a recorded identity, own or foreign, and counts it in
+  `Ingested::skipped`: it burns no position, a call that lands nothing still
+  leaves the file byte-identical (#359), and an own claim the store never held is
+  still refused (SY-38). The probe runs only once the record holds a row, and
+  seeks its primary key. The ingest fixture grants `REMOVAL`, so the mounted
+  ingest family runs `a_removed_event_is_not_readmitted`, and
+  `tests/pruned_replica.rs` holds `experiments/retention-reader`'s three R2-dst
+  scenarios as regression tests, fixed, with their control.
 - `happenstance-cloudflare`: the removal record (#483, #484, SY-40). `migrate`
   creates a table, `event_removed`, and an `AFTER DELETE` trigger on `event`,
   `event_record_removal`, that records the origin identity of every event
@@ -129,6 +142,13 @@ entry below.
   from each log's own `store_id`. No rule's verdict changes.
 - **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
   an identity that is not the store's.
+- **Breaking (schema): `happenstance-sqlite`: `SCHEMA_VERSION` is 3, was 2.**
+  `open`, `open_on` and `open_in_memory` apply migration 3 to a file at 2 and
+  raise its marker in the same transaction; `new`, which never migrates, refuses
+  a file at 2 with `SchemaNeedsMigration { found: 2, required: 3 }`; and a `0.7`
+  build refuses a file at 3 with `UnsupportedSchemaVersion`. Rows deleted before
+  the migration are not recorded, and the README gives the `INSERT` that records
+  one by hand. See [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md#a-sqlite-store-migrates-to-schema-version-3-h4).
 - **SY-40 is minted `[PROVISIONAL]`** by ADR-0110, and the frozen
   SY-1 and SY-38 are amended by it: a removed event is SY-1's second exception,
   and SY-38's refusal no longer covers an identity the store has recorded as
@@ -152,6 +172,7 @@ it reports that no row below covers becomes a **T** row.
 | H1 | `happenstance` | `run_projection`'s and `run_fan_out`'s first parameter is `Source<'_, S>`, was `&S` (signature) | hand | PS-40, ADR-0109 (#485, 485-Q1) | Changed |
 | H2 | `happenstance` | a run against a store other than the one its checkpoint was built from returns `ProjectionError::SourceChanged`, where it resumed; a `0.7.x` checkpoint is adopted on its first run (behaviour) | hand | PS-40, ADR-0109 (#485, 485-Q2, 485-Q3) | Changed |
 | H3 | `happenstance` | a view's first run commits its pin with an empty batch, and every run reads it, so a `ProjectionStore` sees one more `checkpoint` call per run and one more `begin` and `commit` per view (behaviour) | hand | ADR-0109 (#485) | Changed |
+| H4 | `happenstance-sqlite` | `SCHEMA_VERSION` 2 → 3: a file this release opens is migrated and refused by a `0.7` build, and `new` refuses a file at 2 (value, schema) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 
 **Not breaks, recorded so the absence is a decision:** `SourceChanged` and
 `RecordSource` are new variants on the `#[non_exhaustive]` `ProjectionError`,
