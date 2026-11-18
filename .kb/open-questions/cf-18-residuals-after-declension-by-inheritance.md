@@ -24,7 +24,7 @@ related:
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/cf-18-observable-skip-reporting.md
   - .kb/_intake/2026-09-07-ratifications-discharged-and-what-execution-changed.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-11-18
 ---
 
 # What declension by inheritance leaves open under CF-18
@@ -107,3 +107,14 @@ each adapter's README, so the README is now where the claim lives, and whether i
 capabilities is a documentation obligation. **Owner now: phase 20** for residuals 1 and 3 — a
 default `cargo test` still prints no `SKIP` line; accepting that, or narrowing CF-18's `Rejects:`
 prose by a frozen-clause repair, is the choice. ES-35's renewal is recorded; it has no phase.
+
+## Phase 21 audit — 2026-11-18
+
+**Proposed, not settled:** `kb-decision-0113` (ADR-0113, `status: proposed`, #145). Residual 1 is
+not accepted. `RuleOutcome::report` would write its `SKIP` line through a locked `io::stderr()`
+handle, which libtest's capture does not intercept, and that is verified red first. The fallback,
+if libtest does capture it, is to accept the gap. CF-18's text does not move. Residual 3: each
+published adapter's README lists its fixtures' declined capabilities. The four in-tree READMEs
+already do, on the proposing branch. Cloudflare's README had said its fixture "declines nothing"
+while `CloudflareFixture` declines `READ_FAULT`, which is residual 3's hazard in this repository.
+This atom stays open until the owner accepts and the testkit change lands.

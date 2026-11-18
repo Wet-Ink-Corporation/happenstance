@@ -1050,6 +1050,24 @@ the owner's acceptance. It supersedes nothing.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0110 | [`kb-decision-0110`](../decisions/0110-a-removed-event-is-not-readmitted.md) | A store that removed an event records it, and ingest skips it, and SY-40 is minted provisional | accepted | — | — |
 
+## 2026-11-18: phase 21's audit debt (#185, #115, #145, #188), proposed
+
+ADR-0111 to ADR-0114 are written straight here with no intake step. They are proposals the owner
+has not yet accepted, prepared overnight from `.temper/plans/audit-debt-adrs.md`. None of them
+mints a clause, edits `[FROZEN]` text or changes `spec_trace.rs`. Each one says what acceptance
+would change. ADR-0111 claims the three rules in `UNCLAIMED_PENDING_ADR`. ADR-0112 keeps a foreign
+rollback non-normative for 1.0 and renews it. ADR-0113 prints a declined capability past libtest's
+capture and lists the declines in each adapter's README; those README lines have landed. ADR-0114
+gives ES-6, ES-29 and ES-31 their rules under phase 20, and leaves SY-6's refusal shape to the
+owner. None supersedes anything.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0111 | [`kb-decision-0111`](../decisions/0111-the-three-unclaimed-rules-are-claimed.md) | The three unclaimed rules are claimed, by ES-44, CF-44, CF-45 and ES-25's Rule line | proposed | 21 | — |
+| ADR-0112 | [`kb-decision-0112`](../decisions/0112-foreign-rollback-stays-non-normative-for-1-0.md) | A foreign rollback stays non-normative for 1.0, renewed against a store whose rollback acts on store-side state | proposed | 21 | — |
+| ADR-0113 | [`kb-decision-0113`](../decisions/0113-a-declined-capability-is-printed-and-listed.md) | A declined capability is printed past libtest's capture and listed in each adapter's README | proposed | 21 | — |
+| ADR-0114 | [`kb-decision-0114`](../decisions/0114-es-6-es-29-and-es-31-get-their-rules.md) | ES-6, ES-29 and ES-31 get their rules, owned by phase 20, and none is demoted | proposed | 21 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

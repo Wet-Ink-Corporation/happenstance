@@ -37,6 +37,19 @@ reach-and-adapter-path (blocked, after a `changes-requested` slice),
       pointer is in `docs/adapter-reading-order.md`, the recipe atom and
       `CONTRIBUTING.md`, and the atom is superseded.
 
+**Work carried in from phase 21's audit**
+
+- [ ] #188 · **The rules three `[FROZEN]` ES clauses name and nothing owned**
+      (`kb-decision-0114`, proposed 2026-11-18). This phase owns them because it is
+      the last phase phase 21 waits on that is not `done`, which is PS-40's
+      precedent. Phase 21 settles nothing, and its audit reads a frozen clause as met.
+      ES-6's `store_error_crosses_a_join_handle`, bound by ADR-0009's marker. ES-31's
+      `checkpoint_lag_is_not_a_position_difference`, beside the typed runner. ES-29's
+      `wire_condition_with_after_is_refused`, shared with SY-6, which needs SY-6's
+      refusal built in the shape the owner picks in that record. Each rule lands with
+      its wrong implementation and takes its `Scheduled` entry out of
+      `xtask/src/spec_trace.rs`.
+
 **Proof artefact.** The initiative's own Definition of Done
 (`.bklg/docs-that-teach/initiative.md`), re-observed from a clean checkout, which is
 what its terminal project `HS-P0025` was specified to do.

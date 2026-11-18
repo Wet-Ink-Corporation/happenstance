@@ -28,7 +28,7 @@ source_paths:
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
   - crates/happenstance-testkit/src/suite.rs
-last_reviewed: 2026-09-29
+last_reviewed: 2026-11-18
 ---
 
 # The read-fault rule checks a real hazard and belongs to no clause
@@ -72,3 +72,12 @@ in the array at `:3026`); sub-questions 1–3 stay open. **Owner now: phase 21 a
 runs against `spec-trace`, which prints the unclaimed count on every green run. The one ADR over
 all three unclaimed entries (sub-question 1) may be taken by any phase before it. Not phase 17's:
 nothing here breaks.
+
+## Phase 21 audit — 2026-11-18
+
+**Proposed, not settled:** `kb-decision-0111` (ADR-0111, `status: proposed`, #185) is the one
+record over all three `UNCLAIMED_PENDING_ADR` entries, which answers sub-question 1 in favour of
+batching. Option A, extended. It mints ES-44 for the store's `Err` item and CF-44 for the fixture's
+`READ_FAULT` promise, CF-39's read-side twin, both frozen on landing on the Postgres and Neon
+evidence above. Sub-question 2: no index. Sub-question 3: `LogError::ReadFailed` stays test
+support. This atom stays open until the owner accepts the record and the clauses land.

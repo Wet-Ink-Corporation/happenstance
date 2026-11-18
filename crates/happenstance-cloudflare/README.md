@@ -151,19 +151,24 @@ Cloudflare's timing. What a local eviction does not reach is state in the
 isolate's globals, because it tears down the object and leaves the wasm instance
 standing.
 
-**The fixture declines nothing, so the conformance run prints no `SKIP` line.** A
+**The fixture declines one capability, `READ_FAULT`, and inherits one default.** A
 rule whose capability a fixture declines still runs and reports the fixture's
-stated reason rather than vanishing from the binary; there is nothing here for
-that channel to report. The two `SKIP` lines the gate *does* print for this crate
-come from a deliberately declining fixture in `tests/fixture_contract.rs`, which
-exists so that the reporting channel has something that fails when it breaks —
-they are a control, not this adapter's result.
+stated reason rather than vanishing from the binary (CF-18), so the read-fault
+rule reports a `SKIP` line rather than a pass. This paragraph used to say the
+fixture declined nothing; the `READ_FAULT` decline in `tests/support/mod.rs`
+arrived after it and nothing compared the two. The other `SKIP` lines the gate
+prints for this crate come from a deliberately declining fixture in
+`tests/fixture_contract.rs`, which exists so that the reporting channel has
+something that fails when it breaks — they are a control, not this adapter's
+result.
 
 | Capability | This fixture | What it buys the run |
 | --- | --- | --- |
 | `SECOND_HANDLE` | supported | two handles onto one object, so the multi-connection rules are real rather than skipped |
 | `REOPEN` | supported | a second binding taken off the same `state`, so an acknowledged write is observed surviving one |
 | `MID_BATCH_FAULT` | supported | a trigger on the object's own `event` table, so atomicity is checked against a fault inside the store's write path |
+| `READ_FAULT` | declined, by scope | the read does not fetch a page at a time across an await, so there is no fetch between two pages to fail; declaring it before such a read exists would report a green result about a read nothing had faulted |
+| `HELD_ABOVE_FRONTIER` | declined, by the testkit's default | true here: a row is visible from the moment it commits, so nothing is held above a frontier |
 
 **The concurrency family is not invoked, and that is a reason rather than a
 silence.** `happenstance_testkit::event_store_concurrency_conformance!` binds
