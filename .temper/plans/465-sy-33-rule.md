@@ -81,3 +81,9 @@ spec's evidence. Building the rule the clause already names changes no meaning.
 - Gate (TEMPER_BASE=5f71d44, --no-cache): GREEN, fingerprint fdc7bc352fb18024. Its three
   advisories (sqlite lib.rs:340, pruned_replica.rs:45, ingest_fixture.rs:195) are in files
   this change does not touch. spec-trace and lints green after the last edit.
+
+## Review follow-up (F2-F4)
+
+- F2: added `Mistake::RefusesAViolatedGuardOnNewEvents` (skips held groups, then checks the guard), so the late probe is shown to do work; fails SY-1 and SY-33.
+- F3: spec wording now says the rule's own pushes never provoke SY-38.
+- F4: `ClassFollowsTheLog` uses `matches!(.., Ok(held) if !held.is_empty())`.

@@ -37,6 +37,12 @@ enum Mistake {
     /// literal condition-level refusal. SY-1's rule rejects it too, from the
     /// side of the fact that was refused.
     RefusesAViolatedGuard,
+    /// The same "conflict" refusal, written the way a careful peer would:
+    /// a group whose events this peer already holds is a re-delivery and is
+    /// skipped first (SY-11), and only a group with new events has its guard
+    /// checked against the log. The rule's re-sent probe is skipped here, so
+    /// only its late probe, the same shape from a fresh origin, sees it.
+    RefusesAViolatedGuardOnNewEvents,
     /// Refuse the oversized push as `Split` while the log is empty and `Stop`
     /// once it holds anything; a pull's refusal keeps the reference peer's
     /// class. Each error's class is fixed when it is made, so
@@ -134,6 +140,26 @@ impl LogKeyedPeer {
                     })
                 })
                 .then_some(Cause::GuardViolated),
+            Mistake::RefusesAViolatedGuardOnNewEvents => batch
+                .groups
+                .iter()
+                .filter(|group| {
+                    group
+                        .events
+                        .iter()
+                        .any(|offered| !events().any(|event| event.id == offered.id))
+                })
+                .filter_map(|group| group.guard.as_ref())
+                .any(|guard| {
+                    events().any(|event| {
+                        guard.is_violated_by(
+                            SequencePosition::FIRST,
+                            event.event.event_type(),
+                            event.event.tags(),
+                        )
+                    })
+                })
+                .then_some(Cause::GuardViolated),
             Mistake::Faithful | Mistake::ClassFollowsTheLog => None,
         })
     }
@@ -152,7 +178,7 @@ impl LogKeyedPeer {
     /// that rule's and this mutant is SY-33's alone.
     async fn refuse_push(&self, inner: MemoryPeerError) -> KeyedError {
         let class = match self.mistake {
-            Mistake::ClassFollowsTheLog if !self.held().await.is_ok_and(|held| held.is_empty()) => {
+            Mistake::ClassFollowsTheLog if matches!(self.held().await, Ok(held) if !held.is_empty()) => {
                 FailureClass::Stop
             }
             _ => inner.class(),
@@ -315,6 +341,20 @@ fn refusal_is_never_condition_derived_fails_a_peer_whose_class_follows_its_log()
 fn refusal_is_never_condition_derived_fails_a_peer_that_refuses_a_violated_guard() {
     fails_exactly_these(
         Mistake::RefusesAViolatedGuard,
+        &[
+            ("ingest_never_rejects", "SY-1"),
+            ("refusal_is_never_condition_derived", "SY-33"),
+        ],
+    );
+}
+
+/// The careful "conflict" refusal, which skips a re-delivery before it checks
+/// the guard. The rule's re-sent probe passes it, so this pins that the late
+/// probe from a fresh origin does work of its own.
+#[test]
+fn refusal_is_never_condition_derived_fails_a_peer_that_refuses_a_violated_guard_on_new_events() {
+    fails_exactly_these(
+        Mistake::RefusesAViolatedGuardOnNewEvents,
         &[
             ("ingest_never_rejects", "SY-1"),
             ("refusal_is_never_condition_derived", "SY-33"),

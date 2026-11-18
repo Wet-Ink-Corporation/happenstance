@@ -8538,10 +8538,11 @@ the fixture receiver is driven into every refusal it can produce; the rule
 asserts none of them varies with the receiver's log contents. It drives them
 once on the fresh receiver and once after pushing a rival claim the probe's
 guard names and unrelated events, with a re-sent probe and a late one between,
-and compares refused or accepted and the class. SY-38's refusal is never
-provoked, since the rule's origins are its own. `tests/wrong_refusals.rs` holds
-it against a peer that refuses what it holds, one that refuses a violated guard
-and one whose refusal's class follows its log.
+and compares refused or accepted and the class. The rule's own pushes never
+provoke SY-38's refusal, since their origins are the rule's own.
+`tests/wrong_refusals.rs` holds it against a peer that refuses what it holds,
+one that refuses a violated guard, one that does so only for new events, and
+one whose refusal's class follows its log.
 Cases: E2E-45, E2E-39, E2E-47.
 
 *Rejects:* the reading that will otherwise be re-litigated the first time someone

@@ -218,8 +218,9 @@ deploy.
   claim's first answer. Only refusals are compared, never acks. SY-38's
   own-identity refusal is never provoked: the rule's origins are its own. It
   rejects a peer that refuses an event it already holds, one that refuses a
-  group whose guard its log violates, which SY-1's rule rejects too, and one
-  whose oversized-push refusal is `Split` on an empty log and `Stop` once it
+  group whose guard its log violates, which SY-1's rule rejects too, the same
+  peer made careful enough to skip a re-delivery first, which only the
+  fresh-origin probe catches, and one whose oversized-push refusal is `Split` on an empty log and `Stop` once it
   holds anything, in `tests/wrong_refusals.rs`. `SyncFixture` is unchanged, so
   every existing fixture runs the rule with no edit: it is green on
   `MemorySyncPeer`, the KV-capped, `!Send`, remote and store peers, and mounted
