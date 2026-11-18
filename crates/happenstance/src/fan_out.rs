@@ -443,8 +443,8 @@ fn plan_read<P: Projection>(slots: &[Slot<P>]) -> Option<(Query, ReadOptions)> {
         return None;
     }
     let mut items: Vec<QueryItem> = Vec::new();
-    // What `items` already holds, so the union is linear in views x scopes
-    // rather than quadratic. Keyed by the item's parts because `QueryItem`
+    // What `items` already holds, so each candidate item costs one hash
+    // lookup rather than a scan of `items`. Keyed by the item's parts because `QueryItem`
     // itself is not `Hash`; its `==` compares exactly these two fields, so
     // equal keys are equal items. The `Vec` keeps first-seen order.
     let mut seen: HashSet<(&[EventType], &Tags)> = HashSet::new();
