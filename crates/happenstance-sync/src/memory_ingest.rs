@@ -65,8 +65,10 @@ use crate::ingest::{IngestError, IngestGroup, Ingested, SendIngestStore};
 /// holds, so the two never disagree. Every check runs before anything is
 /// written, and the write is one critical section.
 ///
-/// Positions are dense and start at 1. The specification permits gaps, so
-/// nothing may depend on that.
+/// Positions start at 1 and are dense until something is removed through
+/// [`remove`](Self::remove), which leaves the allocator where it was. The
+/// specification permits gaps, so nothing may depend on density. A removed
+/// identity is recorded, and ingest skips it on re-delivery (SY-40).
 ///
 /// # Examples
 ///
@@ -112,10 +114,17 @@ pub struct MemoryIngestStore {
 /// lock.
 #[derive(Debug, Default)]
 struct State {
-    /// Position order, dense from 1.
+    /// Position order, from 1, dense until something is removed.
     log: Vec<SequencedEvent>,
+    /// How many positions this store has ever assigned: the allocator. A
+    /// removal leaves it where it was, so no position is assigned twice
+    /// (ES-38).
+    assigned: usize,
     /// Every `id` in `log`, updated in the same critical section.
     held: BTreeSet<EventId>,
+    /// Every `id` removed from `log` outside the port: the removal record
+    /// ingest treats as held (SY-40). It never shrinks.
+    removed: BTreeSet<EventId>,
     /// The write group of each row of `log`, index for index: the position of
     /// the group's first row (#420).
     group_of: Vec<SequencePosition>,
@@ -178,9 +187,10 @@ impl MemoryIngestStore {
 
     /// Reads through the lock, recovering from poisoning.
     ///
-    /// `MemoryEventStore`'s argument holds here too: every mutation is two
-    /// `extend`s under the write lock, and nothing before them mutates, so a
-    /// panic elsewhere cannot have left the state torn.
+    /// `MemoryEventStore`'s argument holds here too: every write is
+    /// `extend`s under the write lock, and every removal is `remove`s and
+    /// `retain`s whose predicates cannot panic, and nothing before either
+    /// mutates, so a panic elsewhere cannot have left the state torn.
     fn read_guard(&self) -> RwLockReadGuard<'_, State> {
         self.state.read().unwrap_or_else(PoisonError::into_inner)
     }
@@ -192,9 +202,10 @@ impl MemoryIngestStore {
 }
 
 impl State {
-    /// The position the next row written takes, `staged` rows past the log.
+    /// The position the next row written takes, `staged` rows past the last
+    /// position ever assigned.
     fn next_position(&self, staged: usize) -> SequencePosition {
-        position_at(self.log.len().saturating_add(staged))
+        position_at(self.assigned.saturating_add(staged))
     }
 
     /// Everything `groups` would write, and the counts, or the refusal. Mutates
@@ -213,8 +224,9 @@ impl State {
             let landed_before = counts.appended;
             let group_start = staged.len();
             for shipped in group.events {
-                // Held when the call began: a re-delivery (SY-11).
-                if self.held.contains(&shipped.id) {
+                // Held when the call began, or held once and recorded as
+                // removed: a re-delivery either way (SY-11, SY-40).
+                if self.held.contains(&shipped.id) || self.removed.contains(&shipped.id) {
                     counts.skipped += 1;
                     continue;
                 }
@@ -278,6 +290,7 @@ impl State {
                 self.guards.insert(group.first, guard);
             }
         }
+        self.assigned = self.assigned.saturating_add(staged.rows.len());
         self.held.extend(staged.rows.iter().map(|row| row.id));
         self.log.extend(staged.rows);
     }
@@ -488,6 +501,9 @@ impl Stream for Snapshot {
 // The write-group port (#420), a file of its own because this one is long
 // enough. A child module, so it reads `State` without widening it.
 mod groups;
+// Removal outside the port and the record of what was removed (SY-40,
+// ADR-0110), beside the write groups for the same reason.
+mod removal;
 
 #[cfg(test)]
 mod tests {

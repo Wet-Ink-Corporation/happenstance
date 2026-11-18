@@ -1038,6 +1038,18 @@ ADR-0063's port and ADR-0102's PS-25 id are unchanged.
 | --- | --- | --- | --- | --- | --- |
 | ADR-0109 | [`kb-decision-0109`](../decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md) | A typed checkpoint is pinned to the event store it was built from, and PS-40 is minted provisional | accepted | — | — |
 
+## 2026-11-17: a removed event is not readmitted by ingest (#483, #484), proposed
+
+ADR-0110 is written straight here with no intake step. It records the owner's answers D-1..D-10
+(all A, 2026-11-17): a trigger-written removal record per store, read only inside ingest, which
+skips a recorded identity rather than re-admitting or refusing it. It amends the frozen SY-1 and
+SY-38, points SY-11 and ES-39 at the new clause, and mints SY-40 `[PROVISIONAL]`. Its text awaits
+the owner's acceptance. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0110 | [`kb-decision-0110`](../decisions/0110-a-removed-event-is-not-readmitted.md) | A store that removed an event records it, and ingest skips it, and SY-40 is minted provisional | accepted | — | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it

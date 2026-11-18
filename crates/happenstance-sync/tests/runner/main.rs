@@ -15,6 +15,7 @@ mod drive;
 mod groups;
 mod incarnation;
 mod probe;
+mod pruned;
 mod retention;
 mod unchanged;
 mod watermark;

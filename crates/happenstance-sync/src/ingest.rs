@@ -150,6 +150,11 @@ pub trait IngestStore {
     /// re-minted (VT-6). The ingest then writes nothing and fails with
     /// [`IngestError::UnheldOwnIdentity`], whose remedy is the re-mint (SY-38).
     ///
+    /// An own event the store once held and that was removed outside the port
+    /// (an operator's `DELETE`) is neither: a removal keeps the position
+    /// allocator, and the store records the removed identity, so its echo is
+    /// a skip and not this refusal (SY-40, provisional).
+    ///
     /// `async` and fallible because a SQL store keeps its identity in a row,
     /// and reading it is I/O that can fail; a store holding it answers `Ok`.
     ///
@@ -188,6 +193,12 @@ pub trait IngestStore {
     /// against the store's own uniqueness on the origin pair (VT-8), never by a
     /// lookup ahead of it. A group whose foreign events were all skipped writes
     /// no compensation either (SY-11): the first delivery already wrote it.
+    ///
+    /// An event removed from the store outside the port and offered again is
+    /// a re-delivery too. The store records the identity of every event
+    /// removed from it, and treats a recorded identity as held: skipped,
+    /// counted in [`Ingested::skipped`], and never refused as an unheld own
+    /// identity (SY-40, provisional).
     ///
     /// # Errors
     ///
@@ -278,7 +289,11 @@ impl<'a> IngestGroup<'a> {
 pub struct Ingested {
     /// Foreign events appended to the local log.
     pub appended: usize,
-    /// Foreign events skipped because this store already held their identity.
+    /// Foreign events skipped because this store holds their identity, or
+    /// once held it and recorded its removal (SY-40).
+    ///
+    /// One count for both on purpose: a separate count of removed identities
+    /// would be a port value reporting unheld history, which ES-39 rules out.
     pub skipped: usize,
     /// Compensation events written, minted here.
     pub compensated: usize,

@@ -127,6 +127,7 @@
 //! | [`only_the_adjudicator_compensates`](ingest_rules::only_the_adjudicator_compensates) | SY-7 | a compensation minted under an incarnation the store never read, so its log names an author nobody assigned |
 //! | [`directional_merge_rules_compose`](ingest_rules::directional_merge_rules_compose) | SY-10 | a store with the merge rule built in, which answers a group whose travelling guard its log breaks with a reversal of its own, and so judges, as a spoke, what the hub sends; and one that re-mints its own claim when a peer's claim on the seat arrives |
 //! | [`bulk_ingest_is_idempotent_in_bounded_round_trips`](ingest_rules::bulk_ingest_is_idempotent_in_bounded_round_trips) | SY-14, VT-24 | a store that consults what it holds for the first 64 events of a call only and writes a held event past them again, and one that refuses a call of VT-24's 128 events as over its batch limit |
+//! | [`a_removed_event_is_not_readmitted`](ingest_rules::a_removed_event_is_not_readmitted) | SY-40, SY-38, SY-11 | a store that dedupes only against what it holds and re-admits a removed foreign event, one that refuses a removed own event as an unheld claim, one that skips every unheld own claim once anything was removed, one that keeps its removal record per handle, and one that compensates a group of removed and held events |
 //!
 //! Each wrong store lives in `tests/wrong_ingest_stores.rs`, where a test runs
 //! the whole family against it and asserts it fails exactly its rule.
@@ -364,8 +365,8 @@ mod ingest_fixture;
 // to is one `cargo xtask spec-trace` refuses.
 mod ingest_suite;
 pub use ingest_fixture::{
-    IngestFixture, MemoryIngestFixture, MemoryIngestHandle, UNSTATED_MID_GROUP_FAULT,
-    ingest_declensions_are_stated,
+    IngestFixture, MemoryIngestFixture, MemoryIngestHandle, UNSTATED_INGEST_REMOVAL,
+    UNSTATED_MID_GROUP_FAULT, ingest_declensions_are_stated,
 };
 pub use ingest_suite::{
     MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON,

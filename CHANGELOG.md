@@ -43,6 +43,16 @@ anything. **This is a breaking change to `happenstance`'s two runners**; read
 [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md). No schema changes and no
 store migrates: the pin is one more checkpoint row, under an id of its own.
 
+A store that had events removed outside the port no longer takes them back, or
+refuses them, when they are offered again (#483, #484, SY-40,
+[ADR-0110](.kb/decisions/0110-a-removed-event-is-not-readmitted.md)).
+`experiments/retention-reader` showed a restored edge re-admitting pruned foreign
+events at the tail, so a projection applied them twice, and refusing a pruned own
+event as `UnheldOwnIdentity`, which wedged the edge. Ingest now skips an event
+whose identity the store has recorded as removed. This release's first part is
+the oracle and the conformance rule; the four adapters follow, each with its own
+entry below.
+
 ### Added
 
 - `happenstance`: `Source<'a, S>`, an event store paired with its `StoreId`, the
@@ -70,6 +80,22 @@ store migrates: the pin is one more checkpoint row, under an id of its own.
   a typed-layer test rather than a conformance rule, rejecting a runner with no pin, a pin never compared, and
   the identity folded into the main key; and `a_view_refuses_another_sqlite_file`
   on two real SQLite files.
+- `happenstance-sync`: `MemoryIngestStore::remove`, behind `memory`, the
+  oracle's removal outside the port. It removes the events at the positions
+  named, records each removed identity, keeps the position allocator where it
+  was (ES-38), and returns how many it removed. Its ingest skips a recorded
+  identity, foreign or own, and counts it in `Ingested::skipped` (SY-40).
+- `happenstance-sync-testkit`: `IngestFixture::REMOVAL`,
+  `IngestFixture::remove_outside_port` and `UNSTATED_INGEST_REMOVAL`, defaulted
+  to declined, so an existing fixture compiles and reports the new rule as a
+  skip. `MemoryIngestFixture` grants it.
+- `happenstance-sync-testkit`: SY-40's rule, `a_removed_event_is_not_readmitted`,
+  in the ingest family. It rejects a store that re-admits a removed foreign event,
+  one that refuses a removed own event, one that skips every unheld own claim once
+  anything was removed, one that keeps its record per handle, and one that
+  compensates a group of removed and held events. **A new rule is a minor for
+  this crate; pin it exactly.** It runs only against a fixture that grants
+  `REMOVAL`, so no adapter's CI turns red until that adapter grants it.
 
 ### Changed
 
@@ -89,6 +115,11 @@ store migrates: the pin is one more checkpoint row, under an id of its own.
   from each log's own `store_id`. No rule's verdict changes.
 - **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
   an identity that is not the store's.
+- **SY-40 is minted `[PROVISIONAL]`** by ADR-0110, and the frozen
+  SY-1 and SY-38 are amended by it: a removed event is SY-1's second exception,
+  and SY-38's refusal no longer covers an identity the store has recorded as
+  removed. SY-11 and ES-39 point at it. `happenstance-sync`'s docs on
+  `Ingested::skipped`, `IngestStore` and `IngestError::UnheldOwnIdentity` say so.
 
 ### `0.8.0` trace
 
