@@ -8,8 +8,16 @@ yanked = "deny"
 # version exists, and it reaches this workspace only through testcontainers
 # 0.28.0, a dev-dependency of happenstance-postgres. Nothing published depends
 # on it. Remove this entry once testcontainers moves off it (#387).
+#
+# RUSTSEC-2026-0543: chrono is unmaintained (2026-11-17), every version is
+# affected and no fixed one exists. It reaches this workspace through worker
+# 0.8.5, a normal dependency of happenstance-cloudflare, so unlike the entry
+# above a published crate carries it; the workspace has no direct use of chrono
+# to replace. The owner accepted the ignore on 2026-11-17. Remove this entry
+# once worker drops chrono (#496).
 ignore = [
     { id = "RUSTSEC-2026-0440", reason = "unmaintained, dev-only via testcontainers 0.28.0; no fix exists yet (#387)" },
+    { id = "RUSTSEC-2026-0543", reason = "unmaintained, via worker 0.8.5 (happenstance-cloudflare); no fix exists yet (#496)" },
 ]
 
 [licenses]
