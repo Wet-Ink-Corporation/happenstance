@@ -6,10 +6,11 @@
 //! view here takes an event exactly as `run_projection` would take it.
 
 use core::convert::Infallible;
+use std::collections::HashSet;
 
 use happenstance_core::{
-    Authority, EventStore, ProjectionId, ProjectionStore, Query, QueryItem, ReadOptions,
-    SequencePosition, SequencedEvent, StoreId,
+    Authority, EventStore, EventType, ProjectionId, ProjectionStore, Query, QueryItem, ReadOptions,
+    SequencePosition, SequencedEvent, StoreId, Tags,
 };
 
 use crate::boundary::AtLeastOneType;
@@ -442,6 +443,11 @@ fn plan_read<P: Projection>(slots: &[Slot<P>]) -> Option<(Query, ReadOptions)> {
         return None;
     }
     let mut items: Vec<QueryItem> = Vec::new();
+    // What `items` already holds, so the union is linear in views x scopes
+    // rather than quadratic. Keyed by the item's parts because `QueryItem`
+    // itself is not `Hash`; its `==` compares exactly these two fields, so
+    // equal keys are equal items. The `Vec` keeps first-seen order.
+    let mut seen: HashSet<(&[EventType], &Tags)> = HashSet::new();
     let mut everything = false;
     let mut from: Option<SequencePosition> = None;
     let mut from_start = false;
@@ -451,7 +457,7 @@ fn plan_read<P: Projection>(slots: &[Slot<P>]) -> Option<(Query, ReadOptions)> {
             None => everything = true,
             Some(own) => {
                 for item in own {
-                    if !items.contains(item) {
+                    if seen.insert((item.types(), item.tags())) {
                         // Owned, because `Query::from_items` takes items by
                         // value and each lane keeps its own query to filter by.
                         items.push(item.clone());
