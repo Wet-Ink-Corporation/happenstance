@@ -14,10 +14,23 @@ came from and refuses to resume it against another
 ([PS-40](../spec/SPECIFICATION.md#47-checkpoint-semantics)). The decision is
 [ADR-0109](../.kb/decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md).
 
-If your application does not run a typed projection, change the version number
-and you are done. No store needs a migration step of yours: a Durable Object's
-`migrate` adds one table and one trigger on its next open, with no marker (see
-[the removal record](#a-durable-object-gains-the-removal-record)).
+Separately, the event stores now record events deleted outside the port, so
+that a replica pruned that way no longer takes back, or refuses, the events it
+pruned (SY-40). Nothing in your code changes for it. A SQLite store migrates its
+file to schema version 3 on open, and older builds refuse the migrated file; a
+Postgres or Neon store needs migration 4 applied before this release ingests
+into it.
+
+If your application does not run a typed projection and does not use a SQLite,
+Postgres or Neon event store, change the version number and you are done. No
+SQLite or Durable Object store needs a migration step of yours. SQLite's schema
+change migrates itself on open: see
+[a SQLite store migrates to version 3](#a-sqlite-store-migrates-to-schema-version-3-h4).
+A Durable Object's `migrate` adds one table and one trigger on its next open,
+with no marker: see
+[the removal record](#a-durable-object-gains-the-removal-record).
+Postgres and Neon need migration 4 applied before you deploy: see
+[Postgres and Neon add the removal record](#postgres-and-neon-add-the-removal-record-h5-h6).
 
 ## How to use this page
 
@@ -30,7 +43,9 @@ why.
 | run a view whose checkpoint 0.7 wrote | [the first run adopts its store](#the-first-0-8-run-adopts-the-store-it-reads-h2) |
 | move a view to another event store, or restore one | [another store is refused](#a-run-against-another-store-is-refused-h2) |
 | wrote a `ProjectionStore` that counts its calls | [one more read and one more commit](#one-more-read-and-one-more-commit-h3) |
+| open a `SqliteEventStore` | [a SQLite store migrates to version 3](#a-sqlite-store-migrates-to-schema-version-3-h4) |
 | run a `CloudflareEventStore` that replicates | [the removal record](#a-durable-object-gains-the-removal-record) |
+| run a `PostgresEventStore` or `NeonEventStore` | [Postgres and Neon add the removal record](#postgres-and-neon-add-the-removal-record-h5-h6) |
 
 Each heading ends with a bracketed id, such as **[H1]**. That is the row for
 this change in the `0.8.0` trace table, at the end of the
@@ -293,6 +308,43 @@ pin. A store refusing the pin's commit is reported as
 `ProjectionError::RecordSource`, and one refusing its `begin` as
 `ProjectionError::Begin`, both with no progress.
 
+## A SQLite store migrates to schema version 3 **[H4]**
+
+**What changed.** `happenstance-sqlite`'s `SCHEMA_VERSION` is 3, was 2.
+`SqliteEventStore::open`, `open_on` and `open_in_memory` apply migration 3 on
+open: a table, `event_removed`, and an `AFTER DELETE` trigger on `event` that
+records the origin identity of every row deleted from the file, by this crate or
+by any other client. Ingest then skips an event whose identity is recorded,
+counting it in `Ingested::skipped`, where 0.7 took a removed foreign event back
+at the tail and refused a removed own event as `UnheldOwnIdentity` (SY-40,
+[ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)).
+The file is the only thing that changes; no signature does.
+
+**What to change.** Two things, both about deploying:
+
+- **Upgrade every process that opens the file before any of them opens it.** A
+  0.7 build refuses a file 0.8 has opened, with
+  `SqliteEventStoreError::UnsupportedSchemaVersion { found: 3, supported: 2 }`,
+  as 0.6 builds refused 0.7's version 2.
+- **If you wrap a connection with `SqliteEventStore::new`, open the file once
+  through `open_on` first.** `new` never migrates, so it refuses a file still at
+  2 with `SchemaNeedsMigration { found: 2, required: 3 }`.
+
+Rows deleted **before** the migration are not recorded, because nothing was
+listening. If you pruned a replica under 0.7 and it may be offered those events
+again, record each one by hand, its origin store's 16 bytes and its origin
+position. Not compiled here:
+
+```text
+INSERT INTO event_removed (origin_store, origin_position)
+VALUES (X'0123456789ABCDEF0123456789ABCDEF', 42);
+```
+
+The record grows by one small row per removed event and is kept for ever.
+Deleting a row of it lets that identity be ingested again, so do that only once
+no peer can offer the event. A restore from a copy of the file rolls the record
+back with the log, which is what keeps SY-38's refusal of a restored store true.
+
 ## A Durable Object gains the removal record
 
 **What changed.** `CloudflareEventStore::migrate` creates one more table,
@@ -308,3 +360,77 @@ object before it serves replication again, because an older build ingests
 without consulting the record. Events your retention job deleted before the
 upgrade are not recorded; the crate README gives the `INSERT` that records one
 by hand.
+
+## Postgres and Neon add the removal record **[H5, H6]**
+
+**What changed.** Both adapters gain migration 4: a table that records the
+origin identity of every event deleted from the log, and a `BEFORE DELETE`
+trigger that writes it, for every client and every session. Ingest skips an
+event whose identity is recorded, counting it in `Ingested::skipped`, where 0.7
+took a removed foreign event back at the tail and refused a removed own event
+as `UnheldOwnIdentity` (SY-40,
+[ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)). To
+close the race between a removal and an ingest of the same event, every ingest
+first takes `LOCK TABLE ... IN SHARE MODE` on the record, in the same round trip
+as before. `happenstance-postgres`'s `SCHEMA_VERSION` is 3, was 2. No signature
+changes.
+
+**What to change.** Apply the migration, then deploy 0.8. A 0.8 ingest against
+a schema without the record fails with an undefined table.
+
+On Postgres, `migration::apply` sends migrations 1, 3 and 4. Not compiled here:
+
+```text
+happenstance_postgres::migration::apply(&pool).await?;
+```
+
+On Neon, send `migration::removal_record_request`, the new table with its
+two trigger statements in one request, after migrations 1 and 3. Sending
+`migration::request(MIGRATION_4, &config)` alone creates the table and no
+trigger, and nothing records a removal. Not compiled here:
+
+```text
+transport.round_trip(migration::removal_record_request(&config)).await?;
+```
+
+**Grant the ingesting role two privileges on the record.** Every ingest locks it
+`IN SHARE MODE`, which Postgres admits only to a role holding `UPDATE`,
+`DELETE`, `TRUNCATE` or, from 17, `MAINTAIN`, and reads it, which needs
+`SELECT`. A role that deletes from the log needs nothing more: the trigger
+runs as the role that applied the migration. On Neon the table is
+`<event table>_removed`. Not compiled here:
+
+```text
+GRANT SELECT, UPDATE ON event_removed TO <ingest role>;
+-- or, on Postgres 17 and later, a grant that writes nothing:
+GRANT SELECT, MAINTAIN ON event_removed TO <ingest role>;
+```
+
+Both are idempotent. Appends and reads do not touch the record, so a process
+that only appends keeps working before you migrate. An older build keeps
+working against a migrated schema, but its ingest ignores the record and
+re-admits what was removed, so upgrade every process that replicates into the
+store.
+
+A removal and an ingest now wait for each other, and under Postgres' default
+`lock_timeout` of `0` an ingest waits for ever: a `psql` session left open
+after a `DELETE` on the log holds every ingest until it ends. Set a
+`lock_timeout` on the ingesting role (`ALTER ROLE <ingest role> SET
+lock_timeout = '5s'`) or, on Postgres, on its connections. An ingest that gives
+up fails with SQLSTATE `55P03`, which both adapters now classify as transient,
+so the runner retries it. `TRUNCATE` fires no row trigger and
+records nothing. Rows deleted **before** the migration are not recorded; if you
+pruned a replica under 0.7 and it may be offered those events again, record each
+one by hand, its origin store's 16 bytes and its origin position. On Neon the
+table is `<event table>_removed`. Not compiled here:
+
+```text
+INSERT INTO event_removed (origin_store, origin_position)
+VALUES ('\x0123456789abcdef0123456789abcdef'::bytea, 42)
+ON CONFLICT DO NOTHING;
+```
+
+The record grows by one small row per removed event and is kept for ever.
+Deleting a row of it lets that identity be ingested again, so do that only once
+no peer can offer the event. A restore brings the record back with the log and
+the sequence, which is what keeps SY-38's refusal of a restored store true.

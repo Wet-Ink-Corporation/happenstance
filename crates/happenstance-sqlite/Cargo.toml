@@ -196,5 +196,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 name = "ingest_port"
 required-features = ["sync"]
 
+# The retention-reader's R2-dst scenarios over a pruned file (#483, #484,
+# SY-40). Named rather than gated inside the file, for `ingest_port`'s reason:
+# without the feature the target is not built at all, rather than built empty.
+[[test]]
+name = "pruned_replica"
+required-features = ["sync"]
+
 [lints]
 workspace = true

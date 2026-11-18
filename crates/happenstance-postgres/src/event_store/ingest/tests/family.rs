@@ -11,14 +11,17 @@
 //! reports its hidden-claim half as skipped, because a refused call here has
 //! consumed sequence values, so the compensation the rule then writes lands
 //! past the identity it claimed. `claims.rs` verifies that half directly.
+//! SY-40 runs, the fixture removing by a raw `DELETE`; `removal.rs` beside
+//! this adds the reopen, the trigger's schema and the lock (I-4, I-6).
 //!
 //! The write-group family (SY-39, #420) mounts on the same fixture, below: the
 //! store a runner pushes from and a `StoreSyncPeer` serves a pull from. All six
 //! rules run; `groups.rs` beside this adds what a rule cannot arrange from
 //! outside, interleaved writers and rows from before migration 3.
 
+use happenstance_core::SequencePosition;
 use happenstance_sync_testkit::{IngestFixture, Violation};
-use happenstance_testkit::Capability;
+use happenstance_testkit::{Capability, Removed};
 use sqlx::PgPool;
 use tokio::sync::OnceCell;
 
@@ -71,12 +74,28 @@ impl IngestFixture for PostgresIngestFixture {
     /// to, foreign and compensation events counted together.
     const MAX_EVENTS_PER_BATCH: Option<usize> = Some(PostgresEventStore::MAX_EVENTS_PER_BATCH);
 
+    /// Supported, by a raw `DELETE` on this fixture's schema, which is what an
+    /// operator's prune does and what migration 4's trigger records (SY-40).
+    /// It keeps the position sequence where it was, so it is a removal and
+    /// not a restore. One table, because tags are a column of `event`.
+    const REMOVAL: Capability = Capability::SUPPORTED;
+
     async fn connect(&self) -> Self::Store {
         // A refcounted handle onto the one pool, which every handle shares.
         // A new store rather than a clone, so each handle reads its identity
         // for itself on first use.
         let pool = self.pool().await.clone();
         PostgresEventStore::new(pool)
+    }
+
+    /// Deletes the named rows in one statement on the fixture's pool, whose
+    /// `search_path` is its schema, through `removal.rs`'s `remove`, which
+    /// panics unless each position named was held: the rule names only
+    /// positions this store assigned, so anything else is a broken
+    /// environment.
+    async fn remove_outside_port(&self, positions: &[SequencePosition]) -> Removed {
+        super::removal::remove(self.pool().await, positions).await;
+        Removed::Deleted
     }
 
     /// Installs the trigger `MID_GROUP_FAULT` describes. The counter is a

@@ -26,6 +26,14 @@ pub(super) fn set(rows: &[serde_json::Value]) -> serde_json::Value {
     })
 }
 
+/// The removal record's lock's result set (SY-40), which opens every
+/// ingest's answer: no rows.
+pub(super) fn locked() -> serde_json::Value {
+    serde_json::json!({
+        "command": "LOCK", "rowCount": null, "fields": [], "rows": [], "rowAsArray": false,
+    })
+}
+
 /// The identity read's result set, naming `store`.
 pub(super) fn identity(store: happenstance_core::StoreId) -> serde_json::Value {
     set(&[serde_json::json!({ "v": BASE64.encode(store.to_bytes()) })])
@@ -171,9 +179,9 @@ async fn a_pull_from_a_token_reads_above_it() {
 }
 
 /// The write, its confirmation and the responder in one round trip: the
-/// ingest's three statements, then the watermark and the identity, in one
-/// `REPEATABLE READ` batch, so the ack describes the transaction that wrote
-/// the push.
+/// ingest's statements (since SY-40 the removal record's lock and then the
+/// three), then the watermark and the identity, in one `REPEATABLE READ`
+/// batch, so the ack describes the transaction that wrote the push.
 ///
 /// **Named wrong peer:** `StoreSyncPeer` over this store, which sends the
 /// ingest, the watermark and the identity as three round trips.
@@ -182,6 +190,7 @@ async fn a_push_is_one_request_that_writes_confirms_and_names_the_store() {
     let origin = peer(0x44);
     let transport = Scripted::default();
     transport.answer_batch(&[
+        locked(),
         set(&[serde_json::json!({
             "appended": "2", "skipped": "1", "compensated": "0", "unheld": "",
         })]),
@@ -342,10 +351,12 @@ async fn a_refused_push_is_the_ingest_refusal() {
     assert_eq!(transport.round_trips.get(), 1);
 }
 
-/// The five result sets a landed one-group push is answered with: counts,
-/// the refusal's `DO`, the stamp's `UPDATE`, the watermark, the identity.
+/// The six result sets a landed one-group push is answered with: the removal
+/// record's lock's (SY-40), counts, the refusal's `DO`, the stamp's `UPDATE`,
+/// the watermark, the identity.
 fn landed_push(counts: serde_json::Value) -> Vec<serde_json::Value> {
     vec![
+        locked(),
         set(&[counts]),
         serde_json::json!({ "command": "DO", "rowCount": null, "fields": [], "rows": [] }),
         serde_json::json!({ "command": "UPDATE", "rowCount": 1, "fields": [], "rows": [] }),
@@ -373,14 +384,21 @@ fn one_group() -> PushBatch {
 /// Rejects lenient indexing, which reads the watermark and the identity from
 /// whatever sets sit at or past the write's, and the old
 /// `MissingColumn { "results" }`, which named neither count.
+///
+/// Since the removal record (SY-40) every count is one higher, for the lock's
+/// set: the five and the four or six this pinned are the counts beside it.
 #[tokio::test]
 async fn a_push_answered_with_the_wrong_number_of_result_sets_is_answer() {
+    /// The lock's result set, which every count below now includes.
+    const LOCK: usize = 1;
     let mut too_few = landed_push(one_landed());
-    too_few.remove(3);
+    // The watermark's, as before: past the lock's, one place on.
+    too_few.remove(3 + LOCK);
     let mut too_many = landed_push(one_landed());
     too_many.push(identity(OWN));
 
-    for (sets, actual) in [(too_few, 4), (too_many, 6)] {
+    for (sets, beside_the_lock) in [(too_few, 4), (too_many, 6)] {
+        let actual = beside_the_lock + LOCK;
         let transport = Scripted::default();
         transport.answer_batch(&sets);
         let peer = NeonSyncPeer::new(transport.store());
@@ -393,7 +411,8 @@ async fn a_push_answered_with_the_wrong_number_of_result_sets_is_answer() {
         assert!(
             matches!(
                 &refused,
-                NeonPeerError::Answer(NeonError::ResultSets { expected: 5, actual: a }) if *a == actual
+                NeonPeerError::Answer(NeonError::ResultSets { expected, actual: a })
+                    if *expected == 5 + LOCK && *a == actual
             ),
             "{refused:?}"
         );
