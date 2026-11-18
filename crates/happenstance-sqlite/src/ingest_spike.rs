@@ -22,6 +22,9 @@
 //!   same identity check, with no condition evaluated (SY-1), compensation
 //!   written only for a group that landed something (SY-11), and the whole
 //!   call rolled back as `IngestError::UnheldOwnIdentity` on that field;
+//! * `event_store/removal.rs`'s `Probe`, which drops an event whose identity
+//!   migration 3's trigger recorded as removed before the insert, so it is a
+//!   skip and never that refusal (SY-40);
 //! * `ingest_groups` and `origin_watermark`, the `&self` entry points: the
 //!   ceilings and the lock, and `WATERMARK_SQL`, one `GROUP BY` over the
 //!   origin index, whose plan `plan_tests` asserts;
@@ -161,9 +164,6 @@ mod tests {
 
     #![allow(clippy::unwrap_used)]
 
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
     use futures_core::Stream;
     use happenstance_core::{
         AppendCondition, AppendError, Event, EventId, EventStore, Query, QueryItem, ReadOptions,
@@ -231,43 +231,9 @@ mod tests {
         found
     }
 
-    /// A store on a file of its own, so a second connection can look at the
-    /// tables or reach the schema. Dropped after the store it backs, because
-    /// Windows will not unlink an open file.
-    struct TempFile(PathBuf);
-
-    impl TempFile {
-        fn new() -> Self {
-            static NEXT: AtomicU64 = AtomicU64::new(1);
-            let mut path = std::env::temp_dir();
-            path.push(format!(
-                "happenstance-sqlite-ingest-spike-{}-{}.db",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
-            let file = Self(path);
-            file.remove();
-            file
-        }
-
-        fn remove(&self) {
-            for suffix in ["", "-wal", "-shm"] {
-                let mut path = self.0.clone().into_os_string();
-                path.push(suffix);
-                let _ = std::fs::remove_file(PathBuf::from(path));
-            }
-        }
-
-        fn inspect(&self) -> rusqlite::Connection {
-            rusqlite::Connection::open(&self.0).unwrap()
-        }
-    }
-
-    impl Drop for TempFile {
-        fn drop(&mut self) {
-            self.remove();
-        }
-    }
+    // A store on a file of its own, so a second connection can look at the
+    // tables or reach the schema: the crate's one test-only `TempFile`.
+    use crate::test_support::TempFile;
 
     /// VT-9's restated falsifier (ADR-0066): *`IngestStore` fails to carry a
     /// foreign `RecordedAt` unchanged*. One of the two stamps is before 1970,
@@ -302,7 +268,7 @@ mod tests {
     /// no error, no second row, no second tag row, no second count.
     #[tokio::test]
     async fn redelivery_is_a_skip_not_an_error() {
-        let file = TempFile::new();
+        let file = TempFile::new("ingest-spike");
         let store = SqliteEventStore::open(&file.0).unwrap();
         let from = peer(0xB2);
         let first = [
@@ -455,7 +421,7 @@ mod tests {
     /// pass.
     #[tokio::test]
     async fn a_compensation_that_fails_in_the_transaction_takes_the_losing_event_with_it() {
-        let file = TempFile::new();
+        let file = TempFile::new("ingest-spike");
         let store = SqliteEventStore::open(&file.0).unwrap();
         file.inspect()
             .execute_batch(
@@ -820,7 +786,7 @@ mod tests {
     /// the foreign event it now is, under the identity that minted it.
     #[tokio::test]
     async fn a_claim_lands_as_foreign_after_the_store_is_reminted() {
-        let file = TempFile::new();
+        let file = TempFile::new("ingest-spike");
         let store = SqliteEventStore::open(&file.0).unwrap();
         let claimed = Claimed::on(&store).await;
         ingest(&store, &claimed.groups())
@@ -963,6 +929,10 @@ mod tests {
         }
     }
 
+    // SY-40 (#483, #484): ingest over a store that had events removed by a
+    // raw `DELETE`, and the record's reopen and restore behaviour (I-4, I-5).
+    mod removal;
+
     /// `happenstance-sync-testkit`'s ingest family, against this adapter.
     ///
     /// Mounted here rather than in `tests/`, beside the unit tests whose
@@ -979,8 +949,10 @@ mod tests {
         /// One file per fixture, and a connection onto it per `connect`.
         ///
         /// A file, not `open_in_memory`, so that two handles a rule holds are
-        /// one store. Each handle is dropped before the fixture that backs it,
-        /// so the file unlinks on Windows too.
+        /// one store. Most rules drop each handle before the fixture that backs
+        /// it, so the file unlinks on Windows too; the SY-7 and SY-10 rules
+        /// drop the fixture first, and `TempFile`'s `Drop` leaves that file to
+        /// the temporary-directory cleanup.
         struct SqliteIngestFixture {
             file: TempFile,
         }
@@ -988,7 +960,7 @@ mod tests {
         impl SqliteIngestFixture {
             fn new() -> Self {
                 Self {
-                    file: TempFile::new(),
+                    file: TempFile::new("ingest-spike"),
                 }
             }
         }
@@ -1013,10 +985,34 @@ mod tests {
             /// No metadata ceiling: that check does not bound it.
             const MAX_EVENT_DATA_LEN: Option<usize> = Some(SqliteEventStore::MAX_EVENT_DATA_LEN);
             const MAX_TAGS_PER_EVENT: Option<usize> = Some(SqliteEventStore::MAX_TAGS_PER_EVENT);
+            /// Mirrored from the constant `check_ceilings` holds the whole
+            /// call to, foreign and compensation events counted together.
+            const MAX_EVENTS_PER_BATCH: Option<usize> =
+                Some(SqliteEventStore::MAX_EVENTS_PER_BATCH);
+
+            /// Supported, through a raw `DELETE` on a second connection: the
+            /// operator's removal migration 3's trigger records (SY-40).
+            /// `AUTOINCREMENT` keeps the allocator, and `store_meta` is not
+            /// touched, so the removal never mints a new incarnation.
+            const REMOVAL: Capability = Capability::SUPPORTED;
 
             async fn connect(&self) -> Self::Store {
                 SqliteEventStore::open(&self.file.0)
                     .expect("a fresh temporary file opens as a store")
+            }
+
+            /// Deletes the named events in one transaction on a second
+            /// connection, through the unit tests' `removal::remove`, which
+            /// keeps `event_tag` and `tag_cardinality` true as
+            /// `tests/support/mod.rs`'s event-store fixture does. It panics on
+            /// a position the store does not hold, for `connect`'s reason: the
+            /// rule names only positions it appended.
+            async fn remove_outside_port(
+                &self,
+                positions: &[happenstance_core::SequencePosition],
+            ) -> happenstance_testkit::Removed {
+                super::removal::remove(&self.file, positions);
+                happenstance_testkit::Removed::Deleted
             }
 
             /// Installs an `AFTER INSERT` trigger that raises once the

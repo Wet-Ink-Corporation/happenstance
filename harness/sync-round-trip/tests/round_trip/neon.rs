@@ -271,13 +271,14 @@ impl Schema {
         let name = format!("hsr_{seconds}_{}_{ordinal}", std::process::id());
         let transport = LiveTransport::new();
         let config = NeonConfig::default().with_schema(name);
-        let both = format!("{}\n{}", migration::MIGRATION_1, migration::MIGRATION_3);
-        execute(
-            &transport,
-            migration::request(&both, &config),
-            "migrations 1 and 3",
-        )
-        .await;
+        // Migrations 1 and 3, then migration 4's table and trigger through
+        // `removal_record_request` (#483, #484): every push locks the record.
+        let log = format!("{}\n{}", migration::MIGRATION_1, migration::MIGRATION_3);
+        let mut request = migration::request(&log, &config);
+        request
+            .statements
+            .extend(migration::removal_record_request(&config).statements);
+        execute(&transport, request, "migrations 1, 3 and 4").await;
         Self {
             peer: NeonSyncPeer::with_limits(NeonEventStore::new(transport, config), limits),
         }

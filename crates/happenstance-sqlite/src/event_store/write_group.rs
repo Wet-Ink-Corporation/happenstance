@@ -24,7 +24,7 @@ use super::SqliteEventStoreError;
 pub(super) const BASELINE_SCHEMA_VERSION: u32 = 1;
 
 /// The marker migration 2 raises a file to.
-const WRITE_GROUP_SCHEMA_VERSION: u32 = 2;
+pub(super) const WRITE_GROUP_SCHEMA_VERSION: u32 = 2;
 
 /// Migration 2, verbatim. Mirrored in the [module documentation](super).
 ///
@@ -134,6 +134,11 @@ mod tests {
 
     use super::STAMP_SQL;
     use crate::event_store::SqliteEventStore;
+
+    // The version-2 schema, reached by stopping `migrate`'s steps after
+    // migration 2: where `tests/migration.rs`'s version-2 assertions live now
+    // that every public open goes on to migration 3.
+    mod version_2;
 
     /// `EXPLAIN QUERY PLAN`'s detail lines.
     fn plan(connection: &Connection, sql: &str) -> Vec<String> {

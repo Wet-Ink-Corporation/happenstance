@@ -419,27 +419,29 @@ Each line names the red it must show first. "Wrong store X" means a store in
 
 ### PR 4: Postgres and Neon (`live-postgres`, `live-neon`)
 
-- [ ] Postgres `migration::tests`: `MIGRATION_4` is idempotent, `SCHEMA_VERSION == 3`, and
+- [x] Postgres `migration::tests`: `MIGRATION_4` is idempotent, `SCHEMA_VERSION == 3`, and
       `EVENT_LOG` contains it.
-- [ ] Postgres live: `a_raw_delete_records_the_identity_whatever_the_search_path` (the
+- [x] Postgres live: `a_raw_delete_records_the_identity_whatever_the_search_path` (the
       deleting session's `search_path` does not name the schema).
-- [ ] Postgres ingest units (`ingest/tests/`): the five behaviours; reds as in PR 2.
-- [ ] `..::a_removal_waits_for_an_ingest_in_flight`. Deterministic with no sleep (TST-10):
+- [x] Postgres ingest units (`ingest/tests/`): the five behaviours; reds as in PR 2.
+- [x] `..::a_removal_waits_for_an_ingest_in_flight`. Deterministic with no sleep (TST-10):
       transaction A takes the ingest's `SHARE` lock, and transaction B sets
       `lock_timeout = '50ms'` and `DELETE`s, failing with `55P03`.
-- [ ] `..::an_ingest_waits_for_a_removal_in_flight`: the mirror case.
-- [ ] `PostgresRestoreFixture::restore` rolls `event_removed` back to the backup (D-7). The
+- [x] `..::an_ingest_waits_for_a_removal_in_flight`: the mirror case.
+- [x] `PostgresRestoreFixture::restore` rolls `event_removed` back to the backup (D-7). The
       restore family stays green. Without this change it goes red, because the post-backup
       own events read as removed after the re-mint and are skipped rather than landing as
       foreign events, which SY-38's remedy sentence requires.
-- [ ] `PostgresIngestFixture` grants `REMOVAL`; the rule is green.
-- [ ] Neon scripted-transport units: the ingest request is one round trip whose first
+- [x] `PostgresIngestFixture` grants `REMOVAL`; the rule is green.
+- [x] Neon scripted-transport units: the ingest request is one round trip whose first
       statement is the `LOCK`, and whose ingest statement carries the anti-join. The
       migration request carries the trigger statements unsplit.
 - [ ] Neon live: the five behaviours, and the rule green with `NeonIngestFixture` granting
-      `REMOVAL`.
+      `REMOVAL`. Written and granted; **not run** (no endpoint credentials here). The SQL was
+      checked by hand against PostgreSQL 17.10 instead; see Progress.
 - [ ] Final step, in PR 4 or a one-line follow-up: SY-40 `[PROVISIONAL]` becomes `[FROZEN]`
-      if D-10 says it freezes on four green adapters.
+      if D-10 says it freezes on four green adapters. **Not taken in PR 4**: this branch does
+      not carry PR 2 or PR 3, and Neon's live run has not happened; see Progress.
 
 ## Decisions (H-16)
 
@@ -669,6 +671,14 @@ its five wrong stores.
   `lib.rs` because the edit hook classifies a `src/test_support.rs` file as production code); F5
   `WRITE_GROUP_SCHEMA_VERSION` is `pub(super)` and `removal.rs` imports it; F6 the experiment
   addendum cites tests and issues, not a branch commit.
+- 2026-11-18, CI regression from F4 on `gate (windows-latest)`: `ingest_family`'s
+  `directional_merge_rules_compose` and `only_the_adjudicator_compensates` panicked in
+  `TempFile::drop` with os error 32. Root cause in the sync testkit, unchanged since `1cfa397`
+  (0.6.0) and not PR 1's: `topology.rs:302` and `adjudication.rs:184` write
+  `open().await.connect().await`, dropping the fixture while the rule holds the store. The old
+  spike `TempFile` hid it with `let _ = remove_file`. Fix in this crate only: `Drop` leaves a
+  Windows sharing violation (`cfg!(windows)`, raw code 32) to the temp-dir cleanup; `remove`
+  (and so `new`) still panics on every error. No red here: Linux unlinks an open file.
 - 2026-11-17, PR 3 (Durable Object), on `claude/project-thread-qkv7ws-483-do`, stacked on PR 1
   (`0c4a96c`), not on PR 2. Reds, each run on `wasm32` under the Node 24 shim
   (`wasm-bindgen-test-runner` 0.2.126); a red that needed dead code to compile ran with
@@ -720,3 +730,142 @@ its five wrong stores.
   - Not done here, because PR 2 edits the same text and this branch does not carry it:
     SY-40's "Green on" sentence and `docs/choose-a-topology.md`'s pruning paragraph. Both
     should name the Durable Object once PR 2 and this PR are merged.
+- 2026-11-18, PR 4 (Postgres and Neon), on `claude/project-thread-qkv7ws-483-pg`, stacked on
+  PR 1 (`0c4a96c`), not on PR 2 or PR 3. Live Postgres was PostgreSQL 17.10 in the
+  testcontainers image, and the crate's lib suite also passed on 16. Reds, each shown by
+  reverting the implementation and restored before the next step:
+  - Postgres `migration::tests`: a compile red first (unresolved `MIGRATION_4`,
+    `WRITE_GROUP_SCHEMA_VERSION`, `WRITE_GROUP_LOG`).
+  - Postgres `ingest::tests::removal`, with `drop_removed` disabled (the `0.7.0` ingest behind
+    the new lock): `a_removed_foreign_event_is_skipped_on_redelivery` `(1, 2, 0)` vs `(0, 3, 0)`
+    (#483); `a_removed_own_event_is_skipped_not_refused` `UnheldOwnIdentity { .., position: 1 }`
+    (#484); `a_group_of_removed_and_held_events_writes_no_compensation` `(1, 1, 1)` vs
+    `(0, 2, 0)`; `a_group_with_one_new_event_lands_it_and_compensates_once` `(2, 0, 1)` vs
+    `(1, 1, 1)`; `a_skip_against_a_removal_draws_no_position` `(1, 0, 0)` vs `(0, 1, 0)`;
+    `the_record_reaches_every_handle_and_survives_reopen` `through the earlier handle,
+    (1, 0, 0)` vs `(0, 1, 0)`. `an_own_claim_never_held_is_refused_after_a_removal` stays green,
+    as a guard.
+  - `a_raw_delete_records_the_identity_whatever_the_search_path`, with the trigger's `INSERT`
+    static rather than `EXECUTE format(.., TG_TABLE_SCHEMA)`: `left: []`, the identities landing
+    in the decoy schema on the deleting session's `search_path`.
+  - `a_removal_waits_for_an_ingest_in_flight`, with the `LOCK` replaced by `SET LOCAL
+    application_name` (replacing it with `SELECT 1` made `fetch_one` return that row instead):
+    the `DELETE` succeeded, `rows_affected: 1`. `an_ingest_waits_for_a_removal_in_flight`, same
+    revert: the patient ingest counted `(1, 0, 0)`, should be `(0, 1, 0)`. Both also red on class
+    `Stop` vs `Transient` before `55P03` was classified.
+  - **The first version of `an_ingest_waits_for_a_removal_in_flight` was decorative**: it passed
+    without the lock, because `ON CONFLICT DO NOTHING` already waits on a row an in-progress
+    transaction is deleting, so an impatient ingest fails `55P03` either way. It now also spawns
+    a patient ingest, waits (no sleep, under a deadline) until `pg_blocking_pids` shows it
+    behind the deleter, commits the deleter, and asserts the skip. That half is what goes red.
+  - The mounted rule `ingest_conformance::a_removed_event_is_not_readmitted`, with the probe
+    disabled: `SY-40 violated: ... (1, 2, 0); it should be (0, 3, 0)`.
+  - **This plan's D-7 prediction was wrong.** The restore family does *not* go red without
+    D-7(i): its rule never ingests after the restore. A direct I-5 test,
+    `a_restore_rolls_the_removal_record_back_with_the_allocator` (Remint and NothingMore), was
+    red without the fixture change: `the restore kept a record the backup did not have,
+    left: 1 right: 0`.
+  - Neon scripted, before the implementation: `the_ingest_statement_drops_recorded_identities_before_its_insert`
+    panicked `the write builds ins` (statement 1 did not exist yet);
+    `the_ingest_request_locks_the_record_first_in_one_round_trip` `MissingColumn { appended }`;
+    `an_answer_without_the_locks_set_is_named` returned `Ok(Ingested { 2, 1, 1 })`. The Neon
+    migration tests' red was not captured: their production code was written first.
+  - Green: the Postgres crate's every binary against 17.10 (lib 132, conformance 117 among them);
+    `harness/sync-round-trip`'s three `postgres::` cases; the Neon lib 125 passed, 62 ignored
+    (live). The Neon SQL was checked by hand against 17.10, as no Neon endpoint is here: the
+    rendered migrations 1, 3 and 4 plus both trigger statements applied twice (idempotent, one
+    trigger), and in a `REPEATABLE READ` transaction `LOCK ... IN SHARE MODE` then the
+    anti-join returned the offered pairs minus the one a `DELETE` had recorded.
+  - **Existing expectations changed, owner rule B** (each old assertion kept where it still
+    holds, new ones added beside it, none dropped or loosened):
+    - Postgres `the_schema_version_counts_the_write_group_migration`: `SCHEMA_VERSION == 2` →
+      `WRITE_GROUP_SCHEMA_VERSION == 2` (the version-2 state, still named), plus new
+      `the_schema_version_counts_the_removal_record` (`SCHEMA_VERSION == 3`).
+    - Postgres `apply_sends_migration_1_then_migration_3`: runs on the test-only
+      `WRITE_GROUP_LOG` (1 + 3, the version-2 lineage) rather than `EVENT_LOG`, plus new
+      `apply_sends_migrations_1_and_3_then_migration_4` on `EVENT_LOG`.
+    - Postgres and Neon class tests: `55P03 → Transient` added.
+    - Postgres restore fixture: rolls `event_removed` back (D-7(i), a fixture behaviour).
+    - Neon, every test that indexed the ingest request: the old indices and the old count of 3
+      (`STATEMENTS_PER_PUSH = 5` on a push) hold over `after_lock(..)`, every statement but the
+      lock, and a whole-request count (4, or 6 on a push) is asserted beside it. Tests:
+      `the_refusal_is_raised..`, `an_unidentified_store..`, `a_refusal_answer_names_the_claim_it_carries`,
+      `ingest_batch_is_one_statement_regardless_of_size`, `ingest_carries_foreign_origin..`,
+      `rotors_ingest..`, `write_group::the_ingest_request_ends_with_the_stamp_after_the_refusal`,
+      `every_ingested_row_is_written_under_a_provisional_tag`.
+    - Neon scripted answers (`LANDED`, `NO_COMPENSATED`, `landed_push`, `a_push_is_one_request..`):
+      a lock result set prepended, since a real answer now carries one.
+    - Neon `a_push_answered_with_the_wrong_number..`: `expected: 5` → `5 + LOCK`, actual
+      `(4, 6)` → `(4 + LOCK, 6 + LOCK)`, `remove(3)` → `remove(3 + LOCK)`, with `LOCK = 1`
+      named. No state is reachable in which a push sends the old five alone.
+  - Decided without the owner: `55P03` classified transient in both adapters (the Errors
+    section assumed it; a classification change); the trigger's `WHEN` guards both origin
+    columns, mirroring `event_origin_idx`'s predicate, where the design named `origin_store`
+    alone; the trigger is created by a `DO` block guarded by `pg_trigger`, not `DROP` +
+    `CREATE`, so a reapply takes no lock on `event`; Neon's anti-join is a `LEFT JOIN .. IS
+    NULL`, because an existing test forbids `NOT EXISTS` in an ingest (SY-1), and its record,
+    function and trigger names derive from `event_table`, so `NeonConfig` gains nothing; Neon
+    still draws positions for every offered row (`fp` counts the batch), so a removed row
+    leaves a gap there, which the design required of Postgres only; Postgres's probe is a child
+    module, `ingest/removal.rs`; `WRITE_GROUP_LOG` is `cfg(test)`. `RawSql::fetch_one`'s
+    future fails the `Executor` HRTB check under `spawn`, so the first round trip goes through
+    `Executor::fetch_one` on `&mut PgConnection`.
+  - CHANGELOG rows **H5** (Postgres) and **H6** (Neon) assume PR 2's SQLite row keeps **H4**;
+    renumber on merge if it does not.
+  - **SY-40 not frozen.** D-10 freezes it on four green adapters. This branch carries two of
+    them, and Neon's is unrun. ADR-0107 and ADR-0108 each recorded a freeze in an ADR of its own,
+    so the freeze is a follow-up after PR 2, PR 3 and a `live-neon` run, with the ADR that
+    names it.
+
+
+- 2026-11-18, PR 4 review fixes (review at fingerprint `c4e8edcbcaafa10b`, changes requested),
+  on the same branch, by a second implementer; the first was unreachable. Live Postgres was
+  17.10 in the reused testcontainers container, every live run `--test-threads=1`.
+  - **F1, privileges.** Verified by hand first, on 17.10 with `SET ROLE`: a role holding
+    `SELECT, DELETE` on `event` fails its `DELETE` with `permission denied for table
+    event_removed`; a role holding `SELECT` on the record cannot `LOCK ... IN SHARE MODE`, and
+    one holding `SELECT, UPDATE` or `SELECT, MAINTAIN` can. Firing a trigger checks no
+    `EXECUTE` on its function, and creating one does, so `REVOKE EXECUTE ... FROM PUBLIC`
+    stops a role attaching the definer function to a table of its own and breaks no deleter.
+    New live tests in `ingest/tests/privileges.rs`, each logging in as a `LOGIN` role it
+    creates and drops:
+    - `a_deleter_holding_only_select_and_delete_is_recorded`, **red** before `SECURITY
+      DEFINER`: `the deleter's DELETE commits: error returned from database: permission denied
+      for table event_removed`. Green after.
+    - `an_ingest_role_needs_select_and_update_on_the_record`: `SELECT` alone on the record is
+      refused `42501` naming `event_removed`, and adding `UPDATE` lands the batch. It pins the
+      documented set, so it went green with the docs rather than with code; its first run was
+      red on the test's own arrangement (`permission denied for table event`: a `0.7` ingest
+      already needed `UPDATE` on `event`, the write-group stamp), which the grant list now
+      says.
+    - Both adapters' function: `SECURITY DEFINER SET search_path = pg_catalog, pg_temp`
+      (`pg_temp` last, the manual's form), `EXECUTE` revoked from `PUBLIC` (Postgres: a
+      statement in the migration; Neon: first in the `DO` block, as the request is fixed at
+      two statements). Unit assertions added in `migration_4_creates_the_record..`; Neon's
+      `the_trigger_statements_are_whole_and_qualified` text, **red**: `left: ".. LANGUAGE
+      plpgsql AS $record$ .."` without `SECURITY DEFINER`. That exact-text expectation was
+      rewritten, because the SQL it pins changed by the review's request.
+  - **F2, dollar tags.** Neon keeps "escape at emission" (`config.rs` rejects validating
+    names), so the tag is chosen: `$record$`/`$trigger$`, or, when the statement's text
+    carries it, the base padded with `_` past the text's length, which no substring can
+    match. New `the_trigger_statements_choose_a_tag_the_table_name_cannot_close`, table
+    `e$record$$trigger$x`, **red**: `$record$ in CREATE OR REPLACE FUNCTION .. left: 4 right:
+    2`. A separate test rather than a case inside `..quote_a_hostile_table_name`, one
+    behaviour per test.
+  - **F3.** `migration::removal_record_request(&config) -> SqlRequest`, beside `request`.
+    **Red**: `error[E0432]: unresolved import super::removal_record_request` in
+    `the_removal_record_request_is_the_table_then_its_trigger`. Used by the `MIGRATION_4`
+    doctest, a new doctest on the function, the README, the upgrade guide and the three
+    private copies.
+  - **F4.** Documented in both READMEs and the upgrade guide: an open transaction holding a
+    `DELETE` holds every ingest under `lock_timeout = 0`; set one on the role (or, on
+    Postgres, the connection); `55P03` is then transient and retried. No `SET LOCAL
+    lock_timeout` added: an open option for the owner.
+  - **F5.** The doc on `the_schema_version_counts_the_write_group_migration` names the test
+    that now pins `SCHEMA_VERSION`.
+  - The Neon SQL was applied by hand to 17.10 (no endpoint here), rendered by a script
+    mirroring the `format!`s, for the default table and for `e$record$$trigger$x` with the
+    padded tags: applied twice, one trigger, `EXECUTE` not held by another role, and a
+    `DELETE` by a role holding only `SELECT, DELETE` recorded the identity.
+  - Green: Postgres lib 134 (all 74 live among them) and every integration binary under
+    `--ignored` (conformance 114); Neon lib 127 passed, 62 ignored (live).

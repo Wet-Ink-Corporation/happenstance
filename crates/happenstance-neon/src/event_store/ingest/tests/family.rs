@@ -11,15 +11,18 @@
 //! reports its hidden-claim half as skipped, because a refused call here has
 //! consumed sequence values, so the compensation the rule then writes lands
 //! past the identity it claimed. On this store the hidden case reduces to the
-//! landed one, which `claims.rs` verifies directly.
+//! landed one, which `claims.rs` verifies directly. SY-40 runs, the fixture
+//! removing by a raw `DELETE` through the endpoint; `removal.rs` beside this
+//! pins the request and checks the trigger.
 //!
 //! The write-group family (SY-39, #420) mounts on the same fixture, below: the
 //! store a runner pushes from and a `StoreSyncPeer` serves a pull from. All six
 //! rules run; `groups.rs` beside this reads what the rules cannot, the stored
 //! columns and a schema from before migration 3.
 
+use happenstance_core::SequencePosition;
 use happenstance_sync_testkit::{IngestFixture, Violation};
-use happenstance_testkit::Capability;
+use happenstance_testkit::{Capability, Removed};
 use tokio::sync::OnceCell;
 
 use super::endpoint::{LiveTransport, fresh_schema};
@@ -69,12 +72,33 @@ impl IngestFixture for NeonIngestFixture {
         Some(NeonEventStore::<LiveTransport>::MAX_EVENT_DATA_LEN);
     const MAX_TAGS_PER_EVENT: Option<usize> =
         Some(NeonEventStore::<LiveTransport>::MAX_TAGS_PER_EVENT);
+    /// Mirrored from the constant `exceeded` holds the whole call's length
+    /// to, foreign and compensation events counted together: VT-24's floor,
+    /// exactly.
+    const MAX_EVENTS_PER_BATCH: Option<usize> =
+        Some(NeonEventStore::<LiveTransport>::MAX_EVENTS_PER_BATCH);
+
+    /// Supported, by a raw `DELETE` on this fixture's schema through the
+    /// endpoint, which is what an operator's prune does and what migration
+    /// 4's trigger records (SY-40). It keeps the position sequence where it
+    /// was, so it is a removal and not a branch reset. One table, because tags
+    /// are a column of the event table.
+    const REMOVAL: Capability = Capability::SUPPORTED;
 
     async fn connect(&self) -> Self::Store {
         let (config, transport) = self.schema().await;
         // A cheap handle onto the one client and ledger, and a copy of a few
         // names, which the store keeps.
         NeonEventStore::new(transport.clone(), config.clone())
+    }
+
+    /// Deletes the named rows in one request, through `removal.rs`'s
+    /// `remove`, which panics unless each position named was held: the rule
+    /// names only positions this store assigned, so anything else is a broken
+    /// environment.
+    async fn remove_outside_port(&self, positions: &[SequencePosition]) -> Removed {
+        super::removal::remove(&self.connect().await, positions).await;
+        Removed::Deleted
     }
 
     /// Installs the trigger `MID_GROUP_FAULT` describes. The counter is a
