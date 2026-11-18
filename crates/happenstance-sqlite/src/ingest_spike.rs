@@ -949,8 +949,10 @@ mod tests {
         /// One file per fixture, and a connection onto it per `connect`.
         ///
         /// A file, not `open_in_memory`, so that two handles a rule holds are
-        /// one store. Each handle is dropped before the fixture that backs it,
-        /// so the file unlinks on Windows too.
+        /// one store. Most rules drop each handle before the fixture that backs
+        /// it, so the file unlinks on Windows too; the SY-7 and SY-10 rules
+        /// drop the fixture first, and `TempFile`'s `Drop` leaves that file to
+        /// the temporary-directory cleanup.
         struct SqliteIngestFixture {
             file: TempFile,
         }

@@ -664,3 +664,11 @@ its five wrong stores.
   `lib.rs` because the edit hook classifies a `src/test_support.rs` file as production code); F5
   `WRITE_GROUP_SCHEMA_VERSION` is `pub(super)` and `removal.rs` imports it; F6 the experiment
   addendum cites tests and issues, not a branch commit.
+- 2026-11-18, CI regression from F4 on `gate (windows-latest)`: `ingest_family`'s
+  `directional_merge_rules_compose` and `only_the_adjudicator_compensates` panicked in
+  `TempFile::drop` with os error 32. Root cause in the sync testkit, unchanged since `1cfa397`
+  (0.6.0) and not PR 1's: `topology.rs:302` and `adjudication.rs:184` write
+  `open().await.connect().await`, dropping the fixture while the rule holds the store. The old
+  spike `TempFile` hid it with `let _ = remove_file`. Fix in this crate only: `Drop` leaves a
+  Windows sharing violation (`cfg!(windows)`, raw code 32) to the temp-dir cleanup; `remove`
+  (and so `new`) still panics on every error. No red here: Linux unlinks an open file.

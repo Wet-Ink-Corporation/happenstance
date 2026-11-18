@@ -328,8 +328,8 @@ mod test_support {
 
     /// A database file of its own, deleted with its WAL sidecars on drop, so
     /// a second connection can look at the tables or act as an operator
-    /// would. Dropped after the store it backs, because Windows will not
-    /// unlink an open file.
+    /// would. Drop it after the store it backs, because Windows will not
+    /// unlink an open file; where a caller cannot, `Drop` says what happens.
     pub(crate) struct TempFile(pub(crate) PathBuf);
 
     impl TempFile {
@@ -361,6 +361,12 @@ mod test_support {
         /// panics, except while a test is already unwinding, where a second
         /// panic would abort and hide the first.
         pub(crate) fn remove(&self) {
+            self.remove_leaving(|_| false);
+        }
+
+        /// As [`remove`](Self::remove), except that a deletion `left`
+        /// accepts is left in place rather than panicking.
+        fn remove_leaving(&self, left: impl Fn(&std::io::Error) -> bool) {
             for suffix in ["", "-wal", "-shm"] {
                 // An owned path per sidecar: `push` needs one to extend.
                 let mut path = self.0.clone().into_os_string();
@@ -368,6 +374,7 @@ mod test_support {
                 let path = PathBuf::from(path);
                 if path.exists()
                     && let Err(error) = std::fs::remove_file(&path)
+                    && !left(&error)
                     && !std::thread::panicking()
                 {
                     panic!("could not delete {}: {error}", path.display());
@@ -390,8 +397,25 @@ mod test_support {
     }
 
     impl Drop for TempFile {
+        /// Deletes the file, leaving it to the system's temporary-directory
+        /// cleanup in exactly one case: Windows refusing because a handle is
+        /// still open on it. The sync testkit's SY-7 and SY-10 rules connect
+        /// through `open().await.connect().await`, which drops the fixture,
+        /// and this file with it, while the rule still holds the store. Linux
+        /// unlinks an open file, so that case never reaches here. Every other
+        /// error still panics, as does the same refusal in `new`, where no
+        /// handle of ours can be open.
         fn drop(&mut self) {
-            self.remove();
+            self.remove_leaving(still_open_on_windows);
         }
+    }
+
+    /// Whether `error` is Windows' `ERROR_SHARING_VIOLATION` (32): the file
+    /// is open in some process, which for a test's own temporary file means
+    /// a store handle that outlived its fixture. Matched on the raw code
+    /// because `io::ErrorKind` has no variant for it. Never true elsewhere.
+    fn still_open_on_windows(error: &std::io::Error) -> bool {
+        const ERROR_SHARING_VIOLATION: i32 = 32;
+        cfg!(windows) && error.raw_os_error() == Some(ERROR_SHARING_VIOLATION)
     }
 }
