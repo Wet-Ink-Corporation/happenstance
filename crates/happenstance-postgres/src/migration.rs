@@ -88,7 +88,7 @@ pub const MIGRATION_4: &str = include_str!("../migrations/0004_removal_record.sq
 ///
 /// `concat!` over the three `include_str!`s, so the batch is one constant
 /// compiled in and not a string assembled per call. It begins with
-/// [`WRITE_GROUP_LOG`], byte for byte.
+/// the test-only `WRITE_GROUP_LOG`, byte for byte.
 #[cfg(feature = "event-store")]
 const EVENT_LOG: &str = concat!(
     include_str!("../migrations/0001_event_log.sql"),
