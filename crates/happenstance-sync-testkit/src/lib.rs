@@ -43,6 +43,7 @@
 //! | [`peer_takes_a_batch_at_its_declared_limits`](rules::peer_takes_a_batch_at_its_declared_limits) | SY-18 | a peer that refuses a push its own batch limits admit: more events, or more bytes, than it really takes |
 //! | [`push_envelope_preserves_group_boundaries`](rules::push_envelope_preserves_group_boundaries) | SY-30 | a peer that merges the groups of a page into one, or strips the guard a group was pushed with |
 //! | [`every_refusal_states_its_class`](rules::every_refusal_states_its_class) | SY-36 | a peer whose errors all state one failure class, whatever the failure |
+//! | [`refusal_is_never_condition_derived`](rules::refusal_is_never_condition_derived) | SY-33 | a peer whose refusal of a push appears, vanishes or changes class with what it holds: a "duplicate" or "conflict" refusal |
 //! | [`nothing_waiting_means_the_next_pull_is_empty`](rules::nothing_waiting_means_the_next_pull_is_empty) | SY-37 | a peer that says nothing is waiting when its page ran out, not its log |
 //! | [`ack_never_confirms_a_non_durable_event`](rules::ack_never_confirms_a_non_durable_event) | SY-31 | a peer that confirms an event before it is durable |
 //! | [`round_trip_preserves_the_whole_log`](rules::round_trip_preserves_the_whole_log) | SY-28, SY-27 | a peer that withholds from its counterpart the events a type or tag filter matches, among those the rule's log carries |
@@ -52,8 +53,9 @@
 //! this crate's `tests/wrong_peers.rs` — SY-18's in `tests/wrong_limits.rs`,
 //! over [`KvCappedFixture`], its batch rule's in `tests/wrong_peers.rs`,
 //! SY-23's in `tests/wrong_orders.rs`, SY-28's in `tests/wrong_scopes.rs`,
-//! SY-31's across a reopen in `tests/wrong_reopens.rs`, and SY-32's in
-//! `tests/wrong_retention.rs` — where the rule is shown to fail it. A rule no
+//! SY-31's across a reopen in `tests/wrong_reopens.rs`, SY-32's in
+//! `tests/wrong_retention.rs`, and SY-33's in `tests/wrong_refusals.rs` —
+//! where the rule is shown to fail it. A rule no
 //! peer can fail is decorative. The mount also emits
 //! `every_declined_capability_is_stated_by_this_fixture`, which fails a
 //! fixture that leaves [`REOPEN`](SyncFixture::REOPEN) at this crate's default

@@ -207,6 +207,25 @@ deploy.
   typed-layer test in `crates/happenstance/tests/projection_scopes.rs`, held
   against both runners and against a runner reading `scope()` alone and one
   dropping the event types.
+- **`happenstance-sync-testkit`: SY-33's rule, `refusal_is_never_condition_derived`**,
+  in the sync peer family (#465). SY-33 was frozen naming it, and it had never
+  been written. It drives every refusal the fixture declares through
+  `SyncFixture::refusals` twice on one handle, once on the fresh receiver and
+  once after the rule has grown its log, and requires each to be answered the
+  same: accepted, or refused with the same `FailureClass`. In between it pushes a
+  guarded claim, a seed of a rival claim that guard names and unrelated events,
+  the claim again and the claim's shape from a fresh origin, each held to the
+  claim's first answer. Only refusals are compared, never acks. SY-38's
+  own-identity refusal is never provoked: the rule's origins are its own. It
+  rejects a peer that refuses an event it already holds, one that refuses a
+  group whose guard its log violates, which SY-1's rule rejects too, and one
+  whose oversized-push refusal is `Split` on an empty log and `Stop` once it
+  holds anything, in `tests/wrong_refusals.rs`. `SyncFixture` is unchanged, so
+  every existing fixture runs the rule with no edit: it is green on
+  `MemorySyncPeer`, the KV-capped, `!Send`, remote and store peers, and mounted
+  for the Durable Object, `harness/workerd`, and the Postgres and Neon peers
+  under `live-postgres` and `live-neon`. **A new rule is a minor for this crate;
+  pin it exactly.**
 
 ### Changed
 

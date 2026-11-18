@@ -66,18 +66,12 @@ pub(super) fn all_declarations()
 const OWED_BY_458: &str = "#458's second half: written into `happenstance-sync-testkit`, or the \
      `[FROZEN]` Rule line repointed by a record";
 
-/// SY-33's owner, which predates #458. #465 named SY-34 too, and ADR-0108
-/// repointed SY-34's line at the runner test that holds it; no test anywhere
-/// varies a refusal with the receiver's log, so SY-33's stays unwritten.
-const OWED_BY_465: &str = "#465: written at the runner or peer level with a wrong peer whose \
-     refusal varies with its log, or the `[FROZEN]` Rule line repointed by a record";
-
 /// Every `(clause, rule)` pair an `SY` clause states and no resolution source
 /// can find, with the reason.
 ///
 /// The count in the type is written twice on purpose, as the parent table's is:
 /// a change to it is a change a reviewer should be made to see.
-pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 21] = [
+pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 20] = [
     // ---- Scheduled: nothing has written them -----------------------------
     // SY-3's `compensation_is_idempotent_under_redelivery` left this table at
     // ADR-0108, which repointed SY-3's line to SY-12's
@@ -126,11 +120,8 @@ pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 21] 
              `Query` on the port and builds this rule with its ADR",
         ),
     ),
-    (
-        "SY-33",
-        "refusal_is_never_condition_derived",
-        Unresolvable::Scheduled(OWED_BY_465),
-    ),
+    // SY-33's `refusal_is_never_condition_derived` left this table when #465
+    // wrote it into the sync peer family, where check 4 resolves it.
     (
         "SY-35",
         "the_sync_suite_never_decodes",
