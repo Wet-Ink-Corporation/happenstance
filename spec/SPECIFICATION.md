@@ -8532,9 +8532,17 @@ claiming the receiver's own identity that it does not hold; it is an
 identity-integrity refusal, not a condition-level one (ADR-0098).
 
 `[FROZEN]`
-Rule: `refusal_is_never_condition_derived` (new, `happenstance-sync-testkit`) —
+Rule: `refusal_is_never_condition_derived` (`happenstance-sync-testkit`'s sync
+peer family, `sync_suite.rs`; written by #465) —
 the fixture receiver is driven into every refusal it can produce; the rule
-asserts none of them varies with the receiver's log contents.
+asserts none of them varies with the receiver's log contents. It drives them
+once on the fresh receiver and once after pushing a rival claim the probe's
+guard names and unrelated events, with a re-sent probe and a late one between,
+and compares refused or accepted and the class. The rule's own pushes never
+provoke SY-38's refusal, since their origins are the rule's own.
+`tests/wrong_refusals.rs` holds it against a peer that refuses what it holds,
+one that refuses a violated guard, one that does so only for new events, and
+one whose refusal's class follows its log.
 Cases: E2E-45, E2E-39, E2E-47.
 
 *Rejects:* the reading that will otherwise be re-litigated the first time someone
@@ -10853,7 +10861,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-30 | FROZEN | `push_envelope_preserves_group_boundaries`, `ingest_group_is_atomic_under_a_mi… | E2E-35, E2E-39 |
 | SY-31 | FROZEN | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
 | SY-32 | FROZEN | `retention_gap_is_reported_not_silent` | E2E-44, E2E-46, E2E-47 |
-| SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
+| SY-33 | FROZEN | `refusal_is_never_condition_derived` | E2E-45, E2E-39, E2E-47 |
 | SY-34 | FROZEN | `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` †, `a_r… | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
 | SY-36 | FROZEN | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |

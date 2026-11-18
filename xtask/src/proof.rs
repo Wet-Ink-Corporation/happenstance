@@ -1374,6 +1374,7 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::ingest::tests::served::sync_conformance::peer_declares_its_own_limits",
     "event_store::ingest::tests::served::sync_conformance::peer_takes_a_batch_at_its_declared_limits",
     "event_store::ingest::tests::served::sync_conformance::every_refusal_states_its_class",
+    "event_store::ingest::tests::served::sync_conformance::refusal_is_never_condition_derived",
     "event_store::ingest::tests::served::sync_conformance::nothing_waiting_means_the_next_pull_is_empty",
     "event_store::ingest::tests::served::sync_conformance::ack_never_confirms_a_non_durable_event",
     "event_store::ingest::tests::served::sync_conformance::push_envelope_preserves_group_boundaries",

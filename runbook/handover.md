@@ -73,9 +73,10 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
   you want one.
 - #480: `sync_declensions_are_stated` still accepts an inherited `COMPACTION` declension,
   because every real peer fixture inherits it.
-- Eight `[FROZEN]` `SY` clauses name a † rule that exists nowhere in the tree (SY-6, SY-9,
-  SY-13, SY-16, SY-19, SY-26, SY-33, SY-35), each declared in `SYNC_UNRESOLVABLE_RULE_NAMES`
-  with its owner (#465).
+- Seven `[FROZEN]` `SY` clauses name a † rule that exists nowhere in the tree (SY-6, SY-9,
+  SY-13, SY-16, SY-19, SY-26, SY-35), each declared in `SYNC_UNRESOLVABLE_RULE_NAMES`
+  with its owner (#458). SY-33's, the eighth, was written by #465:
+  `refusal_is_never_condition_derived`, in the sync peer family.
 - Calls taken *as recommended* while the owner was asked, still unconfirmed: #101 O1–O3,
   #103 O1(a), #118's schema call, and #123 O1(B)/O2.
 - Defaults in force: `trait-variant` keeps its caret (ADR-0092); new CI jobs are not
