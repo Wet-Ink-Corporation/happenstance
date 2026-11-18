@@ -140,6 +140,20 @@ enum Mistake {
     /// left alone, so the call is refused as `TagsPerEvent`, `Park`, and a
     /// runner parks a call that would have landed halved.
     RefusesTheTotalAsPerEvent,
+    /// VT-24's on the ingest path, the append path's check reused per group:
+    /// hold each group's foreign events and compensation to the
+    /// events-per-call ceiling apart, although the call is one transaction.
+    CountsEachGroupsLengthApart,
+    /// VT-24's second: count the foreign events and never the compensation
+    /// the store writes itself, so a call the compensation takes over lands.
+    LeavesCompensationOutOfTheLength,
+    /// VT-24's third: refuse a call exactly at the events-per-call ceiling, so
+    /// the declaration is one larger than what the store takes.
+    RefusesAtTheLengthLimit,
+    /// VT-24's fourth: check the call's length after writing it, as a store
+    /// does that counts the rows its insert returned, so the refusal is well
+    /// formed and the call it refuses is in the log.
+    RefusesTheLengthAfterWriting,
     /// SY-7's: a compensation minted under an incarnation the store never
     /// read, a placeholder (the nil `StoreId`), because its compensation path
     /// was written before the store kept its identity. The log then says a
@@ -219,6 +233,12 @@ const WRONG_MAX_METADATA_LEN: usize = 512;
 /// at least [`WRONG_MAX_TAGS`], so it is coherent, and above every call any
 /// other rule makes, the largest of which is SY-18's control at 16.
 const WRONG_MAX_TAGS_PER_BATCH: usize = 64;
+
+/// The events-per-call ceiling every [`WrongIngestStore`] declares and
+/// enforces, compensation included: the SQLite and Postgres adapters' 256, and
+/// above every call any other rule makes, the largest of which is SY-14's at
+/// VT-24's floor of 128.
+const WRONG_MAX_EVENTS_PER_BATCH: usize = 256;
 
 /// The incarnation [`Mistake::FilesCompensationUnderAPlaceholder`] files
 /// every compensation under: one no store was given, and no rule's origin.
@@ -394,11 +414,55 @@ impl WrongIngestStore {
         groups: &[IngestGroup<'_>],
         handle_record: &Mutex<BTreeSet<EventId>>,
     ) -> Result<Ingested, IngestError<WrongError>> {
+        let late = self.mistake == Mistake::RefusesTheLengthAfterWriting;
+        if !late {
+            self.within_the_call_length(groups)?;
+        }
         self.check_ceilings(groups)?;
         let removed = self.record_for(handle_record).map_err(IngestError::Store)?;
         let mut rows = self.rows().map_err(IngestError::Store)?;
         let written = self.write_groups(&mut rows, groups, &removed)?;
-        self.apply(&mut rows, written)
+        let ingested = self.apply(&mut rows, written)?;
+        if late {
+            self.within_the_call_length(groups)?;
+        }
+        Ok(ingested)
+    }
+
+    /// The call's events, every group and its compensation, are within the
+    /// events-per-call ceiling: checked first, as every adapter here orders
+    /// it, so a call over it and over a per-event ceiling is split rather
+    /// than parked.
+    fn within_the_call_length(
+        &self,
+        groups: &[IngestGroup<'_>],
+    ) -> Result<(), IngestError<WrongError>> {
+        let length = |group: &IngestGroup<'_>| {
+            if self.mistake == Mistake::LeavesCompensationOutOfTheLength {
+                group.events.len()
+            } else {
+                group.events.len() + group.compensation.len()
+            }
+        };
+        let lengths: Vec<usize> = if self.mistake == Mistake::CountsEachGroupsLengthApart {
+            groups.iter().map(length).collect()
+        } else {
+            vec![groups.iter().map(length).sum()]
+        };
+        let over = |len: usize| {
+            if self.mistake == Mistake::RefusesAtTheLengthLimit {
+                len >= WRONG_MAX_EVENTS_PER_BATCH
+            } else {
+                len > WRONG_MAX_EVENTS_PER_BATCH
+            }
+        };
+        match lengths.into_iter().find(|len| over(*len)) {
+            Some(len) => Err(IngestError::exceeds_store_limit(
+                StoreLimit::EventsPerBatch,
+                len,
+            )),
+            None => Ok(()),
+        }
     }
 
     /// Commits what `written` decided onto `rows`, row by row in write order,
@@ -1014,6 +1078,8 @@ impl IngestFixture for WrongFixture {
     const MAX_METADATA_LEN: Option<usize> = Some(WRONG_MAX_METADATA_LEN);
     /// Mirrored too, so VT-36's ingest rule runs against every mistake here.
     const MAX_TAGS_PER_BATCH: Option<usize> = Some(WRONG_MAX_TAGS_PER_BATCH);
+    /// And so VT-24's ingest rule, and VT-36's reachable half.
+    const MAX_EVENTS_PER_BATCH: Option<usize> = Some(WRONG_MAX_EVENTS_PER_BATCH);
 
     /// Supported, so SY-40's rule runs against every mistake here: a removal
     /// deletes rows from the one log every handle shares and records them.
@@ -1206,6 +1272,10 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
         (
             "ingest_holds_the_call_to_its_tags_per_batch_ceiling",
             "VT-36",
+        ),
+        (
+            "ingest_holds_the_call_to_its_events_per_batch_ceiling",
+            "VT-24",
         ),
         ("only_the_adjudicator_compensates", "SY-7"),
         ("directional_merge_rules_compose", "SY-10"),
@@ -1620,13 +1690,97 @@ fn bulk_ingest_is_idempotent_in_bounded_round_trips_fails_a_store_that_looks_up_
 /// A store whose ingest refuses a call of 65 events refuses the minimum
 /// peer's 128-event push, and the rule reports that refusal under VT-24, the
 /// floor it breaks, rather than SY-14.
+///
+/// Its fixture states the cap it enforces, [`StatesItsCap`], so the mistake
+/// is the floor alone: VT-24's batch-length rule holds the store to the 64 it
+/// declares and passes it, which is that rule leaving the floor to this one.
 #[test]
 fn bulk_ingest_is_idempotent_in_bounded_round_trips_fails_a_store_that_caps_the_call_below_the_floor()
  {
     fails_exactly(
-        &verdicts(async || WrongFixture::new(Mistake::CapsTheCallBelowTheFloor)),
+        &verdicts(async || StatesItsCap(WrongFixture::new(Mistake::CapsTheCallBelowTheFloor))),
         "bulk_ingest_is_idempotent_in_bounded_round_trips",
         "VT-24",
+    );
+}
+
+/// A [`WrongFixture`] that declares [`CALL_CAP_BELOW_THE_FLOOR`] as its
+/// events-per-call ceiling, and delegates the rest.
+struct StatesItsCap(WrongFixture);
+
+impl IngestFixture for StatesItsCap {
+    type Store = WrongHandle;
+
+    const MID_GROUP_FAULT: Capability = WrongFixture::MID_GROUP_FAULT;
+    const MAX_EVENT_DATA_LEN: Option<usize> = WrongFixture::MAX_EVENT_DATA_LEN;
+    const MAX_TAGS_PER_EVENT: Option<usize> = WrongFixture::MAX_TAGS_PER_EVENT;
+    const MAX_METADATA_LEN: Option<usize> = WrongFixture::MAX_METADATA_LEN;
+    const MAX_TAGS_PER_BATCH: Option<usize> = WrongFixture::MAX_TAGS_PER_BATCH;
+    /// The cap [`Mistake::CapsTheCallBelowTheFloor`] enforces, and under it
+    /// the faithful store's own, which is wider.
+    const MAX_EVENTS_PER_BATCH: Option<usize> = Some(CALL_CAP_BELOW_THE_FLOOR);
+    const REMOVAL: Capability = WrongFixture::REMOVAL;
+
+    async fn connect(&self) -> Self::Store {
+        self.0.connect().await
+    }
+
+    async fn remove_outside_port(&self, positions: &[SequencePosition]) -> Removed {
+        self.0.remove_outside_port(positions).await
+    }
+
+    async fn arm_mid_group_fault(&self, after: usize) -> Result<(), Violation> {
+        self.0.arm_mid_group_fault(after).await
+    }
+}
+
+#[test]
+fn ingest_holds_the_call_to_its_events_per_batch_ceiling_fails_a_store_that_counts_each_group_apart()
+ {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::CountsEachGroupsLengthApart)),
+        "ingest_holds_the_call_to_its_events_per_batch_ceiling",
+        "VT-24",
+    );
+}
+
+#[test]
+fn ingest_holds_the_call_to_its_events_per_batch_ceiling_fails_a_store_that_leaves_compensation_out()
+ {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::LeavesCompensationOutOfTheLength)),
+        "ingest_holds_the_call_to_its_events_per_batch_ceiling",
+        "VT-24",
+    );
+}
+
+/// Only the control sees it: every over call is refused either way.
+#[test]
+fn ingest_holds_the_call_to_its_events_per_batch_ceiling_fails_a_store_that_refuses_at_the_limit() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::RefusesAtTheLengthLimit)),
+        "ingest_holds_the_call_to_its_events_per_batch_ceiling",
+        "VT-24",
+    );
+}
+
+/// The refusal is the right one; only the log read back after it shows the
+/// call was written.
+#[test]
+fn ingest_holds_the_call_to_its_events_per_batch_ceiling_fails_a_store_that_refuses_after_writing()
+{
+    let open = async || WrongFixture::new(Mistake::RefusesTheLengthAfterWriting);
+    fails_exactly(
+        &verdicts(open),
+        "ingest_holds_the_call_to_its_events_per_batch_ceiling",
+        "VT-24",
+    );
+    let violation =
+        block_on(ingest_rules::ingest_holds_the_call_to_its_events_per_batch_ceiling(open))
+            .expect_err("the rule rejects the store");
+    assert!(
+        violation.message().contains("changed the store"),
+        "the rule failed for another reason: {violation}"
     );
 }
 

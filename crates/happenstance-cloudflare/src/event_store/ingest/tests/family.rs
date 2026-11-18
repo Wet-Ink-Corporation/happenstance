@@ -60,6 +60,9 @@ impl IngestFixture for CloudflareIngestFixture {
     /// Mirrored from the ceilings the store declares: the call is the batch,
     /// so VT-36's ingest rule holds every group and compensation to it.
     const MAX_TAGS_PER_BATCH: Option<usize> = Some(Ceilings::DECLARED.tags_per_batch);
+    /// Mirrored from the ceilings the store declares: the call is the batch,
+    /// so VT-24's ingest rule holds every group and compensation to it.
+    const MAX_EVENTS_PER_BATCH: Option<usize> = Some(Ceilings::DECLARED.events_per_batch);
 
     /// Supported, through a raw `DELETE` on the object's own SQL: the
     /// retention job the record's trigger hears (SY-40). `sqlite_sequence` and
