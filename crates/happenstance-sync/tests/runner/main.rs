@@ -81,6 +81,19 @@ fn ids(log: &[SequencedEvent]) -> Vec<EventId> {
     log.iter().map(|row| row.id).collect()
 }
 
+/// SY-34's log assertion: a refused push leaves the local log as it was,
+/// every row in place. Shared with `wrong_runners`, which runs it against a
+/// runner that rolls back on refusal.
+fn the_log_is_kept(before: &[SequencedEvent], after: &[SequencedEvent]) -> Result<(), String> {
+    (after == before).then_some(()).ok_or_else(|| {
+        format!(
+            "the local log changed on a refused push, from {:?} to {:?}",
+            ids(before),
+            ids(after)
+        )
+    })
+}
+
 /// Rejects a step that never ingests what it pulled.
 #[tokio::test]
 async fn a_step_pulls_the_far_sides_events_into_the_local_log() {
@@ -333,7 +346,7 @@ async fn a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class() 
         matches!(refused, Err(StepError::Push(_))),
         "the peer refused the push: {refused:?}"
     );
-    assert_eq!(store.snapshot(), before, "the local log is unchanged");
+    assert_eq!(the_log_is_kept(&before, &store.snapshot()), Ok(()));
     assert_eq!(edge.status().confirmed, None);
     assert_eq!(edge.status().pending, Pending::Exactly(2));
     let cause = Failure::new(Phase::Push, FailureClass::Split);
