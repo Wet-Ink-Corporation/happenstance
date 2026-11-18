@@ -2042,9 +2042,16 @@ jobs:
       # The credentials are step-scoped, on the three steps that need them, so
       # nothing before them — `npm ci`'s install scripts, `cargo install`'s build
       # scripts, the local runs — can read them.
+      #
+      # MANUAL ONLY (2026-11-18). Every queue, PR and main run deployed this
+      # Worker and the ingest ceiling's bisection wrote ~1.8M tag rows a run
+      # (max-tags: nine accepted calls up to 256 events x 1,024 tags), which
+      # ran the account to ~872M Durable Object SQL rows written in one
+      # billing period. The leg now runs only from a `workflow_dispatch` of
+      # this workflow; the local leg above still runs everywhere.
       - name: Whether there is an account to deploy to
         id: account
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
