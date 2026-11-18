@@ -224,6 +224,10 @@ deploy.
   store that counts its calls sees them.
 - `happenstance-sync-testkit`: the convergence suite builds its runs' `Source`
   from each log's own `store_id`. No rule's verdict changes.
+- `happenstance-sync-testkit`: SY-7's and SY-10's ingest rules keep each
+  fixture alive until the store connected from it drops, so a fixture that tears
+  its backing down on drop no longer does so under a live handle (#500). No
+  rule's verdict changes.
 - **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
   an identity that is not the store's.
 - **Breaking (schema): `happenstance-sqlite`: `SCHEMA_VERSION` is 3, was 2.**
