@@ -90,6 +90,21 @@ impl WorkerdIngestFixture {
         }
         Ok(())
     }
+
+    /// [`IngestFixture::remove_outside_port`]'s body, as a `Result`: every
+    /// [`removal_statements`] statement run in order, stopping at the first
+    /// refusal, whose text names the statement and the storage's error.
+    fn remove(&self, positions: &[SequencePosition]) -> Result<(), String> {
+        let what = "removing outside the port";
+        let statements = removal_statements(&self.namespace, positions)
+            .ok_or_else(|| format!("{what}: a position does not fit SQLite's i64"))?;
+        for (statement, bindings) in &statements {
+            self.sql
+                .exec(statement, bindings)
+                .map_err(|error| format!("{what}: {statement}: {error}"))?;
+        }
+        Ok(())
+    }
 }
 
 /// Why [`WorkerdIngestFixture::open`] could not build a fixture.
@@ -180,16 +195,17 @@ impl IngestFixture for WorkerdIngestFixture {
     /// `Deleted` only if every statement ran. Otherwise `Nothing`, which SY-40's
     /// rule fails on before it reads anything back; this crate may not panic,
     /// so nothing here does.
+    ///
+    /// `Removed` carries no reason, so the refusal is logged to the object's
+    /// console, naming the statement and the `SqlError`, before `Nothing` is
+    /// answered: the rule's failure then has its cause beside it in the log.
     fn remove_outside_port(&self, positions: &[SequencePosition]) -> impl Future<Output = Removed> {
-        let removed = removal_statements(&self.namespace, positions).is_some_and(|statements| {
-            statements
-                .iter()
-                .all(|(statement, bindings)| self.sql.exec(statement, bindings).is_ok())
-        });
-        core::future::ready(if removed {
-            Removed::Deleted
-        } else {
-            Removed::Nothing
+        core::future::ready(match self.remove(positions) {
+            Ok(()) => Removed::Deleted,
+            Err(fault) => {
+                worker::console_error!("{fault}");
+                Removed::Nothing
+            }
         })
     }
 }
