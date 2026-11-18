@@ -4,7 +4,6 @@
 //! runs on a device, offline, and on central, over the whole history; that it
 //! is one model is the point (the pillar *true to your rules*).
 
-use core::convert::Infallible;
 use core::fmt;
 use std::collections::BTreeMap;
 
@@ -463,80 +462,8 @@ impl DecisionModel for ShowLedger {
     }
 }
 
-/// The decision behind scheduling the show: one `ShowScheduled`, or nothing
-/// if this store already holds one, so scheduling twice is not an error.
-///
-/// # Errors
-///
-/// None: the error type is [`Infallible`].
-pub fn schedule(ledger: &ShowLedger, capacity: u32) -> Result<Vec<BoxOffice>, Infallible> {
-    Ok(match ledger.capacity {
-        Some(_) => Vec::new(),
-        None => vec![BoxOffice::ShowScheduled {
-            show: ledger.show.clone(),
-            capacity,
-        }],
-    })
-}
-
-/// The decision behind a sale at `at`: one `SeatSold` if a seat is free in the
-/// history this store holds, a [`Refusal`] if not.
-///
-/// The sale's id is minted here, from the same fold, so a retried decision
-/// mints it again from the history it re-read.
-///
-/// # Errors
-///
-/// [`Refusal::NotScheduled`] before the show reaches this store, and
-/// [`Refusal::SoldOut`] when every seat is held.
-pub fn sell_seat(ledger: &ShowLedger, at: Place, buyer: &str) -> Result<Vec<BoxOffice>, Refusal> {
-    let Some(capacity) = ledger.capacity else {
-        return Err(Refusal::NotScheduled {
-            show: ledger.show.to_string(),
-        });
-    };
-    let held = ledger.held();
-    if held >= capacity {
-        return Err(Refusal::SoldOut { capacity, held });
-    }
-    let made_here = ledger.sales().filter(|sale| sale.sold_by == at).count();
-    Ok(vec![BoxOffice::SeatSold {
-        show: ledger.show.clone(),
-        sale: SaleId::mint(at, made_here.saturating_add(1)),
-        buyer: buyer.to_owned(),
-        sold_by: at,
-    }])
-}
-
-/// Central's decision over the whole history: one `SaleRefunded` for each
-/// sale past capacity, refunding from the most recent arrival, and **nothing**
-/// when no seat is oversold, which `commit` reports as
-/// `CommandOutcome::Nothing`.
-///
-/// # Errors
-///
-/// None: the error type is [`Infallible`], which says in the signature that
-/// central's rule always has an answer.
-pub fn adjudicate(ledger: &ShowLedger) -> Result<Vec<BoxOffice>, Infallible> {
-    let Some(capacity) = ledger.capacity else {
-        return Ok(Vec::new());
-    };
-    let sales_seen = ledger.held();
-    let keep = usize::try_from(capacity).unwrap_or(usize::MAX);
-    Ok(ledger
-        .holding()
-        .skip(keep)
-        .map(|sale| BoxOffice::SaleRefunded {
-            show: ledger.show.clone(),
-            sale: sale.sale.clone(),
-            reason: RefundReason {
-                capacity,
-                sales_seen,
-                rule: Rule::FirstToReachCentralKeepsTheSeat,
-            },
-        })
-        .collect())
-}
+mod decide;
+pub use decide::{adjudicate, schedule, sell_seat};
 
 #[cfg(test)]
 mod tests;

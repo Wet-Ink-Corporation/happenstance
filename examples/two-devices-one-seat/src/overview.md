@@ -19,9 +19,11 @@ cargo run -p two-devices-one-seat
 3. **The signal returns.** Each device syncs through its own
    `happenstance_sync::runner::Edge`. Ingest never refuses (SY-1), so central
    now holds four sales for three seats. The oversell is visible, not lost.
-4. **Central keeps its rule.** It runs a decision over the whole history it
-   holds and appends one `SaleRefunded`, an ordinary conditional append
-   carrying its reason (SY-2). Running the rule again finds nothing to do.
+4. **Central keeps its rule.** Central's sync peer judges each push before it
+   lands, with [`CentralRule`] mounted on it as the runner's merge rule. The
+   sale that arrives past capacity lands in one write with one
+   `SaleRefunded`, an ordinary event carrying its reason (SY-2). Asked again
+   about everything central holds, the rule finds nothing to do.
 5. **Everyone converges.** The devices sync the refund down. A read model,
    [`Timeline`], is built on all three files and shows the same thing on each:
    four sales, one refund, three of three seats held, and an audit line saying
@@ -35,7 +37,8 @@ cargo run -p two-devices-one-seat
 - **Offline is real.** A device decides alone, with the same decision model
   central uses, and a failed sync loses nothing.
 - **One set of rules.** [`sell_seat`] runs on every device, and
-  [`adjudicate`] on central over the history no device had alone.
+  [`adjudicate`] on central, over the history no device had alone, as each
+  push lands.
 - **History is kept.** Nothing is overwritten. The oversell is in every log,
   and so is the refund that answered it, with its reason as data.
 - **Three places, one answer.** The read model converges because it is written
@@ -51,19 +54,32 @@ lowest event id is deterministic across peers (SY-23), but store ids are
 minted at random, so the winning device would change from run to run. A
 device's clock is not an ordering key.
 
-# Central adjudicates by convention, for now
+# Central adjudicates as it syncs
 
-`StoreSyncPeer` never adjudicates: a push ingests and writes no compensation.
-No published runner yet writes a compensation beside an ingest; that hook is
-#450. So central applies its rule **after** ingest, with an ordinary `commit`.
-That is SY-2's compensation by an ordinary append, and SY-7, which is still
-provisional, makes one peer its author. Here that peer is central, by this
-application's convention. When the hook lands, this example moves to it.
+A `StoreSyncPeer` writes no compensation unless it is given a merge rule.
+Central's is given one: `StoreSyncPeer::with_adjudicator(CentralRule)`,
+served by `serve_sync_adjudicated`. For each group a device pushes, the
+runner asks [`CentralRule`] what the group lands with, before anything in the
+push is written, and lands the group and the answer in one write. The rule
+decides and never writes; it reads what central holds, and the groups that
+land before this one in the same push, and hands back the refunds.
+
+That is SY-2's compensation by an ordinary append, and SY-7's one author:
+only central's peer mounts the rule, and each device's edge keeps the
+default, which judges nothing it pulls (SY-10). A sale central already holds
+is never refunded again, so a push delivered twice earns nothing new, even
+before the runner skips it (SY-11).
+
+The refund is a plain event built from the domain event's type, tags and JSON
+bytes, without the codec tag `commit` writes into an event's metadata,
+because the typed layer has no public way to build one outside `commit`. A
+payload without the tag decodes under the reader's codec, JSON everywhere
+here.
 
 # The transport
 
 Each device talks to central through `RemoteSyncPeer` over [`Uplink`], an
-`Exchange` that calls `serve_sync` over central's `StoreSyncPeer`. Every pull
+`Exchange` that calls `serve_sync_adjudicated` over central's `StoreSyncPeer`. Every pull
 and push goes through the real wire envelope, so replacing `Uplink` with an
 HTTP client changes the transport and nothing else. The guide page
 `docs/sync-a-device.md` walks the same shape.
@@ -75,8 +91,9 @@ Neither is compiled here.
 - **Postgres** (`happenstance-postgres`, feature `sync`). What changes, all of
   it:
   - `Central` becomes `PostgresEventStore`. `CentralError`, `CentralPeer`,
-    `Uplink`, `UplinkError` and `StoryError`'s `Schedule` and `Adjudicate`
-    variants name central only through it, and follow.
+    `CentralRule`, `RuleError`, `Uplink`, `UplinkError` and `StoryError`'s
+    `Schedule` and `Adjudicate` variants name central only through it, and
+    follow.
   - Central's file. `Scenario::open` opens central with the same private
     `Site` the devices use, which opens all three roles on one SQLite file.
     Central needs its own: a `PostgresEventStore`, a
@@ -89,12 +106,16 @@ Neither is compiled here.
     `Project` variants name SQLite's errors for every place, central
     included. Central's failures need variants of their own.
 
-  What does not change: the domain and the rule, `StoreSyncPeer`,
-  `serve_sync`, `RemoteSyncPeer`, the edges, and both devices.
+  What does not change: the domain and the rule, `StoreSyncPeer` and its
+  merge rule, `serve_sync_adjudicated`, `RemoteSyncPeer`, the edges, and both
+  devices.
 - **Neon** is not a one-line change. `NeonSyncPeer` *is* the peer, since the
   device talks to Neon directly over one-shot HTTP with no server between, so
   it replaces `RemoteSyncPeer<Uplink>`. The application supplies the
-  `SqlTransport`, and central's rule commits through a `NeonEventStore`.
+  `SqlTransport`. `NeonSyncPeer` takes no merge rule, and there is no server
+  to mount one on, so central's rule runs as an ordinary `commit` through a
+  `NeonEventStore` after a sync, as this example did before the runner had a
+  merge rule.
 
 # What is not shown
 

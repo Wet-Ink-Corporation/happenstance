@@ -447,8 +447,8 @@ const TWO_PROCESS_TESTS: &[&str] = &[
 /// `the_refunded_sale_is_the_last_to_reach_central` runs the story both ways
 /// round, and rejects a rule that always refunds one device or refunds by
 /// sale id. `without_adjudication_the_show_stays_oversold` is the contrast: it
-/// passes because the oversell is real when central keeps no rule, and it is
-/// listed so that it cannot be silenced alone.
+/// passes because the oversell is real when central's peer judges by a rule
+/// that answers nothing, and it is listed so that it cannot be silenced alone.
 const OFFLINE_CONVERGENCE_TESTS: &[&str] = &[
     "story::a_sync_without_signal_is_transient_and_loses_nothing",
     "story::a_lost_push_is_transient_and_the_next_step_delivers_it",
