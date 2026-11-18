@@ -13,7 +13,7 @@
 //!   what its budget can carry and counts what it scanned, so `waiting` is
 //!   decided inside the same statement as the page (SY-37), and the identity
 //!   that names the responder (ADR-0104) is read in the same snapshot;
-//! * a **push** is the ingest's three statements, then the watermark and the
+//! * a **push** is the ingest's four statements, then the watermark and the
 //!   identity, in one `REPEATABLE READ` batch. The ack's `confirmed` and
 //!   `responder` are read inside the transaction that wrote the push, and
 //!   arrive only if it committed. A push with nothing foreign in it writes
@@ -51,7 +51,7 @@ use happenstance_sync::{
     PullBatchLimit, Pulled, PushBatch, StoreResume, SyncPeer, Waiting,
 };
 
-use super::ingest::{ingest_body, ingested_from, watermark_from};
+use super::ingest::{COUNTS_SET, ingest_body, ingested_from, watermark_from};
 use super::remint::identity_from;
 use super::write_group::{decode_group_page, group_budget};
 use super::{NeonEventStore, as_i64, decode_body};
@@ -275,7 +275,8 @@ impl<T: SqlTransport> SyncPeer for NeonSyncPeer<T> {
             last_two(sets, written.saturating_add(2)).map_err(NeonPeerError::Answer)?;
         // A count the answer lacks is such an answer, not the ingest's
         // `Store`, whose outcome is unknown.
-        let ingested = match sets.first() {
+        // The write's counts follow the removal record's lock (SY-40).
+        let ingested = match sets.get(COUNTS_SET) {
             Some(counts) if written > 0 => ingested_from(counts).map_err(|error| match error {
                 IngestError::Store(error) => NeonPeerError::Answer(error),
                 other => NeonPeerError::Ingest(other),

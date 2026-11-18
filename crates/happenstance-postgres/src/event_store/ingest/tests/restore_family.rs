@@ -5,12 +5,14 @@
 //! # How a restore is simulated
 //!
 //! In place, as `tests/remint.rs` does it: a backup records the position
-//! sequence's state and the identity row; a restore deletes every row written
-//! since, sets the sequence back and puts the row back. That is what restoring
-//! a dump or a point-in-time recovery taken at the backup does to this
-//! schema's state, which is the `event` table, `event_position_seq` and
-//! `store_meta` and nothing else. The schema is the fixture's own, from
-//! `server::fresh_pool`, so no other test sees it.
+//! sequence's state, the identity row and the removal record; a restore
+//! deletes every row written since, sets the sequence back, puts the row back
+//! and puts the record back as it was, undoing what the `DELETE`'s trigger
+//! wrote (ADR-0110, D-7). That is what restoring a dump or a point-in-time
+//! recovery taken at the backup does to this schema's state, which is the
+//! `event` table, `event_position_seq`, `store_meta` and `event_removed` and
+//! nothing else. The schema is the fixture's own, from `server::fresh_pool`,
+//! so no other test sees it.
 //!
 //! Then the documented procedure (ADR-0086, the crate root's "After a
 //! restore"): `remint_identity`. Writers are stopped by construction, since the
@@ -27,10 +29,10 @@
 //! gives: CI's `live-postgres` job already runs every `#[ignore]`d test of
 //! this target.
 
-use std::cell::Cell;
+use std::cell::RefCell;
 
-use happenstance_core::{Event, EventStore};
-use happenstance_sync::StoreSyncPeer;
+use happenstance_core::{Event, EventStore, RecordedAt};
+use happenstance_sync::{IngestError, IngestGroup, IngestStore, ReplicatedEvent, StoreSyncPeer};
 use happenstance_sync_testkit::{RestoreFixture, Violation, restore_rules};
 use sqlx::PgPool;
 use tokio::sync::OnceCell;
@@ -50,7 +52,7 @@ enum AfterRestore {
 }
 
 /// The state a restore to the backup brings back.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 struct Backup {
     /// `event_position_seq`'s `last_value`.
     last_value: i64,
@@ -58,11 +60,15 @@ struct Backup {
     is_called: bool,
     /// The `store_meta` identity row's value.
     identity: [u8; 16],
+    /// The removal record (ADR-0110), as two parallel columns: what a dump
+    /// taken then would bring back, so the restore rolls it back with the
+    /// allocator (I-5, D-7).
+    removed: (Vec<Vec<u8>>, Vec<i64>),
 }
 
 impl Backup {
     /// The highest position the backup can hold a row at.
-    const fn highest_kept(self) -> i64 {
+    const fn highest_kept(&self) -> i64 {
         if self.is_called { self.last_value } else { 0 }
     }
 }
@@ -71,7 +77,9 @@ impl Backup {
 #[derive(Debug)]
 struct PostgresRestoreFixture {
     pool: OnceCell<PgPool>,
-    backup: Cell<Option<Backup>>,
+    /// A `RefCell` because the backup holds the record's rows and so is not
+    /// `Copy`; the fixture is one rule's, on one task.
+    backup: RefCell<Option<Backup>>,
     after_restore: AfterRestore,
 }
 
@@ -83,7 +91,7 @@ impl PostgresRestoreFixture {
     fn with(after_restore: AfterRestore) -> Self {
         Self {
             pool: OnceCell::new(),
-            backup: Cell::new(None),
+            backup: RefCell::new(None),
             after_restore,
         }
     }
@@ -134,11 +142,18 @@ impl RestoreFixture for PostgresRestoreFixture {
                 format!("the identity row holds {} bytes, not 16", row.len()),
             )
         })?;
-        self.backup.set(Some(Backup {
+        let removed: Vec<(Vec<u8>, i64)> =
+            sqlx::query_as("SELECT origin_store, origin_position FROM event_removed")
+                .fetch_all(pool)
+                .await
+                .map_err(|error| arranging("read the removal record", &error))?;
+        // A borrow for this statement alone, held across no `.await`.
+        *self.backup.borrow_mut() = Some(Backup {
             last_value,
             is_called,
             identity,
-        }));
+            removed: removed.into_iter().unzip(),
+        });
         Ok(())
     }
 
@@ -168,6 +183,21 @@ impl RestoreFixture for PostgresRestoreFixture {
             .execute(&mut *restore)
             .await
             .map_err(|error| arranging("put the identity row back", &error))?;
+        // After the `DELETE` above, whose trigger recorded every row it took:
+        // a dump has no trigger to run, and brings the record back as it was.
+        sqlx::query("DELETE FROM event_removed")
+            .execute(&mut *restore)
+            .await
+            .map_err(|error| arranging("clear the removal record", &error))?;
+        sqlx::query(
+            "INSERT INTO event_removed (origin_store, origin_position) \
+             SELECT * FROM unnest($1::bytea[], $2::bigint[])",
+        )
+        .bind(&backup.removed.0)
+        .bind(&backup.removed.1)
+        .execute(&mut *restore)
+        .await
+        .map_err(|error| arranging("put the removal record back", &error))?;
         restore
             .commit()
             .await
@@ -210,6 +240,71 @@ happenstance_sync_testkit::restore_conformance!(
     emit = super::emit_ignored_restore_tokio,
     fixture = super::PostgresRestoreFixture::new()
 );
+
+/// I-5 (ADR-0110): a restore rolls the removal record back with the
+/// allocator, as a real `pg_restore` brings the table back as it was at the
+/// dump. One own event is kept by the backup and one written after it; the
+/// restore's own `DELETE` takes the second away, and the record must not keep
+/// it. So after the documented re-mint the lost event, now foreign under the
+/// old identity, lands when a peer offers it back, which is SY-38's remedy;
+/// and without the re-mint a claim on it is still SY-38's refusal.
+///
+/// **Red with an unfaithful restore:** both calls skip the lost event as
+/// removed, `(0, 1, 0)`, because the restore's `DELETE` recorded it.
+#[tokio::test]
+#[ignore = "needs a live Postgres; run with `-- --ignored` (starts a container, or set HAPPENSTANCE_POSTGRES_URL)"]
+async fn a_restore_rolls_the_removal_record_back_with_the_allocator() {
+    for after_restore in [AfterRestore::Remint, AfterRestore::NothingMore] {
+        let fixture = PostgresRestoreFixture::with(after_restore);
+        let store = fixture.store().await;
+        let old = PostgresEventStore::store_id(&store)
+            .await
+            .expect("a migrated store has an identity");
+        let kept = Event::new("Kept", b"kept".to_vec()).expect("a valid event type");
+        let lost = Event::new("Lost", b"lost".to_vec()).expect("a valid event type");
+        fixture
+            .append_local(core::slice::from_ref(&kept))
+            .await
+            .expect("the kept event lands");
+        fixture.back_up().await.expect("the backup is taken");
+        let lost_at = EventStore::append(&store, core::slice::from_ref(&lost), None)
+            .await
+            .expect("the lost event lands");
+        fixture.restore().await.expect("the restore runs");
+
+        let removed: i64 = sqlx::query_scalar("SELECT count(*) FROM event_removed")
+            .fetch_one(store.pool())
+            .await
+            .expect("the record reads");
+        assert_eq!(
+            removed, 0,
+            "the restore kept a record the backup did not have"
+        );
+
+        let lost_id = happenstance_core::EventId::new(old, lost_at);
+        let offered = [ReplicatedEvent::new(
+            lost_id,
+            RecordedAt::from_millis(0),
+            lost,
+        )];
+        let ingested =
+            IngestStore::ingest(&fixture.store().await, &[IngestGroup::new(&offered, &[])]).await;
+        match after_restore {
+            AfterRestore::Remint => {
+                let landed = ingested.expect("after the re-mint the lost event is foreign");
+                assert_eq!(
+                    (landed.appended, landed.skipped),
+                    (1, 0),
+                    "the lost event was skipped as removed"
+                );
+            }
+            AfterRestore::NothingMore => assert!(
+                matches!(ingested, Err(IngestError::UnheldOwnIdentity { id, .. }) if id == lost_id),
+                "without the re-mint the claim is SY-38's refusal: {ingested:?}"
+            ),
+        }
+    }
+}
 
 /// The negative control: the same restore without the documented re-mint
 /// reissues the identity the lost event was given, and the rule says so.

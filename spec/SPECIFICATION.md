@@ -2956,7 +2956,7 @@ impls now do, and one of them is the proof rather than the breadth: `LocalMemory
 EventStore for` in a genuinely downstream crate, beside the blanket impl without
 `error[E0119]`, passing every rule natively and on `wasm32`. `CloudflareEventStore`
 (`crates/happenstance-cloudflare/src/event_store.rs:1334`) and `happenstance-neon`'s two
-(`crates/happenstance-neon/src/event_store.rs:884`, `:1593`) widen the evidence without
+(`crates/happenstance-neon/src/event_store.rs:904`, `:1613`) widen the evidence without
 adding to it. ADR-0001's marker was lifted on that basis at phase 1 (`references/adr/0001-async-port-flavours.md:5-6`).
 
 - **Rule:** not a new rule but a new *invocation* of the existing suite — the
@@ -4496,7 +4496,7 @@ today, four of them skeletons — `happenstance-sqlite` was the fifth until phas
 `crates/happenstance-sqlite/src/event_store.rs:2079`,
 `crates/happenstance-postgres/src/event_store.rs:513`,
 `crates/happenstance-cloudflare/src/event_store.rs:1334` and
-`crates/happenstance-neon/src/event_store.rs:884`, `:1593`. The blanket impl
+`crates/happenstance-neon/src/event_store.rs:904`, `:1613`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
 only implementers do — two when this clause was written, seven now, and seven
 is the figure a required method has to be re-costed against. The count is of
@@ -4971,7 +4971,7 @@ had two halves.
   anything else — `happenstance-cloudflare` at phase 9 and `happenstance-neon` at
   phase 10, whichever lands first.* **`happenstance-neon` meets that wording's
   letter.** Its probe is one read-only round trip of its own
-  (`crates/happenstance-neon/src/event_store.rs:1029`), over the
+  (`crates/happenstance-neon/src/event_store.rs:1049`), over the
   `(origin_store, origin_position)` pair VT-8 already indexes, and
   `contains_event_id_reports_membership` passes against a live endpoint. The
   freeze does not reword that away. It accepts the round trip, because no required
@@ -7652,7 +7652,10 @@ removal]` — minted by [ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-
 Durable Object (host and `workerd`), Postgres and Neon, so the freeze rests on the
 stores whose writers do not serialise and not on SQLite alone. Until each adapter's
 change grants `IngestFixture::REMOVAL`, its mounted ingest family reports the rule
-declined. Green on `MemoryIngestStore`, whose record is a set beside its log.
+declined. Green on `MemoryIngestStore`, whose record is a set beside its log, and
+on `PostgresEventStore` against a live PostgreSQL 17.10, whose record is a table a
+`BEFORE DELETE` trigger writes. `NeonEventStore`'s fixture grants `REMOVAL`; its
+run is `live-neon`'s.
 Rule: `a_removed_event_is_not_readmitted` (`happenstance-sync-testkit`) — four
 arrangements on three fresh fixtures; (c) runs on (b)'s store after its removal:
 (a) a removed foreign event offered again through a handle held across the

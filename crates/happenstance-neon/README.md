@@ -202,6 +202,76 @@ it read back as groups of one, with no guard; nothing is backfilled. An older
 build keeps working against a migrated schema, and writes rows that read as
 groups of one.
 
+## Upgrading to the removal record: migrate, then deploy
+
+`0.8` adds `migration::MIGRATION_4` (`migrations/0004_removal_record.sql`),
+`migration::removal_trigger_statements` and `migration::removal_record_request`,
+which bundles the two. Together they create the **removal
+record** (#483, #484, SY-40): a table, `<event table>_removed`, and a
+`BEFORE DELETE` row trigger on the event table, `<event table>_record_removal`,
+that records the origin identity of every event deleted from the log, by this
+crate or by any other client (`psql`, the Neon console, a retention job).
+Ingest skips an event whose identity is recorded there and counts it in
+`Ingested::skipped`, so a pruned replica that re-pulls, or is re-pushed, what it
+pruned neither takes the events back nor refuses its own as
+`UnheldOwnIdentity`. An own claim the store never held is still refused (SY-38).
+
+The trigger's function has a `plpgsql` body that `migration::render`'s splitter
+would cut in half, so it is built as two whole statements rather than shipped in
+the file. `migration::removal_record_request` sends the table and both
+statements in one request; send it after migrations 1 and 3:
+
+```rust,ignore
+transport.round_trip(migration::removal_record_request(&config)).await?;
+```
+
+Do not send `migration::request(MIGRATION_4, &config)` on its own: it creates the
+table and no trigger, so every ingest takes the lock and succeeds while nothing
+records a removal, and nothing tells you.
+
+Every ingest's request now opens with `LOCK TABLE <event table>_removed IN SHARE
+MODE`, so **apply both before deploying this build to any process that
+ingests**: against a schema without the table, an ingest fails with an
+undefined-table error from the endpoint. Appends and reads do not touch the
+record. An older build keeps working against a migrated schema, but its ingest
+ignores the record and re-admits what was removed, so upgrade every process that
+replicates into the store. Both statements are idempotent; the trigger is
+created only when the table carries none of that name.
+
+### Privileges
+
+A role that deletes from the event table needs **nothing** on the record: the
+trigger's function is `SECURITY DEFINER`, so its insert runs as the role that
+applied the migration. A role that ingests needs `SELECT` and `UPDATE` on the
+record, on top of what it held under `0.7`: `SELECT` for the anti-join, and
+`UPDATE` because Postgres admits `LOCK TABLE ... IN SHARE MODE` only to a role
+holding `UPDATE`, `DELETE`, `TRUNCATE` or, from Postgres 17, `MAINTAIN`. On 17,
+`SELECT, MAINTAIN` is the narrower grant, as it writes nothing:
+
+```sql
+GRANT SELECT, UPDATE ON <schema>.<event table>_removed TO <ingest role>;
+```
+
+### A session holding a `DELETE` holds every ingest
+
+The lock makes a removal and an ingest wait for each other rather than race,
+and Postgres' default `lock_timeout` is `0`, which waits for ever. So a `psql`
+session that runs a `DELETE` on the event table inside a transaction and leaves
+it open stops every ingest into the store until it commits or rolls back. Set a
+`lock_timeout` on the role your connection string names, for example
+`ALTER ROLE <ingest role> SET lock_timeout = '5s'` (the `/sql` endpoint holds no
+session, so a role or database setting is the only one that reaches it). An
+ingest that gives up then fails with SQLSTATE `55P03`, which this crate
+classifies as transient, so the runner retries it rather than stopping the
+edge. The crate sets no bound of its own. `TRUNCATE` fires no row trigger, so it records
+nothing. Rows deleted before the migration are not recorded either; to record
+one by hand, run `INSERT INTO <event table>_removed (origin_store,
+origin_position) VALUES ('\x<origin store id, 16 bytes>'::bytea, <origin
+position>) ON CONFLICT DO NOTHING`. The record grows by one small row per
+removed event and is kept for ever: deleting a row of it lets that identity be
+ingested again, so do that only once no peer can offer the event. A branch
+reset or a restore brings the record back with the log and the sequence.
+
 ## Re-mint every branch before its first append
 
 A Neon branch is a copy of its parent, so it carries the parent's store identity together with an

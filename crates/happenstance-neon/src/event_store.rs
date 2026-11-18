@@ -684,7 +684,11 @@ impl<T: SqlTransport> NeonEventStore<T> {
     ///   the store's uniqueness doing the dedupe, inside the write, which VT-8
     ///   requires; no membership probe precedes it. A skipped row still burned the
     ///   position it drew, and the gap that leaves is one the specification
-    ///   permits.
+    ///   permits. Its rows are `f` less every row whose pair the removal record
+    ///   holds (SY-40, ADR-0110), an anti-join on the record's primary key read
+    ///   under the request's `SHARE` lock on it, so a removed event is a skip
+    ///   counted as one and never lands again. A `LEFT JOIN`, not `NOT EXISTS`:
+    ///   that is an append condition's spelling, and the record is not the log.
     /// - `won` is the groups at least one of whose rows `ins` returned, by
     ///   position rather than by origin pair, so a foreign event repeated across
     ///   two groups gates only the group whose copy landed. It reads `fp` a
@@ -778,7 +782,12 @@ impl<T: SqlTransport> NeonEventStore<T> {
             ),
             fp = self.drawn_positions("jsonb_array_length($1::jsonb)"),
             ins = self.insert_rows(
-                "SELECT * FROM f",
+                &format!(
+                    "SELECT f.* FROM f LEFT JOIN {removed} AS r \
+                     ON r.origin_store = f.origin_store AND r.origin_position = f.origin_position \
+                     WHERE r.origin_store IS NULL",
+                    removed = crate::migration::qualified_removed(&self.config),
+                ),
                 "SELECT * FROM fp",
                 write_group::FOREIGN_ORIGIN,
                 " ON CONFLICT (origin_store, origin_position) \
@@ -797,13 +806,19 @@ impl<T: SqlTransport> NeonEventStore<T> {
     }
 
     /// The ingest batch as the one request that carries it: **one round trip of
-    /// three statements**: [`ingest_statement`](Self::ingest_statement), the
-    /// constant refusal, and the `write_group` stamp, at `REPEATABLE READ`.
+    /// four statements**: the removal record's `SHARE` lock (SY-40),
+    /// [`ingest_statement`](Self::ingest_statement), the constant refusal, and
+    /// the `write_group` stamp, at `REPEATABLE READ`.
+    ///
+    /// The lock comes first and takes no snapshot, being a utility statement, so
+    /// the transaction's snapshot is the ingest statement's, taken once the lock
+    /// is granted: it sees every removal committed before the call could
+    /// proceed, and no removal commits while it runs (D-8).
     ///
     /// A single statement cannot refuse after writing (SY-38): only an error undoes what
-    /// `ins` wrote, and the second raises one, carrying the claim's index, when the first
+    /// `ins` wrote, and the refusal raises one, carrying the claim's index, when the write
     /// left it. The stamp (#420) reads what `ins` wrote, after the refusal so a refused
-    /// call stamps nothing. One `BEGIN`/`COMMIT` holds all three; no provisional tag outlives it.
+    /// call stamps nothing. One `BEGIN`/`COMMIT` holds all four; no provisional tag outlives it.
     ///
     /// `REPEATABLE READ`, fixed, rather than the store's configured level. It is
     /// the lowest at which `ON CONFLICT DO NOTHING` meeting a row committed by a
@@ -821,7 +836,12 @@ impl<T: SqlTransport> NeonEventStore<T> {
         let write = self.ingest_statement(groups)?;
         let stamp = self.stamp_statement(groups)?;
         Ok(SqlRequest::batch(
-            vec![write, ingest::refusal_statement(), stamp],
+            vec![
+                ingest::lock_statement(&self.config),
+                write,
+                ingest::refusal_statement(),
+                stamp,
+            ],
             crate::IsolationLevel::RepeatableRead,
         ))
     }
@@ -2062,17 +2082,26 @@ mod tests {
             let groups = mixed_groups(&rows, &compensation);
             assert!(size < 2 || groups.len() > 1, "{size} rows must span groups");
             let request = store.ingest_request::<std::io::Error>(&groups).unwrap();
+            // Since the removal record (SY-40) the request opens with its
+            // lock; everything below is asserted of what follows it, which
+            // is the request as it stood before.
+            let statements = super::ingest::after_lock(&request, &store.config);
 
             assert_eq!(
                 request.statements.len(),
+                4,
+                "{size} rows: the lock, the write, the refusal, the write-group stamp"
+            );
+            assert_eq!(
+                statements.len(),
                 3,
                 "{size} rows: the write, then the refusal, then the write-group stamp"
             );
             assert_eq!(
-                request.statements[1].query, refusal.query,
+                statements[1].query, refusal.query,
                 "the refusal is a constant, at every size"
             );
-            assert!(request.statements[1].params.is_empty());
+            assert!(statements[1].params.is_empty());
             assert!(
                 request
                     .headers()
@@ -2080,7 +2109,7 @@ mod tests {
                 "the batch form at REPEATABLE READ: {:?}",
                 request.headers()
             );
-            let statement = &request.statements[0];
+            let statement = &statements[0];
             assert!(
                 squeeze(&statement.query).contains(&target),
                 "the conflict target must restate the migration's partial index \
@@ -2153,13 +2182,15 @@ mod tests {
             .statements[0]
             .query
             .clone();
-        let ingest = store
+        let request = store
             .ingest_request::<std::io::Error>(&[IngestGroup::new(
                 &rows,
                 core::slice::from_ref(&event),
             )])
-            .unwrap()
-            .statements[0]
+            .unwrap();
+        // The write is the first statement after the removal record's lock
+        // (SY-40).
+        let ingest = super::ingest::after_lock(&request, &store.config)[0]
             .query
             .clone();
 

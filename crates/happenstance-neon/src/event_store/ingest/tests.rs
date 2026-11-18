@@ -23,7 +23,8 @@ use happenstance_sync::{
 };
 
 use super::{
-    UNHELD_GUC, UNHELD_SQLSTATE, UNIDENTIFIED_GUC, UNIDENTIFIED_SQLSTATE, refusal_statement,
+    UNHELD_GUC, UNHELD_SQLSTATE, UNIDENTIFIED_GUC, UNIDENTIFIED_SQLSTATE, after_lock,
+    refusal_statement,
 };
 use crate::config::NeonConfig;
 use crate::error::{NeonError, NeonSqlError};
@@ -42,6 +43,7 @@ mod groups;
 mod live;
 mod peer_family;
 mod peer_requests;
+mod removal;
 
 /// A store another peer runs.
 fn peer(byte: u8) -> StoreId {
@@ -249,8 +251,10 @@ impl SqlTransport for &Scripted {
 }
 
 /// The answer a call that landed two, skipped one and compensated one gets:
-/// the counts row, then the refusal's empty `DO` set.
-const LANDED: &[u8] = br#"{"results":[{"fields":[],"rows":[{"appended":"2","skipped":"1","compensated":"1","unheld":""}],"command":"SELECT","rowCount":1,"rowAsArray":false},{"fields":[],"rows":[],"command":"DO","rowCount":null,"rowAsArray":false}]}"#;
+/// since the removal record (SY-40), the lock's empty set, then the counts
+/// row, then the refusal's empty `DO` set. The old body, with the lock's set
+/// before it.
+const LANDED: &[u8] = br#"{"results":[{"fields":[],"rows":[],"command":"LOCK","rowCount":null,"rowAsArray":false},{"fields":[],"rows":[{"appended":"2","skipped":"1","compensated":"1","unheld":""}],"command":"SELECT","rowCount":1,"rowAsArray":false},{"fields":[],"rows":[],"command":"DO","rowCount":null,"rowAsArray":false}]}"#;
 
 /// Constraint 4, one port over: generic code binds the bare flavours, and the
 /// store satisfies them at a concrete transport.
@@ -399,8 +403,11 @@ fn the_refusal_is_raised_with_this_adapters_sqlstate_and_a_transaction_local_set
     let request = store
         .ingest_request::<NullTransportError>(&[IngestGroup::new(&sent, &[])])
         .expect("an origin position that fits a bigint");
+    // Since the removal record (SY-40) the request opens with its lock; what
+    // follows it is the request these assertions were written against.
+    let statements = after_lock(&request, store.config());
 
-    let write = &request.statements[0].query;
+    let write = &statements[0].query;
     let setter = format!("set_config('{UNHELD_GUC}', ");
     let at = write
         .find(&setter)
@@ -410,7 +417,7 @@ fn the_refusal_is_raised_with_this_adapters_sqlstate_and_a_transaction_local_set
         "the setting must be transaction-local: {write}"
     );
     let refusal = refusal_statement().query;
-    assert_eq!(request.statements[1].query, refusal);
+    assert_eq!(statements[1].query, refusal);
     assert_eq!(
         refusal
             .matches(&format!("current_setting('{UNHELD_GUC}'"))
@@ -440,7 +447,8 @@ fn an_unidentified_store_writes_no_compensation_and_is_refused() {
         .ingest_request::<NullTransportError>(&[IngestGroup::new(&sent, &compensation)])
         .expect("an origin position that fits a bigint");
 
-    let write = &request.statements[0].query;
+    // The write is the first statement after the removal record's lock.
+    let write = &after_lock(&request, store.config())[0].query;
     let c = write.find(", c AS (").expect("the write builds `c`");
     let comp = write.find(", comp AS (").expect("the write builds `comp`");
     assert!(
@@ -546,8 +554,14 @@ async fn a_refusal_answer_names_the_claim_it_carries() {
     assert_eq!(refused.class(), FailureClass::Stop);
     assert_eq!(transport.round_trips.get(), 1);
     // The write, the refusal and, since #420, the write-group stamp: one
-    // request, so the refusal takes all three with it.
-    assert_eq!(transport.sent.borrow()[0].statements.len(), 3);
+    // request, so the refusal takes all three with it, and since the removal
+    // record (SY-40) the lock before them, which the abort releases.
+    {
+        // Scoped, so the borrow ends before the loop's awaits.
+        let sent = &transport.sent.borrow()[0];
+        assert_eq!(after_lock(sent, transport.store().config()).len(), 3);
+        assert_eq!(sent.statements.len(), 4);
+    }
 
     for body in NO_INDEX {
         let transport = Scripted::answering(400, body);
@@ -602,12 +616,13 @@ async fn a_serialisation_failure_or_deadlock_is_busy_and_sent_once() {
     assert_eq!(refused.class(), FailureClass::Stop);
 }
 
-/// The counts come from the first result set, and a missing one is named.
+/// The counts come from the write's result set, the first after the removal
+/// record's lock (SY-40), and a missing one is named.
 ///
 /// Rejects reading the refusal's result set, and a missing count read as zero.
 #[tokio::test]
 async fn a_success_answer_decodes_its_three_counts() {
-    const NO_COMPENSATED: &[u8] = br#"{"results":[{"fields":[],"rows":[{"appended":"2","skipped":"1","unheld":""}],"command":"SELECT","rowCount":1,"rowAsArray":false},{"fields":[],"rows":[{"compensated":"1"}],"command":"DO","rowCount":null,"rowAsArray":false}]}"#;
+    const NO_COMPENSATED: &[u8] = br#"{"results":[{"fields":[],"rows":[],"command":"LOCK","rowCount":null,"rowAsArray":false},{"fields":[],"rows":[{"appended":"2","skipped":"1","unheld":""}],"command":"SELECT","rowCount":1,"rowAsArray":false},{"fields":[],"rows":[{"compensated":"1"}],"command":"DO","rowCount":null,"rowAsArray":false}]}"#;
     let sent = [shipped(id(peer(0x45), 1), 1, event("Shipped", "a"))];
     let groups = [IngestGroup::new(&sent, &[])];
 
@@ -764,7 +779,7 @@ fn neon_errors_state_their_class() {
         (NeonError::OriginPositionOutOfRange { position: 1 }, Park),
     ];
     for code in [
-        "08006", "53300", "40001", "40P01", "57P01", "57P02", "57P03",
+        "08006", "53300", "40001", "40P01", "55P03", "57P01", "57P02", "57P03",
     ] {
         cases.push((sql(Some(code)), Transient));
     }

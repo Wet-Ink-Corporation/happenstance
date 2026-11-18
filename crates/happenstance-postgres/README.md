@@ -204,6 +204,65 @@ and `apply` then leaves it alone. Rows written before the migration read back as
 groups of one, with no guard; nothing is backfilled. An older build keeps
 working against a migrated schema, and writes rows that read as groups of one.
 
+## Upgrading to schema version 3: migrate, then deploy
+
+`0.8` adds migration 4 (`migrations/0004_removal_record.sql`,
+`migration::MIGRATION_4`), and `SCHEMA_VERSION` is `3`. It creates the
+**removal record** (#483, #484, SY-40): a table, `event_removed`, and a
+`BEFORE DELETE` row trigger on `event`, `event_record_removal`, that records the
+origin identity of every event deleted from the log, by this crate or by any
+other client (`psql`, a retention job), whatever that session's `search_path`.
+Ingest skips an event whose identity is recorded there and counts it in
+`Ingested::skipped`, so a pruned replica that re-pulls, or is re-pushed, what it
+pruned neither takes the events back nor refuses its own as
+`UnheldOwnIdentity`. A recorded event is dropped before it is written, so it
+draws no position, and an own claim the store never held is still refused
+(SY-38).
+
+Every ingest takes `LOCK TABLE event_removed IN SHARE MODE` in its first round
+trip, so **run `migration::apply` against the schema before deploying this
+build to any process that ingests**: against a schema without the table, an
+ingest fails with an undefined-table error from the server. Appends do not read
+the record and are unaffected. An older build keeps working against a migrated
+schema, but its ingest ignores the record and re-admits what was removed, so
+upgrade every process that replicates into the store. `apply` is idempotent; on
+a schema at version 2 its only lasting lock is the trigger's creation, which
+blocks writes to `event` for a moment.
+
+### Privileges
+
+A role that deletes from `event`, a retention job granted `SELECT, DELETE` on
+it, needs **nothing** more: the trigger's function is `SECURITY DEFINER`, so its
+insert into `event_removed` runs as the role that ran the migration. A role that
+ingests needs `SELECT` and `UPDATE` on `event_removed`, on top of what it held
+under `0.7`: `SELECT` for the lookup, and `UPDATE` because Postgres admits
+`LOCK TABLE ... IN SHARE MODE` only to a role holding `UPDATE`, `DELETE`,
+`TRUNCATE` or, from Postgres 17, `MAINTAIN`. On 17, `SELECT, MAINTAIN` is the
+narrower grant, as it writes nothing:
+
+```sql
+GRANT SELECT, UPDATE ON event_removed TO <ingest role>;
+```
+
+### A session holding a `DELETE` holds every ingest
+
+The lock makes a removal and an ingest wait for each other rather than race,
+and Postgres' default `lock_timeout` is `0`, which waits for ever. So a `psql`
+session that runs a `DELETE` on `event` inside a transaction and leaves it open
+stops every ingest into the store until it commits or rolls back. Set a
+`lock_timeout` on the ingesting role, `ALTER ROLE <ingest role> SET
+lock_timeout = '5s'`, or on its connections, `options=-c lock_timeout=5s` in
+the URL. An ingest that gives up then fails with SQLSTATE `55P03`,
+which this crate classifies as transient, so the runner retries it rather than
+stopping the edge. The crate sets no bound of its own. `TRUNCATE` fires no
+row trigger, so it records nothing. Rows deleted before the migration are not
+recorded either; to record one by hand, run
+`INSERT INTO event_removed (origin_store, origin_position) VALUES ('\x<origin store id, 16 bytes>'::bytea, <origin position>) ON CONFLICT DO NOTHING`.
+The record grows by one small row per removed event and is kept for ever:
+deleting a row of it lets that identity be ingested again, so do that only once
+no peer can offer the event. A restore brings the record back with the log and
+the sequence, which is what keeps SY-38's refusal of a restored store true.
+
 ## After a restore, re-mint before the first append
 
 A `pg_restore`, a point-in-time recovery, a promoted replica that lost acknowledged writes, or any
