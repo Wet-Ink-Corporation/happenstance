@@ -8554,7 +8554,7 @@ door SY-1 did not close.
 It MUST NOT delete, rewrite or reorder a local event because a peer declined it.
 
 `[FROZEN]`
-Rule: `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` (`happenstance-sync`'s `tests/runner/main.rs`), repointed by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) from the never-written a_refused_spoke_retains_its_log (#465): the shipped `Edge` is refused a push and must leave the local log, the watermark and the pending count as they were, and park on the class. No wrong runner is built for it; a rollback runner fails its log assertion.
+Rule: `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` (`happenstance-sync`'s `tests/runner/main.rs`), repointed by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) from the never-written a_refused_spoke_retains_its_log (#465): the shipped `Edge` is refused a push and must leave the local log, the watermark and the pending count as they were, and park on the class. Its log assertion is shared with `tests/runner/wrong_runners.rs`, where `a_refused_push_keeps_the_log_rejects_a_runner_that_rolls_back_on_refusal` holds it against a `MiniEdge` that removes the own events it offered when the push is refused, and against the shipped `Edge` (#487).
 Cases: E2E-45.
 
 *Rejects:* the assumption E2E-45 names as untested in the whole catalogue — that a
@@ -10854,7 +10854,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-31 | FROZEN | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
 | SY-32 | FROZEN | `retention_gap_is_reported_not_silent` | E2E-44, E2E-46, E2E-47 |
 | SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
-| SY-34 | FROZEN | `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` † | E2E-45 |
+| SY-34 | FROZEN | `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` †, `a_r… | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
 | SY-36 | FROZEN | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
 | SY-37 | FROZEN | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |

@@ -77,7 +77,7 @@ const OWED_BY_465: &str = "#465: written at the runner or peer level with a wron
 ///
 /// The count in the type is written twice on purpose, as the parent table's is:
 /// a change to it is a change a reviewer should be made to see.
-pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 20] = [
+pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 21] = [
     // ---- Scheduled: nothing has written them -----------------------------
     // SY-3's `compensation_is_idempotent_under_redelivery` left this table at
     // ADR-0108, which repointed SY-3's line to SY-12's
@@ -152,6 +152,13 @@ pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 20] 
         "SY-34",
         "a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class",
         Unresolvable::Elsewhere("crates/happenstance-sync/tests/runner/main.rs"),
+    ),
+    (
+        // The same assertion held against a wrong runner that rolls its own
+        // events back on a refused push, ADR-0108's open point C (#487).
+        "SY-34",
+        "a_refused_push_keeps_the_log_rejects_a_runner_that_rolls_back_on_refusal",
+        Unresolvable::Elsewhere("crates/happenstance-sync/tests/runner/wrong_runners.rs"),
     ),
     (
         // A request count inside one `ingest` call, which no port method sees

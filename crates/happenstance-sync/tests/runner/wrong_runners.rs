@@ -1,5 +1,6 @@
-//! SY-7 and SY-10's runner half, each rule against the shipped [`Edge`] and
-//! the wrong runners it rejects (T-450-4, T-450-7).
+//! SY-7 and SY-10's runner half, and SY-34's log assertion, each rule against
+//! the shipped [`Edge`] and the wrong runners it rejects (T-450-4, T-450-7,
+//! #487).
 //!
 //! A rule no runner can fail is decorative. Each rule here is written over an
 //! [`EdgeRunner`], so it runs against the shipped edge **and** against
@@ -15,17 +16,19 @@
 
 use core::num::NonZeroUsize;
 
-use happenstance_core::{Event, EventId, EventStore, SequencedEvent};
+use happenstance_core::{Event, EventId, EventStore, SequencePosition, SequencedEvent};
 use happenstance_sync::runner::{Adjudicate, Edge};
 use happenstance_sync::{
-    EventGroup, IngestGroup, IngestStore, Ingested, MemoryIngestStore, PushBatch, StoreSyncPeer,
-    SyncPeer, WriteGroupStore,
+    EventGroup, IngestGroup, IngestStore, Ingested, MemoryIngestStore, PeerLimits, PushBatch,
+    StoreSyncPeer, SyncPeer, WriteGroupStore,
 };
 
 use super::adjudication::{
-    HUB, ORIGIN_ONE, ORIGIN_TWO, SeatRule, foreign_claim, ingest_unjudged, reversals, reversals_of,
+    HUB, ORIGIN_ONE, ORIGIN_TWO, SeatRule, claim, foreign_claim, ingest_unjudged, reversals,
+    reversals_of,
 };
 use super::probe::Shared;
+use super::the_log_is_kept;
 
 /// The far side every rule steps against: a store peer that judges nothing.
 type Far = StoreSyncPeer<Shared, Shared>;
@@ -87,6 +90,10 @@ enum Defect {
     /// Lands the pulled groups unjudged, then appends their compensation as a
     /// second write (SY-2).
     CompensatesApart,
+    /// On a refused push, removes the own events it offered, rolling the log
+    /// back to the last acknowledged position so the two logs agree: the tidy
+    /// wrong implementation SY-34 names.
+    RollsBackOnRefusal,
 }
 
 /// An edge step over the public API alone, carrying one [`Defect`].
@@ -167,10 +174,20 @@ impl MiniEdge {
                 }
             }
         }
-        far.push(&PushBatch::new(groups))
-            .await
-            .map_err(|error| error.to_string())?;
-        Ok(())
+        let offered: Vec<SequencePosition> = groups
+            .iter()
+            .flat_map(|group| &group.events)
+            .filter(|event| event.id.store() == local.store_id())
+            .map(|event| event.id.position())
+            .collect();
+        match far.push(&PushBatch::new(groups)).await {
+            Ok(_) => Ok(()),
+            Err(error) if self.0 == Defect::RollsBackOnRefusal => {
+                let removed = local.remove(&offered);
+                Err(format!("{error}, and {removed} offered events rolled back"))
+            }
+            Err(error) => Err(error.to_string()),
+        }
     }
 }
 
@@ -208,6 +225,16 @@ async fn far_holding(claims: &[(happenstance_core::StoreId, &[u8])]) -> (Far, Sh
         ingest_unjudged(&store, &foreign_claim(*origin, data)).await;
     }
     (StoreSyncPeer::new(store.clone(), store.clone()), store)
+}
+
+/// A far store peer over an empty store whose declared batch bytes are below
+/// every event's payload, so it refuses every push before writing anything:
+/// the refusal `main.rs`'s SY-34 test provokes from `MemorySyncPeer`.
+fn far_refusing() -> Far {
+    let mut limits = PeerLimits::minimum();
+    limits.max_batch_bytes = 0;
+    let store = Shared::new(super::adjudication::SPOKE);
+    StoreSyncPeer::with_limits(store.clone(), store, limits)
 }
 
 /// The local store, holding `claims` by ingest, one group each.
@@ -320,6 +347,23 @@ async fn an_edge_judges_nothing_it_pushes(runner: &impl EdgeRunner) -> Result<()
         })
 }
 
+/// SY-34: a spoke whose push is refused keeps its own log, every row in place,
+/// through `main.rs`'s assertion.
+async fn a_refused_push_keeps_the_log(runner: &impl EdgeRunner) -> Result<(), String> {
+    let local = local_holding(&[(ORIGIN_ONE, b"first")]).await;
+    EventStore::append(&local, &[claim(b"own")], None)
+        .await
+        .map_err(|error| error.to_string())?;
+    let before = local.snapshot();
+    let far = far_refusing();
+
+    if runner.step(None, &far, &local).await.is_ok() {
+        return Err("the far side refused nothing".to_owned());
+    }
+
+    the_log_is_kept(&before, &local.snapshot())
+}
+
 /// Which rules fail `runner`, by name.
 async fn failing(runner: &impl EdgeRunner) -> Vec<&'static str> {
     let mut failed = Vec::new();
@@ -338,6 +382,9 @@ async fn failing(runner: &impl EdgeRunner) -> Vec<&'static str> {
     if an_edge_judges_nothing_it_pushes(runner).await.is_err() {
         failed.push("an_edge_judges_nothing_it_pushes");
     }
+    if a_refused_push_keeps_the_log(runner).await.is_err() {
+        failed.push("a_refused_push_keeps_the_log");
+    }
     failed
 }
 
@@ -350,6 +397,7 @@ async fn the_shipped_edge_passes_every_rule() {
         Ok(())
     );
     assert_eq!(an_edge_judges_nothing_it_pushes(&Shipped).await, Ok(()));
+    assert_eq!(a_refused_push_keeps_the_log(&Shipped).await, Ok(()));
 }
 
 #[tokio::test]
@@ -386,5 +434,13 @@ async fn an_edge_judges_nothing_it_pushes_rejects_a_runner_that_adjudicates_its_
     assert_eq!(
         failing(&MiniEdge(Defect::AdjudicatesWhatItPushes)).await,
         vec!["an_edge_judges_nothing_it_pushes"]
+    );
+}
+
+#[tokio::test]
+async fn a_refused_push_keeps_the_log_rejects_a_runner_that_rolls_back_on_refusal() {
+    assert_eq!(
+        failing(&MiniEdge(Defect::RollsBackOnRefusal)).await,
+        vec!["a_refused_push_keeps_the_log"]
     );
 }

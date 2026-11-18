@@ -228,6 +228,10 @@ deploy.
   fixture alive until the store connected from it drops, so a fixture that tears
   its backing down on drop no longer does so under a live handle (#500). No
   rule's verdict changes.
+- `happenstance-sync`'s runner tests: SY-34's log assertion now fails a wrong
+  runner, a `MiniEdge` that rolls its own events back when a push is refused,
+  where the specification had only argued that it would (#487, ADR-0108's open
+  point C). No rule's verdict changes.
 - **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
   an identity that is not the store's.
 - **Breaking (schema): `happenstance-sqlite`: `SCHEMA_VERSION` is 3, was 2.**
