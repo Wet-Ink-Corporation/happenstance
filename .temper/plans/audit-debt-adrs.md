@@ -48,8 +48,9 @@ specification, rule and `spec_trace.rs` edits for after acceptance.
   the temper hook refused a scratch `.rs` file, and the toolchain has no `rust-src`. Verification
   gates the change, and the fallback is to accept the gap.
 - Residual 3: each published adapter's README carries a table of declined capabilities. **Landed**
-  for sqlite, postgres, neon and cloudflare. Cloudflare's README had falsely said its fixture
-  declines nothing.
+  for sqlite, postgres and neon. Cloudflare's README falsely says its fixture
+  declines nothing; its fix waits for acceptance, because its publish-readiness test checks
+  only three capabilities and fails on the corrected sentence (CI on afc4145).
 
 ### #188 to ADR-0114 (`.kb/decisions/0114-es-6-es-29-and-es-31-get-their-rules.md`)
 - ES-6: a `happenstance-core` test bound by a locally declared ADR-0009 marker, which spawns

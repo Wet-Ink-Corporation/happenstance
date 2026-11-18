@@ -19,9 +19,9 @@ summary: >-
   first. If the verification fails, the fallback is to accept the gap. Second: each published
   adapter's README lists the capabilities its conformance fixtures decline, with each reason, as a
   convention stated where adapter authors read. It is not a specification clause. The README lines
-  for the four in-tree adapters land with this proposal, because they are additive. They include
-  a correction: Cloudflare's README says its fixture declines nothing, and that fixture declines
-  READ_FAULT. ES-35 stays renewed past 1.0 and is out of scope.
+  for three in-tree adapters land with this proposal, because they are additive. Cloudflare's
+  README says its fixture declines nothing, and that fixture declines READ_FAULT; its correction
+  lands on acceptance with the publish-readiness test that checks it. ES-35 stays renewed past 1.0 and is out of scope.
 depends_on:
   - kb-decision-0051
   - kb-decision-0066
@@ -112,7 +112,15 @@ This is residual 3's hazard showing up in this repository, not in a stranger's.
    - `happenstance-sqlite`: `MID_BATCH_FAULT` (by scope) and `READ_FAULT` (incapacity).
    - `happenstance-postgres` and `happenstance-neon`: `READ_YOUR_OWN_WRITES` on the event store,
      and `RESET_REFUSAL` on the projection stores.
-   - `happenstance-cloudflare`: `READ_FAULT` (by scope), with the false sentence corrected.
+   - `happenstance-cloudflare`: `READ_FAULT` (by scope), with the false sentence corrected, on
+     acceptance rather than with this proposal. `tests/publish_readiness.rs`'s
+     `the_conformance_claim_carries_every_qualifier_the_run_produces` compares the README's
+     no-`SKIP` sentence against only three of the fixture's capabilities (`SECOND_HANDLE`,
+     `REOPEN`, `MID_BATCH_FAULT`), so correcting the README alone fails that test. The repair
+     widens the test to every capability the fixture declares, `READ_FAULT`, `REMOVAL`,
+     `READ_YOUR_OWN_WRITES` and `HELD_ABOVE_FRONTIER` among them, with each declined reason
+     carried verbatim in the README. That is residual 3's hazard a second time: the check that
+     guards the sentence had the same blind spot as the sentence.
 4. ES-35 stays `renew-past-1.0` (`kb-decision-0066`). Sub-question 2 of the atom is already
    answered.
 
