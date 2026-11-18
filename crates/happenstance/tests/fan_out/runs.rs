@@ -8,15 +8,15 @@ use std::collections::BTreeMap;
 use std::panic::AssertUnwindSafe;
 
 use happenstance::{
-    Checkpoint, Event, EventStore, Json, Progressed, ProjectionError, ProjectionStore,
-    SequencePosition, SourceMark, ViewError, checkpoint_id, run_fan_out, run_projection,
+    Checkpoint, Event, EventStore, Json, Progressed, ProjectionError, ProjectionStore, QueryItem,
+    SequencePosition, SourceMark, Tags, ViewError, checkpoint_id, run_fan_out, run_projection,
     source_checkpoint_id,
 };
 use happenstance_testkit::{BatchCall, RecordingProjectionStore, block_on};
 
 use crate::support::{
     Answers, Instrumented, ReadFault, Shard, checkpoint_of, chunk, part, part_in, poisoned,
-    poisoned_in,
+    poisoned_in, shard_tags,
 };
 
 /// A view's outcome as both runners can report it.
@@ -139,6 +139,35 @@ fn n_views_cost_one_read() {
         assert_eq!(events.reads(), 1, "three views, and not one read");
         assert_eq!(events.delivered(), 3, "an event was delivered twice");
         assert_eq!(got.state, [3, 3, 3]);
+    });
+}
+
+/// Views that share a scope put its item in the one read once, and the items
+/// keep the order their first view named them in. A union that pushed every
+/// lane's items would ask the store for one item per view: the same events,
+/// so only the query itself shows it.
+#[test]
+fn views_sharing_a_scope_ask_for_its_item_once() {
+    block_on(async {
+        let events = Instrumented::seeded(&[part_in("A1", 0), part_in("B1", 1)]).await;
+        let views = [
+            Shard::new("a").in_shard(1),
+            Shard::new("b").in_shard(0),
+            Shard::new("c").in_shard(1),
+            Shard::new("d").in_shard(0),
+        ];
+
+        let (got, _) = fanned(&events, &views, 8).await;
+
+        let [query] = events.take_queries().try_into().expect("one read");
+        let scopes: Vec<&Tags> = query
+            .items()
+            .expect("every view is scoped")
+            .iter()
+            .map(QueryItem::tags)
+            .collect();
+        assert_eq!(scopes, [&shard_tags(1), &shard_tags(0)]);
+        assert_eq!(got.state, [1, 1, 1, 1]);
     });
 }
 

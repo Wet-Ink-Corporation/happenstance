@@ -116,7 +116,8 @@ pub(super) fn fits_the_call<F: IngestFixture>(ceiling: usize, per_event: usize) 
 
 /// How many events a group's compensation carries when it carries any: the
 /// untagged head and the tagged event behind it that
-/// [`Calls::build_unchecked`] builds.
+/// [`Calls::build_unchecked`] builds. The builder's array is typed by this
+/// constant, so the count and what is built cannot drift apart.
 const COMPENSATION_EVENTS: usize = 2;
 
 /// [`per_event`]'s number, once the ceiling is known to be coherent.
@@ -290,12 +291,18 @@ impl Calls<'_> {
                 .map(|count| self.shipped(*count))
                 .collect::<Result<Vec<_>, _>>()?;
             let compensation = match shape.compensation {
-                // The type is one of this module's `from_static` constants, so
-                // the clone copies a borrowed `&'static str`, nothing more.
-                Some(count) => Vec::from([
-                    self.tagged(COMPENSATED, 0)?,
-                    self.tagged(compensation_type.clone(), count)?,
-                ]),
+                Some(count) => {
+                    // Typed by the constant `fits_the_call` counts with, so a
+                    // compensation built longer or shorter does not compile.
+                    let compensation: [Event; COMPENSATION_EVENTS] = [
+                        self.tagged(COMPENSATED, 0)?,
+                        // The type is one of this module's `from_static`
+                        // constants, so the clone copies a borrowed
+                        // `&'static str`, nothing more.
+                        self.tagged(compensation_type.clone(), count)?,
+                    ];
+                    Vec::from(compensation)
+                }
                 None => Vec::new(),
             };
             built.push((events, compensation));
