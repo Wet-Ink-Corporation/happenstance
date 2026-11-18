@@ -55,16 +55,6 @@ entry below. **`happenstance-sqlite` migrates its file to schema
 version 3 on open, and a `0.7` build refuses a migrated file**; upgrade every
 process that opens a store before any of them opens it.
 
-A store that had events removed outside the port no longer takes them back, or
-refuses them, when they are offered again (#483, #484, SY-40,
-[ADR-0110](.kb/decisions/0110-a-removed-event-is-not-readmitted.md)).
-`experiments/retention-reader` showed a restored edge re-admitting pruned foreign
-events at the tail, so a projection applied them twice, and refusing a pruned own
-event as `UnheldOwnIdentity`, which wedged the edge. Ingest now skips an event
-whose identity the store has recorded as removed. This release's first part is
-the oracle and the conformance rule; the four adapters follow, each with its own
-entry below.
-
 ### Added
 
 - `happenstance`: `Source<'a, S>`, an event store paired with its `StoreId`, the

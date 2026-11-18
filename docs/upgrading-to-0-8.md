@@ -338,6 +338,7 @@ The record grows by one small row per removed event and is kept for ever.
 Deleting a row of it lets that identity be ingested again, so do that only once
 no peer can offer the event. A restore from a copy of the file rolls the record
 back with the log, which is what keeps SY-38's refusal of a restored store true.
+
 ## A Durable Object gains the removal record
 
 **What changed.** `CloudflareEventStore::migrate` creates one more table,
