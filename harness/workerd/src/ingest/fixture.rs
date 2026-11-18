@@ -150,6 +150,10 @@ impl IngestFixture for WorkerdIngestFixture {
     // through `ingest` on the real object: ADR-0100's falsifier on this path.
     const MAX_TAGS_PER_BATCH: Option<usize> =
         <WorkerdFixture<'static> as Fixture>::MAX_TAGS_PER_BATCH;
+    // The per-call length, so VT-24's ingest rule runs through `ingest` on the
+    // real object, and VT-36's checks its ceiling is reachable under it.
+    const MAX_EVENTS_PER_BATCH: Option<usize> =
+        <WorkerdFixture<'static> as Fixture>::MAX_EVENTS_PER_BATCH;
     // The event-store fixture's answer, for its reason: here the removal
     // reaches a real object's SQLite, so SY-40's rule runs against the record's
     // trigger firing inside `workerd` rather than inside the shim's model.

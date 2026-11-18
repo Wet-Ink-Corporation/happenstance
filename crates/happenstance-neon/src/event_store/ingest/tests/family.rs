@@ -69,6 +69,11 @@ impl IngestFixture for NeonIngestFixture {
         Some(NeonEventStore::<LiveTransport>::MAX_EVENT_DATA_LEN);
     const MAX_TAGS_PER_EVENT: Option<usize> =
         Some(NeonEventStore::<LiveTransport>::MAX_TAGS_PER_EVENT);
+    /// Mirrored from the constant `exceeded` holds the whole call's length
+    /// to, foreign and compensation events counted together: VT-24's floor,
+    /// exactly.
+    const MAX_EVENTS_PER_BATCH: Option<usize> =
+        Some(NeonEventStore::<LiveTransport>::MAX_EVENTS_PER_BATCH);
 
     async fn connect(&self) -> Self::Store {
         let (config, transport) = self.schema().await;

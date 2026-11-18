@@ -110,6 +110,34 @@ entry below.
   an object before it serves replication again. The ingest fixture, and
   `harness/workerd`'s, grant `REMOVAL`, so `a_removed_event_is_not_readmitted`
   runs on the gate's Node host and under `workerd`.
+- **`happenstance-sync-testkit`: `IngestFixture::MAX_EVENTS_PER_BATCH`** and the
+  ingest rule **`ingest_holds_the_call_to_its_events_per_batch_ceiling`** (VT-24;
+  #379). A store that declares an events-per-call ceiling is held to it over the
+  whole `ingest` call, every group and every compensation counted together. A
+  call exactly at the ceiling lands. A call one event over, spread across groups
+  or over only because of its compensation, is refused as
+  `IngestError::ExceedsStoreLimit { limit: EventsPerBatch, len }`, with `len` the
+  call's length and nothing written. The const defaults to `None`, so an existing
+  fixture still compiles, and a fixture that declares nothing reports the rule
+  **skipped** with `NO_EVENTS_PER_BATCH_LIMIT` and
+  `NO_EVENTS_PER_BATCH_LIMIT_REASON`. A ceiling at or above
+  `MAX_PROVOKED_BATCH_EVENTS` (4,096) is not exercised. VT-24's floor stays with
+  `bulk_ingest_is_idempotent_in_bounded_round_trips`. It rejects a store that
+  holds each group to the ceiling apart, one that leaves the compensation out,
+  one that refuses a call exactly at the ceiling, and one that writes the call
+  and then refuses it. **A new rule is a minor for this crate; pin it exactly.**
+  The ingest fixtures of `happenstance-sqlite`'s spike (256),
+  `happenstance-postgres` (256), `happenstance-neon` (128),
+  `happenstance-cloudflare` (1,024) and `harness/workerd` now declare their
+  stores' ceilings and run it.
+- `happenstance-sync-testkit`: `ingest_holds_the_call_to_its_tags_per_batch_ceiling`
+  now checks VT-36's reachable half before it writes, closing the gap its
+  documentation named under "Not checked: the call's length". When a fixture
+  declares `MAX_EVENTS_PER_BATCH`, `ceiling + 1` tags must fit in that many
+  events of at most `MAX_TAGS_PER_EVENT` tags, or the declaration is a VT-36
+  violation. A coherent declaration too tight for the rule's own spread reports
+  the rule skipped with `TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON`. Before this
+  change, such a store failed the rule naming the wrong limit.
 
 ### Changed
 

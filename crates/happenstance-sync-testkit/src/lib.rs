@@ -124,6 +124,7 @@
 //! | [`ingest_group_is_atomic_under_a_mid_group_fault`](ingest_rules::ingest_group_is_atomic_under_a_mid_group_fault) | SY-30 | a group written in chunks without a transaction, a compensation committed apart, a fault answered `Ok`, and an armed fault that never fires |
 //! | [`ingest_validates_every_event_not_the_head`](ingest_rules::ingest_validates_every_event_not_the_head) | SY-18 | per-event ceilings checked on each group's head only, a compensation never checked, and a ceiling off by one |
 //! | [`ingest_holds_the_call_to_its_tags_per_batch_ceiling`](ingest_rules::ingest_holds_the_call_to_its_tags_per_batch_ceiling) | VT-36, SY-18 | a tags-per-batch ceiling held to each group apart, a compensation left out of the total, a ceiling off by one, and a total refused as per-event, `Park` rather than `Split` |
+//! | [`ingest_holds_the_call_to_its_events_per_batch_ceiling`](ingest_rules::ingest_holds_the_call_to_its_events_per_batch_ceiling) | VT-24 | an events-per-call ceiling held to each group apart, a compensation left out of the length, a ceiling off by one, and a call refused after it was written |
 //! | [`only_the_adjudicator_compensates`](ingest_rules::only_the_adjudicator_compensates) | SY-7 | a compensation minted under an incarnation the store never read, so its log names an author nobody assigned |
 //! | [`directional_merge_rules_compose`](ingest_rules::directional_merge_rules_compose) | SY-10 | a store with the merge rule built in, which answers a group whose travelling guard its log breaks with a reversal of its own, and so judges, as a spoke, what the hub sends; and one that re-mints its own claim when a peer's claim on the seat arrives |
 //! | [`bulk_ingest_is_idempotent_in_bounded_round_trips`](ingest_rules::bulk_ingest_is_idempotent_in_bounded_round_trips) | SY-14, VT-24 | a store that consults what it holds for the first 64 events of a call only and writes a held event past them again, and one that refuses a call of VT-24's 128 events as over its batch limit |
@@ -157,7 +158,7 @@
 //!
 //! ## Capabilities
 //!
-//! Three rules need the fixture's co-operation, and say so rather than pass
+//! Four rules need the fixture's co-operation, and say so rather than pass
 //! when they do not get it. SY-30's needs
 //! [`MID_GROUP_FAULT`](IngestFixture::MID_GROUP_FAULT) and
 //! [`arm_mid_group_fault`](IngestFixture::arm_mid_group_fault), because only
@@ -168,10 +169,14 @@
 //! the adapter's own constant. VT-36's reads
 //! [`MAX_TAGS_PER_BATCH`](IngestFixture::MAX_TAGS_PER_BATCH), mirrored the
 //! same way; only a store whose call has a tags wall of its own states one,
-//! today `happenstance-cloudflare`'s. [`MemoryIngestFixture`] declines the fault in its own words and declares
-//! no ceiling, so it reports all three rules skipped; the faithful store in
+//! today `happenstance-cloudflare`'s. VT-24's reads
+//! [`MAX_EVENTS_PER_BATCH`](IngestFixture::MAX_EVENTS_PER_BATCH), which each
+//! shipped adapter's fixture states, and VT-36's checks its own ceiling is
+//! reachable under it.
+//! [`MemoryIngestFixture`] declines the fault in its own words and declares
+//! no ceiling, so it reports all four rules skipped; the faithful store in
 //! `tests/wrong_ingest_stores.rs` runs them, and `happenstance-sqlite`'s
-//! ingest spike runs the first two. The mount also emits
+//! ingest spike runs all but VT-36's. The mount also emits
 //! `every_declined_capability_is_stated_by_this_fixture`, which fails a
 //! fixture whose declension is this crate's default
 //! ([`ingest_declensions_are_stated`]).
@@ -369,9 +374,10 @@ pub use ingest_fixture::{
     UNSTATED_MID_GROUP_FAULT, ingest_declensions_are_stated,
 };
 pub use ingest_suite::{
-    MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON,
-    NO_PER_EVENT_LIMITS, NO_PER_EVENT_LIMITS_REASON, NO_TAGS_PER_BATCH_LIMIT,
-    NO_TAGS_PER_BATCH_LIMIT_REASON, ingest_rules,
+    MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_EVENTS_PER_BATCH_LIMIT,
+    NO_EVENTS_PER_BATCH_LIMIT_REASON, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, NO_PER_EVENT_LIMITS,
+    NO_PER_EVENT_LIMITS_REASON, NO_TAGS_PER_BATCH_LIMIT, NO_TAGS_PER_BATCH_LIMIT_REASON,
+    TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON, ingest_rules,
 };
 
 // The write-group family (#420), declared after the ingest family for the

@@ -67,6 +67,9 @@ impl IngestFixture for PostgresIngestFixture {
     /// ceiling: this store states none, and `exceeded` does not bound it.
     const MAX_EVENT_DATA_LEN: Option<usize> = Some(PostgresEventStore::MAX_EVENT_DATA_LEN);
     const MAX_TAGS_PER_EVENT: Option<usize> = Some(PostgresEventStore::MAX_TAGS_PER_EVENT);
+    /// Mirrored from the constant `exceeded` holds the whole call's length
+    /// to, foreign and compensation events counted together.
+    const MAX_EVENTS_PER_BATCH: Option<usize> = Some(PostgresEventStore::MAX_EVENTS_PER_BATCH);
 
     async fn connect(&self) -> Self::Store {
         // A refcounted handle onto the one pool, which every handle shares.
