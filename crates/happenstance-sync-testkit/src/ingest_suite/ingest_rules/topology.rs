@@ -125,20 +125,25 @@ pub(super) const PEER_TO_PEER: Directions = Directions {
 
 /// One end of the edge, as the runner above it sees it.
 #[derive(Debug)]
-pub(super) struct End<S> {
+pub(super) struct End<S, F> {
     pub(super) store: S,
     pub(super) id: StoreId,
     /// The reversal this end writes if a direction into it adjudicates.
     pub(super) reversal: Event,
     /// This end's own claim, once it has appended one.
     pub(super) claim: Option<EventId>,
+    /// The fixture `store` was connected from, held so it outlives the store:
+    /// a fixture may tear its backing down on drop (#500), and fields drop in
+    /// declaration order, so this one is last. Nothing reads it; the leading
+    /// underscore says it is held for its drop, as a guard is.
+    _fixture: F,
 }
 
 /// The two ends of one edge, near then far.
 #[derive(Debug)]
-pub(super) struct Edge<S> {
-    pub(super) near: End<S>,
-    pub(super) far: End<S>,
+pub(super) struct Edge<S, F> {
+    pub(super) near: End<S, F>,
+    pub(super) far: End<S, F>,
 }
 
 /// The hub-and-spoke walk, under `directions`. The hub holds another spoke's
@@ -159,7 +164,7 @@ pub(super) struct Edge<S> {
 pub(super) async fn hub_and_spoke<F: IngestFixture>(
     open: &impl AsyncFn() -> F,
     directions: Directions,
-) -> Result<Edge<F::Store>, Violation> {
+) -> Result<Edge<F::Store, F>, Violation> {
     let guard = seat_guard()?;
     let mut edge = open_edge(open, b"reversed-by-the-spoke", b"reversed-by-the-hub").await?;
     let first = ReplicatedEvent::new(
@@ -193,7 +198,7 @@ pub(super) async fn hub_and_spoke<F: IngestFixture>(
 pub(super) async fn peer_to_peer<F: IngestFixture>(
     open: &impl AsyncFn() -> F,
     directions: Directions,
-) -> Result<Edge<F::Store>, Violation> {
+) -> Result<Edge<F::Store, F>, Violation> {
     let guard = seat_guard()?;
     let mut edge = open_edge(open, b"reversed-by-the-first", b"reversed-by-the-second").await?;
     let near = own_claim(&mut edge.near, b"claimed-by-the-first", &guard).await?;
@@ -210,8 +215,8 @@ pub(super) async fn peer_to_peer<F: IngestFixture>(
 ///
 /// A [`Violation`] of SY-10 naming the end whose log differs, or whose own
 /// claim is gone.
-pub(super) async fn judge<S: EventStore + IngestStore>(
-    edge: &Edge<S>,
+pub(super) async fn judge<S: EventStore + IngestStore, F>(
+    edge: &Edge<S, F>,
     expected: &[(EventType, &[u8])],
 ) -> Result<(), Violation> {
     let mut expected: Vec<Fact> = expected
@@ -281,7 +286,7 @@ async fn open_edge<F: IngestFixture>(
     open: &impl AsyncFn() -> F,
     near_reversal: &[u8],
     far_reversal: &[u8],
-) -> Result<Edge<F::Store>, Violation> {
+) -> Result<Edge<F::Store, F>, Violation> {
     let near = end(open, near_reversal).await?;
     let far = end(open, far_reversal).await?;
     ensure(near.id != far.id, SY_10, || {
@@ -298,8 +303,9 @@ async fn open_edge<F: IngestFixture>(
 async fn end<F: IngestFixture>(
     open: &impl AsyncFn() -> F,
     reversal: &[u8],
-) -> Result<End<F::Store>, Violation> {
-    let store = open().await.connect().await;
+) -> Result<End<F::Store, F>, Violation> {
+    let fixture = open().await;
+    let store = fixture.connect().await;
     let id = ensure_foreign(&store, &[OTHER_SPOKE], SY_10).await?;
     let reversal = opaque(CLAIM_REVERSED, reversal, SY_10)?.with_tags(seat());
     Ok(End {
@@ -307,14 +313,15 @@ async fn end<F: IngestFixture>(
         id,
         reversal,
         claim: None,
+        _fixture: fixture,
     })
 }
 
 /// `end` appends its own claim, decided under `guard` against its own log,
 /// and the claim is read back as it would travel: its identity and recorded
 /// time as the store assigned them, and no guard.
-async fn own_claim<S: EventStore + IngestStore>(
-    end: &mut End<S>,
+async fn own_claim<S: EventStore + IngestStore, F>(
+    end: &mut End<S, F>,
     data: &[u8],
     guard: &AppendCondition,
 ) -> Result<ReplicatedEvent, Violation> {
@@ -347,9 +354,9 @@ async fn own_claim<S: EventStore + IngestStore>(
 
 /// The near end pushes its own `claim` to the far end, unguarded, which takes
 /// it under `rule`.
-async fn push<S: EventStore + IngestStore>(
+async fn push<S: EventStore + IngestStore, F>(
     rule: MergeRule,
-    edge: &Edge<S>,
+    edge: &Edge<S, F>,
     claim: &ReplicatedEvent,
 ) -> Result<(), Violation> {
     carry(rule, &edge.far, claim, None, "the near end's pushed claim").await
@@ -364,9 +371,9 @@ async fn push<S: EventStore + IngestStore>(
 /// carries uniquely, and not by identity. An identity-keyed runner sends the
 /// same events from a faithful store, and this way a store that re-mints on
 /// ingest fails VT-5's rule and not this one.
-async fn pull<S: EventStore + IngestStore>(
+async fn pull<S: EventStore + IngestStore, F>(
     rule: MergeRule,
-    edge: &Edge<S>,
+    edge: &Edge<S, F>,
     guard: &AppendCondition,
 ) -> Result<(), Violation> {
     let held = facts(&read_all(&edge.near.store, SY_10).await?);
@@ -401,9 +408,9 @@ async fn pull<S: EventStore + IngestStore>(
 /// The runner's step for one claim crossing into `to` under `rule`, mounted
 /// through the shipped hook: [`MergeRule::Adjudicate`] mounts [`SeatRule`]
 /// over `to`'s store, and [`MergeRule::Accept`] the shipped [`Accept`].
-async fn carry<S: EventStore + IngestStore>(
+async fn carry<S: EventStore + IngestStore, F>(
     rule: MergeRule,
-    to: &End<S>,
+    to: &End<S, F>,
     claim: &ReplicatedEvent,
     guard: Option<&AppendCondition>,
     what: &str,
@@ -424,9 +431,9 @@ async fn carry<S: EventStore + IngestStore>(
 /// claim travels with, if any, rides on its group (SY-30) as evidence, never
 /// an instruction (SY-6). The store evaluates nothing (SY-1) and must count
 /// exactly what it was handed.
-async fn carry_under<S: EventStore + IngestStore, A: Adjudicate>(
+async fn carry_under<S: EventStore + IngestStore, F, A: Adjudicate>(
     rule: &A,
-    to: &End<S>,
+    to: &End<S, F>,
     claim: &ReplicatedEvent,
     guard: Option<&AppendCondition>,
     what: &str,
