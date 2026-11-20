@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 215 clause IDs, of which 208 are normative:
-**194 `[FROZEN]`**, **12 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
+**195 `[FROZEN]`**, **11 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -7693,17 +7693,12 @@ event must not come back on re-delivery; a deployment that needs it to, a pruned
 replica re-hydrated from its hub, needs an explicit operation that clears the
 record, not a change to ingest.
 
-`[PROVISIONAL — falsified by a deployment in which a removed event must come back
-on re-delivery, or by an adapter that cannot keep its allocator across a
-removal]` — minted by [ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)
-(proposed) at `0.8.0` (#483, #484). Freezes when the rule is green on SQLite, the
-Durable Object (host and `workerd`), Postgres and Neon, so the freeze rests on the
-stores whose writers do not serialise and not on SQLite alone. Until each adapter's
-change grants `IngestFixture::REMOVAL`, its mounted ingest family reports the rule
-declined. Green on `MemoryIngestStore`, whose record is a set beside its log, and
-on `PostgresEventStore` against a live PostgreSQL 17.10, whose record is a table a
-`BEFORE DELETE` trigger writes. `NeonEventStore`'s fixture grants `REMOVAL`; its
-run is `live-neon`'s.
+`[FROZEN]` — by [ADR-0115](../.kb/decisions/0115-sy-40-is-frozen.md) at `0.8.0`, on the rule green, not declined, on all five
+adapters that implement ingest: SQLite and the Durable Object on the host, the object under `workerd` warm and cold, a live
+PostgreSQL and a live Neon endpoint (run 44344907519). Minted provisional by [ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)
+(#483, #484). Reopened by a deployment in which a removed event must come back on re-delivery, or by an adapter that cannot keep
+its allocator across a removal. Each store's record is a table its own delete trigger writes; `MemoryIngestStore`'s is a set
+beside its log.
 Rule: `a_removed_event_is_not_readmitted` (`happenstance-sync-testkit`) — four
 arrangements on three fresh fixtures; (c) runs on (b)'s store after its removal:
 (a) a removed foreign event offered again through a handle held across the
@@ -10667,9 +10662,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 41 | 33 | 3 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 40 | 38 | 2 | 0 | 0 |
+| §5 `SyncPeer` | `SY` | 40 | 39 | 1 | 0 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **215** | **194** | **12** | **2** | **7** |
+| **Total** | | **215** | **195** | **11** | **2** | **7** |
 
 ### 7.2 The table
 
@@ -10868,7 +10863,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-37 | FROZEN | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |
 | SY-38 | FROZEN | `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test, `crat… | E2E-42, E2E-34 |
 | SY-39 | FROZEN | `an_append_reads_back_as_one_group`, `an_ingested_group_keeps_its_boundary_and… | E2E-35, E2E-39 |
-| SY-40 | PROVISIONAL | `a_removed_event_is_not_readmitted` | E2E-46, E2E-42 |
+| SY-40 | FROZEN | `a_removed_event_is_not_readmitted` | E2E-46, E2E-42 |
 
 #### `CF` — conformance obligations (§6)
 
