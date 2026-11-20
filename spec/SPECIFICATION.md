@@ -7154,8 +7154,20 @@ ES-18 owns the replacement and disposes of what it replaces.
 
 `[FROZEN]`
 Rule: `compensation_is_atomic_with_the_losing_event` (new,
-`happenstance-sync-testkit`), riding for its store-side half on ES-18.
-Cases: E2E-39.
+`happenstance-sync-testkit`), riding for its store-side half on ES-18;
+`the_losing_event_is_never_read_unresolved` (`happenstance-sync-testkit`).
+Cases: E2E-39, E2E-61.
+
+*The second rule and E2E-61 are a repair (#320), not an amendment.* The first
+rule checks the transport's half, and ES-18 and SY-30's fault rule check a write
+that fails. Neither reaches the reader this clause names when nothing fails: a
+store that commits the losing event, awaits, and then commits the compensation.
+`the_losing_event_is_never_read_unresolved` adjudicates a real conflict through
+the shipped `runner::Adjudicate` hook, hands the store the claim and its reversal
+as the runner does, and reads the log on a second handle each time the ingest
+yields. That store was never admitted by the MUST above, so naming the rule
+admits and excludes nothing, which is the test
+`kb-playbook-repair-frozen-clause-001` applies.
 
 *Rejects:* compensate-after-commit — ingest the losing event, return, then have a
 projection or a follow-up command author the compensation. It is the obvious
@@ -10830,7 +10842,7 @@ between them because its *shape* does not wait on a transport but its
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
 | SY-1 | FROZEN | `ingest_never_rejects` | E2E-33, E2E-39, E2E-42, E2E-45, E2E-47 |
-| SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event` | E2E-39 |
+| SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event`, `the_losing_event_is_never_rea… | E2E-39, E2E-61 |
 | SY-3 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-39 |
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` | E2E-42 |
@@ -11223,9 +11235,9 @@ that nobody reads the unchanged number as evidence that nothing moved.
 
 ### 7.6 E2E cases no clause claims
 
-**None. All 60 cases are claimed by at least one clause.** E2E-59 joined at `0.8.0`,
-claimed by PS-40 alone (ADR-0109), and E2E-60 in the same release, claimed by PS-41
-alone (the owner's call D3 = A).
+**None. All 61 cases are claimed by at least one clause.** E2E-59 joined at `0.8.0`,
+claimed by PS-40 alone (ADR-0109), E2E-60 in the same release, claimed by PS-41
+alone (the owner's call D3 = A), and E2E-61 too, claimed by SY-2 alone (#320).
 
 That result is suspicious enough to state how it was reached, because "the defect
 list is empty" is the shape of a list that was never computed.

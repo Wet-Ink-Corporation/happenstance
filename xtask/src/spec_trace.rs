@@ -1611,7 +1611,7 @@ fn check_case_levels(
 /// Nine of the thirteen are one fact: the `SY` family names rules for
 /// `happenstance-sync-testkit`, which CF-36's own `Rejects` paragraph points at
 /// and which did not exist then. That is not thirteen independent oversights.
-const CF36_UNDISCHARGED: [(&str, &str); 13] = [
+const CF36_UNDISCHARGED: [(&str, &str); 12] = [
     (
         "VT-21",
         "names `store_accepts_the_guaranteed_minimum_payload` and \
@@ -1633,20 +1633,19 @@ const CF36_UNDISCHARGED: [(&str, &str); 13] = [
     ),
     ("PS-30", "the same shape as PS-29, against the same case"),
     (
-        "SY-2",
+        "SY-4",
         "the replication family; CF-36 homes its rules in `happenstance-sync-testkit`, absent \
-         when measured (`crates/happenstance-sync/src/lib.rs:23-24`) and present since #111. \
-         SY-2's case is still E2E-39 alone, and its rule checks only the transport's half: \
-         compensate-after-commit, which the clause's `Rejects` names, is #320",
+         when measured (`crates/happenstance-sync/src/lib.rs:23-24`) and present since #111, \
+         and this clause still cites integration-level cases alone. SY-2 shared this reason \
+         until #320 gave it a contract-level case, E2E-61",
     ),
-    ("SY-4", "the replication family, as SY-2"),
-    ("SY-5", "the replication family, as SY-2"),
-    ("SY-7", "the replication family, as SY-2"),
-    ("SY-9", "the replication family, as SY-2"),
-    ("SY-10", "the replication family, as SY-2"),
-    ("SY-24", "the replication family, as SY-2"),
-    ("SY-25", "the replication family, as SY-2"),
-    ("SY-34", "the replication family, as SY-2"),
+    ("SY-5", "the replication family, as SY-4"),
+    ("SY-7", "the replication family, as SY-4"),
+    ("SY-9", "the replication family, as SY-4"),
+    ("SY-10", "the replication family, as SY-4"),
+    ("SY-24", "the replication family, as SY-4"),
+    ("SY-25", "the replication family, as SY-4"),
+    ("SY-34", "the replication family, as SY-4"),
 ];
 
 /// Check 11's other direction — a recorded CF-36 breach that is no longer one.
@@ -4136,8 +4135,8 @@ mod tests {
         let mut problems = Vec::new();
         let live = reconcile_cf36(
             &one_clause_with(
-                "SY-2",
-                "`compensation_is_atomic_with_the_losing_event`",
+                "SY-4",
+                "`transitive_convergence_over_a_partial_mesh`",
                 "E2E-01",
             ),
             &levels,
@@ -4148,7 +4147,7 @@ mod tests {
         assert!(
             problems
                 .iter()
-                .any(|p| p.contains("SY-2") && p.contains("can only shrink")),
+                .any(|p| p.contains("SY-4") && p.contains("can only shrink")),
             "got {problems:?}"
         );
     }
@@ -4166,7 +4165,7 @@ mod tests {
     }
 
     /// The whole of check 10 against the real documents. §7.6 states the result
-    /// this asserts — *"None. All 60 cases are claimed by at least one clause."*
+    /// this asserts — *"None. All 61 cases are claimed by at least one clause."*
     /// — and until this check that sentence was a hand computation nothing
     /// reproduced.
     #[test]
@@ -4174,7 +4173,7 @@ mod tests {
         let root = workspace_root().unwrap();
         let clauses = parse_clauses(&read(&root, SPEC).unwrap());
         let cases = collect_cases(&read(&root, CASES).unwrap());
-        assert_eq!(cases.len(), 60, "§7.6's count of the document");
+        assert_eq!(cases.len(), 61, "§7.6's count of the document");
 
         let mut problems = Vec::new();
         check_case_ownership(&clauses, &cases, &mut problems);

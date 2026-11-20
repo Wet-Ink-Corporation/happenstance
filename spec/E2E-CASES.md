@@ -40,7 +40,7 @@ types, errors, in-memory store — is `happenstance-core`, and that is what a
 |---|---|
 | [A — Event store semantics](#a--event-store-semantics) | E2E-01 … E2E-14 |
 | [B — Projections and the runner](#b--projections-and-the-runner) | E2E-15 … E2E-32, E2E-60 |
-| [C — Sync and convergence](#c--sync-and-convergence) | E2E-33 … E2E-45 |
+| [C — Sync and convergence](#c--sync-and-convergence) | E2E-33 … E2E-45, E2E-61 |
 | [D — Lifecycle and evolution](#d--lifecycle-and-evolution) | E2E-46 … E2E-51, E2E-59 |
 | [E — Edge and `!Send`](#e--edge-and-send) | E2E-52 … E2E-58 |
 | [What cannot be written yet](#what-cannot-be-written-yet) | — |
@@ -1222,6 +1222,34 @@ exactly one direction.
 
 **Rejects:** the assumption that a spoke's merge rule is the hub's merge rule read
 backwards. `sync/lib.rs:45-51` already says it is not.
+
+---
+
+### E2E-61 — A reader never sees an adjudicated loser without its compensation
+
+- **From:** Kestrel Cold Chain (the hub's adjudication, E2E-39), at the store; #320, the
+  authoring half of **SY-2** that E2E-39's integration level left without a contract case
+- **Level:** contract (sync)
+- **Spans:** `happenstance-sync`, `happenstance-sync-testkit`
+
+**GIVEN** a store holding one origin's claim on a seat, and a second origin's claim on the
+same seat, which the hub's merge rule, mounted through the shipped `runner::Adjudicate`
+hook, answers with a reversal.
+**WHEN** the store ingests the claim and its reversal as the runner hands them, one
+`IngestGroup`, and a reader reads the log through a second handle each time the ingest
+yields, and once after it returns.
+**THEN** no read shows the losing claim without its reversal, and the read after the
+ingest shows both.
+
+**Falsifies:** that atomicity a store promises only under a fault it is asked to arm is
+the atomicity a reader relies on. A store that commits the losing event, awaits, and then
+commits the compensation fails no call and leaves the right log, and SY-30's rule reaches
+it only through a fault its fixture can arm.
+
+**Rejects:** compensate-after-commit in a store: the foreign rows and their compensation
+written as two statements with an await between them and no transaction around both.
+`happenstance-sync-testkit`'s `tests/wrong_ingest_stores.rs` carries it as
+`Mistake::CompensatesAfterCommit`, and every other ingest rule passes it.
 
 ---
 
