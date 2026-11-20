@@ -1056,3 +1056,12 @@ A new decision atom gets a row in ADR-number order under the wave section that i
 (open a new `##` section per wave, the way [`domain-map.md`](domain-map.md) opens a new section
 per domain). A supersession updates two rows in the same edit: the new atom's row, and the old
 atom's `Status` and `Supersedes / superseded by` cells — never delete a superseded row.
+
+## 2026-11-20: SY-40 is frozen
+
+ADR-0115 freezes SY-40 at `0.8.0` on the condition ADR-0110 wrote into its marker: the rule green, not declined, on SQLite, the
+Durable Object (host and `workerd`), Postgres and Neon, with the Neon leg against a live endpoint (#517). It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0115 | [`kb-decision-0115`](../decisions/0115-sy-40-is-frozen.md) | SY-40 is frozen, on its rule green on all five adapters that implement ingest | accepted | 20 | — |

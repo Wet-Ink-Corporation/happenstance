@@ -101,6 +101,9 @@ deploy.
   compensates a group of removed and held events. **A new rule is a minor for
   this crate; pin it exactly.** It runs only against a fixture that grants
   `REMOVAL`, so no adapter's CI turns red until that adapter grants it.
+  **SY-40 is `[FROZEN]`** (ADR-0115). It was minted provisional, and the rule has
+  since run green, not declined, on all five adapters that implement ingest,
+  Neon against a live endpoint among them.
 - `happenstance-sqlite`: the removal record (#483, #484, SY-40). Migration 3
   adds a table, `event_removed`, and an `AFTER DELETE` trigger on `event` that
   records the origin identity of every row deleted from the file, by any client.
