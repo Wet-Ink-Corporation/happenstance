@@ -189,23 +189,26 @@ pub struct TimelineView {
 }
 
 impl TimelineView {
-    /// Reads the view through the application's own connection.
+    /// Reads `show`'s view through the application's own connection.
+    ///
+    /// Both tables are keyed by show, so both reads name it: a file that
+    /// holds a second show holds its rows in the same tables.
     ///
     /// # Errors
     ///
     /// The driver's error, if a table is missing or a row does not decode.
-    pub fn read(app: &Connection) -> rusqlite::Result<Self> {
+    pub fn read(app: &Connection, show: &ShowId) -> rusqlite::Result<Self> {
         let capacity = app
-            .prepare("SELECT capacity FROM show_seats")?
-            .query_map([], |row| row.get::<_, u32>(0))?
+            .prepare("SELECT capacity FROM show_seats WHERE show = ?1")?
+            .query_map([show.as_str()], |row| row.get::<_, u32>(0))?
             .next()
             .transpose()?;
         let rows = app
             .prepare(
                 "SELECT sale, buyer, sold_by, status, reason FROM seat_ledger \
-                 ORDER BY status = 'refunded', sale",
+                 WHERE show = ?1 ORDER BY status = 'refunded', sale",
             )?
-            .query_map([], |row| {
+            .query_map([show.as_str()], |row| {
                 Ok(Row {
                     sale: row.get(0)?,
                     buyer: row.get(1)?,

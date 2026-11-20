@@ -164,6 +164,69 @@ deploy.
   (`lock_not_available`) is classified as transient, so an ingest that gives up
   waiting on a removal under a `lock_timeout` is retried rather than stopping
   an edge.
+- **`happenstance-sync-testkit`: `IngestFixture::MAX_EVENTS_PER_BATCH`** and the
+  ingest rule **`ingest_holds_the_call_to_its_events_per_batch_ceiling`** (VT-24;
+  #379). A store that declares an events-per-call ceiling is held to it over the
+  whole `ingest` call, every group and every compensation counted together. A
+  call exactly at the ceiling lands. A call one event over, spread across groups
+  or over only because of its compensation, is refused as
+  `IngestError::ExceedsStoreLimit { limit: EventsPerBatch, len }`, with `len` the
+  call's length and nothing written. The const defaults to `None`, so an existing
+  fixture still compiles, and a fixture that declares nothing reports the rule
+  **skipped** with `NO_EVENTS_PER_BATCH_LIMIT` and
+  `NO_EVENTS_PER_BATCH_LIMIT_REASON`. A ceiling at or above
+  `MAX_PROVOKED_BATCH_EVENTS` (4,096) is not exercised. VT-24's floor stays with
+  `bulk_ingest_is_idempotent_in_bounded_round_trips`. It rejects a store that
+  holds each group to the ceiling apart, one that leaves the compensation out,
+  one that refuses a call exactly at the ceiling, and one that writes the call
+  and then refuses it. **A new rule is a minor for this crate; pin it exactly.**
+  The ingest fixtures of `happenstance-sqlite`'s spike (256),
+  `happenstance-postgres` (256), `happenstance-neon` (128),
+  `happenstance-cloudflare` (1,024) and `harness/workerd` now declare their
+  stores' ceilings and run it.
+- `happenstance-sync-testkit`: `ingest_holds_the_call_to_its_tags_per_batch_ceiling`
+  now checks VT-36's reachable half before it writes, closing the gap its
+  documentation named under "Not checked: the call's length". When a fixture
+  declares `MAX_EVENTS_PER_BATCH`, `ceiling + 1` tags must fit in that many
+  events of at most `MAX_TAGS_PER_EVENT` tags, or the declaration is a VT-36
+  violation. A coherent declaration too tight for the rule's own spread reports
+  the rule skipped with `TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON`. Before this
+  change, such a store failed the rule naming the wrong limit.
+- `happenstance`: `Projection::scopes`, a provided method returning `&[Tags]`,
+  so one projection can follow several tag sets at once, such as every case one
+  owner holds (PS-41, the owner's call D3 = A). Both runners read the union:
+  one query item per scope, each over the projection's `EVENT_TYPES`, so an
+  event matching any scope is applied once, in log order. The default is
+  `scope()` alone, so a projection that does not override it reads and keys
+  its checkpoint exactly as before. Adding or dropping a scope changes
+  `checkpoint_id` and `source_checkpoint_id`, and the view replays from the
+  start (PS-25); their order and a repeat do not. An empty slice is refused
+  before anything is read, as `ProjectionError::Boundary` holding
+  `InvalidQuery::NoItems`. A wrapper projection that forwards `scope()` should
+  forward `scopes()` too. PS-41's rule, `several_scopes_are_one_query`, is a
+  typed-layer test in `crates/happenstance/tests/projection_scopes.rs`, held
+  against both runners and against a runner reading `scope()` alone and one
+  dropping the event types.
+- **`happenstance-sync-testkit`: SY-33's rule, `refusal_is_never_condition_derived`**,
+  in the sync peer family (#465). SY-33 was frozen naming it, and it had never
+  been written. It drives every refusal the fixture declares through
+  `SyncFixture::refusals` twice on one handle, once on the fresh receiver and
+  once after the rule has grown its log, and requires each to be answered the
+  same: accepted, or refused with the same `FailureClass`. In between it pushes a
+  guarded claim, a seed of a rival claim that guard names and unrelated events,
+  the claim again and the claim's shape from a fresh origin, each held to the
+  claim's first answer. Only refusals are compared, never acks. SY-38's
+  own-identity refusal is never provoked: the rule's origins are its own. It
+  rejects a peer that refuses an event it already holds, one that refuses a
+  group whose guard its log violates, which SY-1's rule rejects too, the same
+  peer made careful enough to skip a re-delivery first, which only the
+  fresh-origin probe catches, and one whose oversized-push refusal is `Split` on an empty log and `Stop` once it
+  holds anything, in `tests/wrong_refusals.rs`. `SyncFixture` is unchanged, so
+  every existing fixture runs the rule with no edit: it is green on
+  `MemorySyncPeer`, the KV-capped, `!Send`, remote and store peers, and mounted
+  for the Durable Object, `harness/workerd`, and the Postgres and Neon peers
+  under `live-postgres` and `live-neon`. **A new rule is a minor for this crate;
+  pin it exactly.**
 
 ### Changed
 
@@ -181,6 +244,14 @@ deploy.
   store that counts its calls sees them.
 - `happenstance-sync-testkit`: the convergence suite builds its runs' `Source`
   from each log's own `store_id`. No rule's verdict changes.
+- `happenstance-sync-testkit`: SY-7's and SY-10's ingest rules keep each
+  fixture alive until the store connected from it drops, so a fixture that tears
+  its backing down on drop no longer does so under a live handle (#500). No
+  rule's verdict changes.
+- `happenstance-sync`'s runner tests: SY-34's log assertion now fails a wrong
+  runner, a `MiniEdge` that rolls its own events back when a push is refused,
+  where the specification had only argued that it would (#487, ADR-0108's open
+  point C). No rule's verdict changes.
 - **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
   an identity that is not the store's.
 - **Breaking (schema): `happenstance-sqlite`: `SCHEMA_VERSION` is 3, was 2.**
@@ -201,6 +272,10 @@ deploy.
   Postgres: send `migration::removal_record_request(&config)` after migrations
   1 and 3, then deploy. An ingest answer is now read from its second result set, after
   the lock's.
+- **PS-41 is minted `[PROVISIONAL]`**, with E2E-60, falsified by a projection
+  that needs different event types under different scopes.
+  `ProjectionError::Boundary` and `InvalidCheckpointId::Query` were documented
+  as unreachable; an empty `scopes` now reaches them, and their docs say so.
 - **SY-40 is minted `[PROVISIONAL]`** by ADR-0110, and the frozen
   SY-1 and SY-38 are amended by it: a removed event is SY-1's second exception,
   and SY-38's refusal no longer covers an identity the store has recorded as
@@ -237,6 +312,10 @@ unchanged, so no `0.7.x` checkpoint is orphaned. The adapters' new inherent
 `store_id` shadows `IngestStore::store_id` in method-call syntax on
 `PostgresEventStore` and `NeonEventStore`, with the same signature and the same
 answer, so a call written against the trait compiles and behaves unchanged.
+`Projection::scopes` is a provided method, which semver counts as a minor
+change: an existing implementation compiles and derives the same query and the
+same ids. The one way it can bite is a type that also has a method named
+`scopes` from another trait in scope, where a method call becomes ambiguous.
 
 **Pending:** the release's other entries.
 

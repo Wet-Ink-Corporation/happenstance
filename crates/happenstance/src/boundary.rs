@@ -173,3 +173,30 @@ pub(crate) fn derive_query(types: &[EventType], scope: &Tags) -> Result<Query, I
     let item = QueryItem::new(types.iter().cloned(), scope.clone())?;
     Ok(Query::from_item(item))
 }
+
+/// The derivation over several scopes, their items OR'd (PS-41).
+///
+/// One item per scope, each over the declared types.
+///
+/// The types are repeated under every scope rather than applied once around
+/// them, because `Query` has no outer filter: an item without them would
+/// nominate every type the scope's tags occur on.
+///
+/// # Errors
+///
+/// Returns [`InvalidQuery::NoItems`] when `scopes` is empty, which no `Query`
+/// can express short of reading everything, and
+/// [`InvalidQuery::UnconstrainedItem`] for an empty scope over no types.
+pub(crate) fn derive_scoped_query(
+    types: &[EventType],
+    scopes: &[Tags],
+) -> Result<Query, InvalidQuery> {
+    // One scope derives an equal `Query` to `derive_query`'s, so a projection
+    // that does not override `scopes` keeps its checkpoint id (PS-25's
+    // goldens, held by `the_runner_commits_under_the_derived_id`).
+    let items = scopes
+        .iter()
+        .map(|scope| QueryItem::new(types.iter().cloned(), scope.clone()))
+        .collect::<Result<Vec<_>, _>>()?;
+    Query::from_items(items)
+}

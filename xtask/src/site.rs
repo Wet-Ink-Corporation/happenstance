@@ -470,6 +470,10 @@ mod tests {
             include_str!("../../crates/happenstance/src/lib.rs"),
         ),
         (
+            "crates/happenstance/src/domain.rs",
+            include_str!("../../crates/happenstance/src/domain.rs"),
+        ),
+        (
             "crates/happenstance/README.md",
             include_str!("../../crates/happenstance/README.md"),
         ),

@@ -62,21 +62,26 @@ pub(super) enum Assignment {
 
 /// One store, as the runner above it sees it.
 #[derive(Debug)]
-pub(super) struct Side<S> {
+pub(super) struct Side<S, F> {
     pub(super) store: S,
     pub(super) id: StoreId,
     /// Whether the assignment names this side the family's adjudicator.
     pub(super) adjudicates: bool,
     /// What this side was asked to write in answer to the conflict.
     pub(super) reversal: Event,
+    /// The fixture `store` was connected from, held so it outlives the store:
+    /// a fixture may tear its backing down on drop (#500), and fields drop in
+    /// declaration order, so this one is last. Nothing reads it; the leading
+    /// underscore says it is held for its drop, as a guard is.
+    _fixture: F,
 }
 
 /// Two sides that each took the same conflicting pair, in opposite orders.
 #[derive(Debug)]
-pub(super) struct Conflict<S> {
+pub(super) struct Conflict<S, F> {
     /// The assigned adjudicator, then the side the assignment did not name
     /// (or, under the test-only `Assignment::EverySide`, named as well).
-    pub(super) sides: [Side<S>; 2],
+    pub(super) sides: [Side<S, F>; 2],
 }
 
 /// Opens two stores and hands each the conflicting pair: the first takes A's
@@ -90,7 +95,7 @@ pub(super) struct Conflict<S> {
 pub(super) async fn take_the_conflicting_pair<F: IngestFixture>(
     open: &impl AsyncFn() -> F,
     assignment: Assignment,
-) -> Result<Conflict<F::Store>, Violation> {
+) -> Result<Conflict<F::Store, F>, Violation> {
     let claims = [claim(ORIGIN_A)?, claim(ORIGIN_B)?];
     let guard = seat_guard()?;
     let adjudicator = side(open, true, b"reversed-by-the-adjudicator").await?;
@@ -140,8 +145,8 @@ pub(super) async fn take_the_conflicting_pair<F: IngestFixture>(
 /// A [`Violation`] of SY-7 for a log holding a reversal its side was not
 /// assigned to write, a reversal missing from an adjudicator's log, or one
 /// filed under another store's identity.
-pub(super) async fn judge<S: EventStore + IngestStore>(
-    conflict: &Conflict<S>,
+pub(super) async fn judge<S: EventStore + IngestStore, F>(
+    conflict: &Conflict<S, F>,
 ) -> Result<(), Violation> {
     for side in &conflict.sides {
         let log = read_all(&side.store, SY_7).await?;
@@ -180,8 +185,9 @@ async fn side<F: IngestFixture>(
     open: &impl AsyncFn() -> F,
     adjudicates: bool,
     reversal: &[u8],
-) -> Result<Side<F::Store>, Violation> {
-    let store = open().await.connect().await;
+) -> Result<Side<F::Store, F>, Violation> {
+    let fixture = open().await;
+    let store = fixture.connect().await;
     let id = ensure_foreign(&store, &[ORIGIN_A, ORIGIN_B], SY_7).await?;
     let reversal = opaque(CLAIM_REVERSED, reversal, SY_7)?.with_tags(seat());
     Ok(Side {
@@ -189,6 +195,7 @@ async fn side<F: IngestFixture>(
         id,
         adjudicates,
         reversal,
+        _fixture: fixture,
     })
 }
 
@@ -196,8 +203,8 @@ async fn side<F: IngestFixture>(
 /// mounts on this side: [`SeatRule`], judging by the seat family against
 /// what the side holds, where the side adjudicates, and the shipped
 /// [`Accept`] where it does not. The store evaluates nothing (SY-1).
-async fn deliver<S: EventStore + IngestStore>(
-    side: &Side<S>,
+async fn deliver<S: EventStore + IngestStore, F>(
+    side: &Side<S, F>,
     claim: &ReplicatedEvent,
     family: &Query,
 ) -> Result<Ingested, Violation> {
@@ -211,9 +218,9 @@ async fn deliver<S: EventStore + IngestStore>(
 
 /// One claim landing on `side` as a runner mounting `rule` lands it: one
 /// group, with the compensation the rule answered in the same write (SY-2).
-async fn deliver_under<S: EventStore + IngestStore, A: Adjudicate>(
+async fn deliver_under<S: EventStore + IngestStore, F, A: Adjudicate>(
     rule: &A,
-    side: &Side<S>,
+    side: &Side<S, F>,
     claim: &ReplicatedEvent,
 ) -> Result<Ingested, Violation> {
     // Owned because the hook judges a wire group; the arrangement keeps

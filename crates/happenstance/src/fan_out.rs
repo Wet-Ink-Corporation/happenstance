@@ -6,20 +6,20 @@
 //! view here takes an event exactly as `run_projection` would take it.
 
 use core::convert::Infallible;
+use std::collections::HashSet;
 
 use happenstance_core::{
-    Authority, EventStore, ProjectionId, ProjectionStore, Query, QueryItem, ReadOptions,
-    SequencePosition, SequencedEvent, StoreId,
+    Authority, EventStore, EventType, ProjectionId, ProjectionStore, Query, QueryItem, ReadOptions,
+    SequencePosition, SequencedEvent, StoreId, Tags,
 };
 
-use crate::boundary::{AtLeastOneType, derive_query};
+use crate::boundary::AtLeastOneType;
 use crate::checkpoint::{self, Bound, Keys};
 use crate::chunk::Chunk;
 use crate::codec::Codec;
-use crate::domain::DomainEvent;
 use crate::runner::{
     Progressed, Projection, ProjectionError, StoreBatch, StoreError, Tally, apply_one,
-    considered_through, next_event,
+    considered_through, next_event, projection_query,
 };
 use crate::source::Source;
 
@@ -200,7 +200,7 @@ where
 ///
 /// One runner per `(store, checkpoint_id)` is the caller's to guarantee, as
 /// `run_projection`'s page explains, and that includes this call: two views
-/// in one slice with one name and one scope share a checkpoint id, and
+/// in one slice with one name and one set of scopes share a checkpoint id, and
 /// nothing here refuses them.
 ///
 /// # Example
@@ -398,7 +398,7 @@ impl<P: Projection> Lane<P> {
 
 /// Derives one view's query and its two ids, with `run_projection`'s arms.
 fn derive<P: Projection>(view: &P) -> Result<(Query, Keys), Stop<P>> {
-    let query = derive_query(P::Event::EVENT_TYPES, view.scope())?;
+    let query = projection_query(view)?;
     let keys = checkpoint::derive_pair(view.id(), &query).map_err(ProjectionError::CheckpointId)?;
     Ok((query, keys))
 }
@@ -443,6 +443,11 @@ fn plan_read<P: Projection>(slots: &[Slot<P>]) -> Option<(Query, ReadOptions)> {
         return None;
     }
     let mut items: Vec<QueryItem> = Vec::new();
+    // What `items` already holds, so each candidate item costs one hash
+    // lookup rather than a scan of `items`. Keyed by the item's parts because `QueryItem`
+    // itself is not `Hash`; its `==` compares exactly these two fields, so
+    // equal keys are equal items. The `Vec` keeps first-seen order.
+    let mut seen: HashSet<(&[EventType], &Tags)> = HashSet::new();
     let mut everything = false;
     let mut from: Option<SequencePosition> = None;
     let mut from_start = false;
@@ -452,7 +457,7 @@ fn plan_read<P: Projection>(slots: &[Slot<P>]) -> Option<(Query, ReadOptions)> {
             None => everything = true,
             Some(own) => {
                 for item in own {
-                    if !items.contains(item) {
+                    if seen.insert((item.types(), item.tags())) {
                         // Owned, because `Query::from_items` takes items by
                         // value and each lane keeps its own query to filter by.
                         items.push(item.clone());

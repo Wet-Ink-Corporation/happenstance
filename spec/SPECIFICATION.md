@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 214 clause IDs, of which 207 are normative:
-**194 `[FROZEN]`**, **11 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
+As assembled, this document carries 215 clause IDs, of which 208 are normative:
+**194 `[FROZEN]`**, **12 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -1713,11 +1713,11 @@ and MUST refuse beyond it with `AppendError::ExceedsStoreLimit`. On the ingest p
 `[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13. Rule: `store_accepts_the_guaranteed_minimum_batch_size`, failing `BatchParameterCeilingStore` and `ChunkLosingBatchStore`, and `append_reports_exceeded_store_limits` for the refusal beyond a documented ceiling; on the ingest
 path, where the call is the batch, `bulk_ingest_is_idempotent_in_bounded_round_trips` (#139), whose `CapsTheCallBelowTheFloor` fails under this clause and no other. Sync ingest is the first consumer that batches by the floor: `PeerLimits::minimum` declares 128 events a push, `happenstance-neon`'s ingest ceiling is
 exactly 128 a call, and Rotor's 1,840 events are 46 groups of 40; no group above 128 surfaced. The refusal beyond a declared ingest ceiling is #379's, additive. Reopened by a domain whose smallest indivisible unit of work exceeds 128 events; Kestrel Cold Chain's largest single conditioned group is under forty.
-`Rule:` `store_accepts_the_guaranteed_minimum_batch_size`; and on the ingest path, where the call is the batch as VT-36 says of tags, `bulk_ingest_is_idempotent_in_bounded_round_trips` (`happenstance-sync-testkit`, #139), whose one call of 128 foreign events a store refusing it as over a capacity limit fails under this clause (`CapsTheCallBelowTheFloor`)
+`Rule:` `store_accepts_the_guaranteed_minimum_batch_size`; and on the ingest path, where the call is the batch as VT-36 says of tags, `bulk_ingest_is_idempotent_in_bounded_round_trips` (`happenstance-sync-testkit`, #139), whose one call of 128 foreign events a store refusing it as over a capacity limit fails under this clause (`CapsTheCallBelowTheFloor`); and `ingest_holds_the_call_to_its_events_per_batch_ceiling` (`happenstance-sync-testkit`, #379), which holds a declared `IngestFixture::MAX_EVENTS_PER_BATCH` to the whole call: exactly at it lands, and one over, across groups or in the compensation alone, is refused as `EventsPerBatch` with the call's length, nothing written
 `Cases:` E2E-35, E2E-36, E2E-39
 `Rejects:` an adapter that builds a multi-row `INSERT` with one parameter set per
 event and per tag and discovers `SQLITE_MAX_VARIABLE_NUMBER` at write time — that
-is, after the caller has already made its decision and taken its side effects.
+is, after the caller has already made its decision and taken its side effects. On the ingest path: a store that holds each group to its declared ceiling apart (`CountsEachGroupsLengthApart`), one that leaves the compensation out of the length (`LeavesCompensationOutOfTheLength`), one that refuses a call exactly at it (`RefusesAtTheLengthLimit`), and one that writes the call and then refuses it (`RefusesTheLengthAfterWriting`), all in `crates/happenstance-sync-testkit/tests/wrong_ingest_stores.rs`.
 Also rejects the `EventBatch` newtype as the enforcement point: it puts a
 constructor in front of every `append` call site in every application in order to
 enforce a bound that is adapter-specific, so the type would either carry the
@@ -1762,7 +1762,7 @@ ingest that splits on `TagsPerBatch`: `the_runner_splits_a_push_on_tags_per_batc
 Both green on the deployed leg of runs 43721323137 and 43746838635. Reopened by a store whose per-call wall is not a function of the tag count, so that no count says where it is;
 the instrument is happenstance-cloudflare, whose deployed wall moved between 524,288 and 1,040,384 tag rows in one call.
 `Rule:` `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit_names_its_floor` and
-`the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared ceiling to the whole ingest call: exactly at it lands, and one over, across groups or in the compensation alone, is refused as `TagsPerBatch`, `Split`, with nothing written
+`the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared ceiling to the whole ingest call: exactly at it lands, and one over, across groups or in the compensation alone, is refused as `TagsPerBatch`, `Split`, with nothing written, and which, when the fixture also declares `MAX_EVENTS_PER_BATCH`, refuses an unreachable ceiling before writing (#379)
 `Cases:` E2E-35, E2E-42
 `Rejects:` a floor of 0, which would let a store refuse 128 events of 64 tags
 while claiming VT-22 and VT-24; and a ceiling below the per-event one, under
@@ -6428,6 +6428,54 @@ and Postgres refuses; and W5, a record written after the first chunk commits,
 which a crash between the two leaves unrecorded and the next run adopts for
 whatever store it was handed.
 
+**PS-41 — A typed projection MAY follow several scopes. The runner MUST read
+their union: one item per scope, each over every event type the projection
+declares, so an event matching any scope is delivered once, in log order, and
+an event of an undeclared type never is. The checkpoint ids MUST be derived
+from that query, and an empty set of scopes MUST be refused before anything is
+read.**
+`[PROVISIONAL — falsified by a projection that needs different event types under
+different scopes, which a set of tag sets cannot express and the typed layer would
+then have to answer with items of its own]` — minted at `0.8.0` on the owner's
+call D3 = A (2026-11-16): an additive provided method, `Projection::scopes`, whose
+default is `scope()` alone, and frozen in the 1.0 freeze pass with the other rows
+that pass holds.
+A single scope is one conjunction of tags, so "every case one owner holds" took one
+projection and one checkpoint per case, or an owner tag that goes stale when a case
+changes hands. `Query` already ORs its items (VT-31), so nothing below the typed layer
+changes: the runners derive one `QueryItem` per scope where they derived one, and a
+projection that does not override `scopes` derives the same `Query`, so PS-25's id and
+goldens and PS-40's pin are unchanged for it. The digest already sorts and dedups item
+encodings (PS-25), so the order of the scopes and a repeated scope move no id; adding
+or dropping a scope moves both ids, and the view replays from the start, which is what
+a newly followed scope's history needs. The types go under every item rather than once
+around them because `Query` has no outer filter. An empty set is
+`InvalidQuery::NoItems`, reported as `ProjectionError::Boundary`: no `Query` nominates
+nothing, and reading everything would invert the request. The scopes are tag sets,
+never a `Query` of the projection's own, for the reason the derivation exists: the
+event types stay nameable in one place.
+**Rule:** `several_scopes_are_one_query` — a projection naming `case:c1` and `case:c2`
+over a log of a `c1` filing, a `c3` filing, an event of an undeclared type tagged `c1`,
+a `c2` filing and a filing tagged both: the run applies the three owned filings once
+each in log order, returns `Ok` reporting three, and leaves the checkpoint under the
+derived id at the last of them. Held through the fan-out runner by
+`several_scopes_are_one_query_in_a_fan_out`, and against the wrong runners below by
+`the_scopes_rule_rejects_a_runner_reading_only_scope` and
+`the_scopes_rule_rejects_a_runner_that_drops_the_types`; the ids by
+`the_ids_follow_the_set_of_scopes` and the refusal by
+`no_scopes_is_refused_before_anything_is_read`. A typed-layer rule, in
+`crates/happenstance/tests/projection_scopes.rs`. No adapter can fail it, so it is not
+a conformance rule.
+**Cases:** E2E-60.
+**Rejects:** W1, a runner that derives its query from `scope()` alone, which is every
+runner before `0.8.0` and any wrapper projection that forwards `scope()` but not
+`scopes()`; W2, one item per scope over the tags alone (`QueryItem::tagged`), which is
+handed an undeclared type and halts on its decode; W3, one read per scope with the
+results concatenated, which hands the filing tagged both scopes over twice and out of
+log order; and W4, an empty set read as `Query::All`. W1 and W2 are written as runners
+in the rule's file; W3 fails the rule's first leg and W4 the refusal's test, and
+neither is written out.
+
 ---
 
 ### 4.8 Failure policy
@@ -8484,9 +8532,17 @@ claiming the receiver's own identity that it does not hold; it is an
 identity-integrity refusal, not a condition-level one (ADR-0098).
 
 `[FROZEN]`
-Rule: `refusal_is_never_condition_derived` (new, `happenstance-sync-testkit`) —
+Rule: `refusal_is_never_condition_derived` (`happenstance-sync-testkit`'s sync
+peer family, `sync_suite.rs`; written by #465) —
 the fixture receiver is driven into every refusal it can produce; the rule
-asserts none of them varies with the receiver's log contents.
+asserts none of them varies with the receiver's log contents. It drives them
+once on the fresh receiver and once after pushing a rival claim the probe's
+guard names and unrelated events, with a re-sent probe and a late one between,
+and compares refused or accepted and the class. The rule's own pushes never
+provoke SY-38's refusal, since their origins are the rule's own.
+`tests/wrong_refusals.rs` holds it against a peer that refuses what it holds,
+one that refuses a violated guard, one that does so only for new events, and
+one whose refusal's class follows its log.
 Cases: E2E-45, E2E-39, E2E-47.
 
 *Rejects:* the reading that will otherwise be re-litigated the first time someone
@@ -8506,7 +8562,7 @@ door SY-1 did not close.
 It MUST NOT delete, rewrite or reorder a local event because a peer declined it.
 
 `[FROZEN]`
-Rule: `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` (`happenstance-sync`'s `tests/runner/main.rs`), repointed by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) from the never-written a_refused_spoke_retains_its_log (#465): the shipped `Edge` is refused a push and must leave the local log, the watermark and the pending count as they were, and park on the class. No wrong runner is built for it; a rollback runner fails its log assertion.
+Rule: `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` (`happenstance-sync`'s `tests/runner/main.rs`), repointed by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) from the never-written a_refused_spoke_retains_its_log (#465): the shipped `Edge` is refused a push and must leave the local log, the watermark and the pending count as they were, and park on the class. Its log assertion is shared with `tests/runner/wrong_runners.rs`, where `a_refused_push_keeps_the_log_rejects_a_runner_that_rolls_back_on_refusal` holds it against a `MiniEdge` that removes the own events it offered when the push is refused, and against the shipped `Edge` (#487).
 Cases: E2E-45.
 
 *Rejects:* the assumption E2E-45 names as untested in the whole catalogue — that a
@@ -10610,10 +10666,10 @@ between them because its *shape* does not wait on a transport but its
 | §2.1–§2.6 value types | `VT` | 36 | 33 | 2 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
-| §4 `ProjectionStore` | `PS` | 40 | 33 | 2 | 0 | 5 |
+| §4 `ProjectionStore` | `PS` | 41 | 33 | 3 | 0 | 5 |
 | §5 `SyncPeer` | `SY` | 40 | 38 | 2 | 0 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **214** | **194** | **11** | **2** | **7** |
+| **Total** | | **215** | **194** | **12** | **2** | **7** |
 
 ### 7.2 The table
 
@@ -10767,6 +10823,7 @@ between them because its *shape* does not wait on a transport but its
 | PS-38 | FROZEN | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint`, `fan_o… | E2E-15, E2E-17, E2E-23 |
 | PS-39 | FROZEN | `projection_ids_round_trip_by_bytes` | E2E-18 |
 | PS-40 | PROVISIONAL | `a_checkpoint_is_not_resumed_against_another_store` †, `source_mark_fits_a_sig… | E2E-59 |
+| PS-41 | PROVISIONAL | `several_scopes_are_one_query` †, `several_scopes_are_one_query_in_a_fan_out` … | E2E-60 |
 
 #### `SY` — the `SyncPeer` port (§5)
 
@@ -10804,8 +10861,8 @@ between them because its *shape* does not wait on a transport but its
 | SY-30 | FROZEN | `push_envelope_preserves_group_boundaries`, `ingest_group_is_atomic_under_a_mi… | E2E-35, E2E-39 |
 | SY-31 | FROZEN | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
 | SY-32 | FROZEN | `retention_gap_is_reported_not_silent` | E2E-44, E2E-46, E2E-47 |
-| SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
-| SY-34 | FROZEN | `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` † | E2E-45 |
+| SY-33 | FROZEN | `refusal_is_never_condition_derived` | E2E-45, E2E-39, E2E-47 |
+| SY-34 | FROZEN | `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` †, `a_r… | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
 | SY-36 | FROZEN | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
 | SY-37 | FROZEN | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |
@@ -11166,8 +11223,9 @@ that nobody reads the unchanged number as evidence that nothing moved.
 
 ### 7.6 E2E cases no clause claims
 
-**None. All 59 cases are claimed by at least one clause.** E2E-59 joined at `0.8.0`,
-claimed by PS-40 alone (ADR-0109).
+**None. All 60 cases are claimed by at least one clause.** E2E-59 joined at `0.8.0`,
+claimed by PS-40 alone (ADR-0109), and E2E-60 in the same release, claimed by PS-41
+alone (the owner's call D3 = A).
 
 That result is suspicious enough to state how it was reached, because "the defect
 list is empty" is the shape of a list that was never computed.
@@ -11181,11 +11239,12 @@ with a stricter rule — discarding any `Cases:` line beginning with the word
 prose contributed nothing. The orphan set was empty under both readings.
 
 The distribution is uneven and the unevenness is informative rather than
-alarming. Five cases are claimed by exactly one clause each: **E2E-14** (SY-6),
-**E2E-31** (PS-31), **E2E-50** (PS-25), **E2E-51** (VT-18) and **E2E-59** (PS-40).
+alarming. Six cases are claimed by exactly one clause each: **E2E-14** (SY-6),
+**E2E-31** (PS-31), **E2E-50** (PS-25), **E2E-51** (VT-18), **E2E-59** (PS-40) and
+**E2E-60** (PS-41).
 Single-claim cases
 are the ones a later edit can orphan without anyone noticing. Three of the first four
-are lifecycle cases, and E2E-59's one clause is still provisional (PS-40). At the
+are lifecycle cases, and the last two cases' clauses are still provisional (PS-40, PS-41). At the
 other end, **E2E-42** — transitive convergence — is claimed by 26 clauses across
 four sections, which is what a case that exercises a whole design looks like.
 

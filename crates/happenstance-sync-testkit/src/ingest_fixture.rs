@@ -47,9 +47,10 @@ use happenstance_sync::{
 ///   [`ingest_declensions_are_stated`] rejects a fixture that keeps them.
 /// * Three per-event ceilings, which SY-18's ingest rule holds to every event
 ///   an ingest writes. `None` by default: facts, not trades.
-/// * One per-call ceiling, [`MAX_TAGS_PER_BATCH`](Self::MAX_TAGS_PER_BATCH),
-///   which VT-36's ingest rule holds to the whole call, compensation
-///   included. `None` by default, for the same reason.
+/// * Two per-call ceilings, [`MAX_TAGS_PER_BATCH`](Self::MAX_TAGS_PER_BATCH)
+///   and [`MAX_EVENTS_PER_BATCH`](Self::MAX_EVENTS_PER_BATCH), which VT-36's
+///   and VT-24's ingest rules hold to the whole call, compensation included.
+///   `None` by default, for the same reason.
 /// * [`REMOVAL`](Self::REMOVAL) and
 ///   [`remove_outside_port`](Self::remove_outside_port), which SY-40's rule
 ///   needs. Declined by default, and silence there misstates nothing, so
@@ -105,6 +106,25 @@ pub trait IngestFixture {
     /// event within its own ceiling is refused as a batch with nothing left
     /// to split.
     const MAX_TAGS_PER_BATCH: Option<usize> = None;
+
+    /// The most events, every foreign event and every compensation event of
+    /// one `ingest` call counted together, the store accepts, or `None` for no
+    /// ceiling.
+    ///
+    /// Mirrored from the adapter's own constant, as
+    /// [`MAX_EVENT_DATA_LEN`](Self::MAX_EVENT_DATA_LEN) is: on the ingest path
+    /// the batch is the call (VT-24), so it is the event-store fixture's
+    /// `MAX_EVENTS_PER_BATCH`, one port over. Stating a number commits the
+    /// store to landing a call of exactly that many events and to refusing one
+    /// more as `IngestError::ExceedsStoreLimit { limit:
+    /// StoreLimit::EventsPerBatch, .. }`, class `Split`, with nothing written.
+    /// It is also what VT-36's ingest rule checks a declared
+    /// [`MAX_TAGS_PER_BATCH`](Self::MAX_TAGS_PER_BATCH) is reachable under.
+    ///
+    /// The floor is VT-24's 128, held by SY-14's bulk rule rather than by the
+    /// rule that reads this, so a number below it is a legal declaration that
+    /// the bulk rule fails.
+    const MAX_EVENTS_PER_BATCH: Option<usize> = None;
 
     /// A handle onto this fixture's one backing store.
     ///

@@ -263,6 +263,10 @@ pub const MAX_PROVOKED_BATCH_BYTES: usize = 64 * 1024 * 1024;
 /// thirty-two times the minimum conformant limit, and above the 257 events the
 /// largest push of SY-37's count-cut log carries, so a peer whose limits
 /// refuse that push refuses the batch rule's corner too.
+///
+/// VT-24's ingest rule caps its calls by it for the same reason: it sizes
+/// them from the fixture's declared `MAX_EVENTS_PER_BATCH`, and a declared
+/// ceiling at or above this is not exercised.
 pub const MAX_PROVOKED_BATCH_EVENTS: usize = 4_096;
 
 /// The oversized-push refusal, provoked on `peer` and declared

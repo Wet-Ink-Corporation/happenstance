@@ -63,6 +63,63 @@ pub(super) fn per_event<F: IngestFixture>(ceiling: usize) -> Result<usize, Viola
     Ok(width(ceiling, F::MAX_TAGS_PER_EVENT))
 }
 
+/// VT-36's reachable half: `ceiling + 1` tags fit in the fixture's declared
+/// events-per-call ceiling, each event at most its declared per-event ceiling.
+/// Nothing to check when either side of the product is undeclared: with no
+/// call length any number of events fits, and with no per-event ceiling one
+/// event carries every tag.
+///
+/// Called after [`per_event`], so `ceiling` is below `usize::MAX`.
+///
+/// # Errors
+///
+/// A [`Violation`] of VT-36 when the ceiling cannot be crossed without
+/// crossing the call length first.
+pub(super) fn ensure_reachable<F: IngestFixture>(ceiling: usize) -> Result<(), Violation> {
+    let (Some(events), Some(widest)) = (F::MAX_EVENTS_PER_BATCH, F::MAX_TAGS_PER_EVENT) else {
+        return Ok(());
+    };
+    let over = ceiling.saturating_add(1);
+    // `max(1)` because `div_ceil` by zero panics. A per-event ceiling of zero
+    // is read as one, the most generous reading; VT-22's floor fails it anyway.
+    let needed = over.div_ceil(widest.max(1));
+    ensure(needed <= events, VT_36, || {
+        format!(
+            "this fixture states a tags-per-batch ceiling of {ceiling}, and {over} tags at most \
+             {widest} to an event need {needed} events, past its ceiling of {events} events per \
+             call; the ceiling cannot be reached without crossing another first, and a ceiling \
+             that cannot be crossed on its own is not a ceiling: `None` is the honest declaration"
+        )
+    })
+}
+
+/// Whether every call the rule makes at `per_event` tags to an event fits
+/// under the fixture's declared events-per-call ceiling, compensation events
+/// included. Always, when it declares none.
+pub(super) fn fits_the_call<F: IngestFixture>(ceiling: usize, per_event: usize) -> bool {
+    let Some(events) = F::MAX_EVENTS_PER_BATCH else {
+        return true;
+    };
+    let length = |shapes: &[Shape]| -> usize {
+        shapes
+            .iter()
+            .map(|shape| {
+                shape.foreign.len() + shape.compensation.map_or(0, |_| COMPENSATION_EVENTS)
+            })
+            .sum()
+    };
+    let longest = length(&control(ceiling, per_event))
+        .max(length(&spread_over(ceiling, per_event)))
+        .max(length(&[over_in_compensation(ceiling, per_event)]));
+    longest <= events
+}
+
+/// How many events a group's compensation carries when it carries any: the
+/// untagged head and the tagged event behind it that
+/// [`Calls::build_unchecked`] builds. The builder's array is typed by this
+/// constant, so the count and what is built cannot drift apart.
+const COMPENSATION_EVENTS: usize = 2;
+
 /// [`per_event`]'s number, once the ceiling is known to be coherent.
 fn width(ceiling: usize, stated: Option<usize>) -> usize {
     stated
@@ -234,12 +291,18 @@ impl Calls<'_> {
                 .map(|count| self.shipped(*count))
                 .collect::<Result<Vec<_>, _>>()?;
             let compensation = match shape.compensation {
-                // The type is one of this module's `from_static` constants, so
-                // the clone copies a borrowed `&'static str`, nothing more.
-                Some(count) => Vec::from([
-                    self.tagged(COMPENSATED, 0)?,
-                    self.tagged(compensation_type.clone(), count)?,
-                ]),
+                Some(count) => {
+                    // Typed by the constant `fits_the_call` counts with, so a
+                    // compensation built longer or shorter does not compile.
+                    let compensation: [Event; COMPENSATION_EVENTS] = [
+                        self.tagged(COMPENSATED, 0)?,
+                        // The type is one of this module's `from_static`
+                        // constants, so the clone copies a borrowed
+                        // `&'static str`, nothing more.
+                        self.tagged(compensation_type.clone(), count)?,
+                    ];
+                    Vec::from(compensation)
+                }
                 None => Vec::new(),
             };
             built.push((events, compensation));

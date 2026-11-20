@@ -985,6 +985,10 @@ mod tests {
             /// No metadata ceiling: that check does not bound it.
             const MAX_EVENT_DATA_LEN: Option<usize> = Some(SqliteEventStore::MAX_EVENT_DATA_LEN);
             const MAX_TAGS_PER_EVENT: Option<usize> = Some(SqliteEventStore::MAX_TAGS_PER_EVENT);
+            /// Mirrored from the constant `check_ceilings` holds the whole
+            /// call to, foreign and compensation events counted together.
+            const MAX_EVENTS_PER_BATCH: Option<usize> =
+                Some(SqliteEventStore::MAX_EVENTS_PER_BATCH);
 
             /// Supported, through a raw `DELETE` on a second connection: the
             /// operator's removal migration 3's trigger records (SY-40).

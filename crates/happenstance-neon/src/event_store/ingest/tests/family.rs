@@ -72,6 +72,11 @@ impl IngestFixture for NeonIngestFixture {
         Some(NeonEventStore::<LiveTransport>::MAX_EVENT_DATA_LEN);
     const MAX_TAGS_PER_EVENT: Option<usize> =
         Some(NeonEventStore::<LiveTransport>::MAX_TAGS_PER_EVENT);
+    /// Mirrored from the constant `exceeded` holds the whole call's length
+    /// to, foreign and compensation events counted together: VT-24's floor,
+    /// exactly.
+    const MAX_EVENTS_PER_BATCH: Option<usize> =
+        Some(NeonEventStore::<LiveTransport>::MAX_EVENTS_PER_BATCH);
 
     /// Supported, by a raw `DELETE` on this fixture's schema through the
     /// endpoint, which is what an operator's prune does and what migration

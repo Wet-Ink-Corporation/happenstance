@@ -29,13 +29,16 @@ use crate::violation::Violation;
 /// The two sides exchange their whole logs, each way once: what a runner
 /// does when two partitioned peers meet. Nothing new conflicts, so the runner
 /// writes no compensation here.
-async fn meet<S: EventStore + IngestStore>(conflict: &Conflict<S>) -> Result<(), Violation> {
+async fn meet<S: EventStore + IngestStore, F>(conflict: &Conflict<S, F>) -> Result<(), Violation> {
     let [first, second] = &conflict.sides;
     ship(first, second).await?;
     ship(second, first).await
 }
 
-async fn ship<S: EventStore + IngestStore>(from: &Side<S>, to: &Side<S>) -> Result<(), Violation> {
+async fn ship<S: EventStore + IngestStore, F>(
+    from: &Side<S, F>,
+    to: &Side<S, F>,
+) -> Result<(), Violation> {
     let shipped: Vec<ReplicatedEvent> = read_all(&from.store, SY_7)
         .await?
         .into_iter()
@@ -46,8 +49,8 @@ async fn ship<S: EventStore + IngestStore>(from: &Side<S>, to: &Side<S>) -> Resu
 }
 
 /// Each side's log after the meeting, adjudicator first.
-async fn logs<S: EventStore + IngestStore>(
-    conflict: &Conflict<S>,
+async fn logs<S: EventStore + IngestStore, F>(
+    conflict: &Conflict<S, F>,
 ) -> Result<[Vec<SequencedEvent>; 2], Violation> {
     let [first, second] = &conflict.sides;
     Ok([

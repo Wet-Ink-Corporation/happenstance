@@ -4,8 +4,10 @@
 //!
 //! The modules are private and every public item is re-exported here, so
 //! each has one path. [`BoxOffice`] and [`ShowLedger`] are the domain, with
-//! its decisions [`schedule`], [`sell_seat`] and [`adjudicate`]; [`Uplink`]
-//! is the device's link to central; [`Timeline`] the read model; [`Scenario`]
+//! its decisions [`schedule`], [`sell_seat`] and [`adjudicate`];
+//! [`CentralRule`] is central's merge rule, which its sync peer judges every
+//! push by; [`Uplink`] is the device's link to central; [`Timeline`] the read
+//! model; [`Scenario`]
 //! the three files and the steps; [`Converged`] the files read back with every
 //! handle dropped; [`tell`] the beats, told into any writer; and
 //! [`StoryError`] what any of it can fail with.
@@ -13,6 +15,7 @@
 mod domain;
 mod error;
 mod readback;
+mod rule;
 mod scenario;
 mod story;
 mod timeline;
@@ -24,6 +27,7 @@ pub use domain::{
 };
 pub use error::{DeviceStep, StoryError};
 pub use readback::{Converged, Replica};
+pub use rule::{CentralRule, RuleError};
 pub use scenario::{CAPACITY, SHOW, Scenario, Synced};
 pub use story::tell;
 pub use timeline::{Row, Status, Timeline, TimelineView};
