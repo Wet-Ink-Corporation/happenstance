@@ -1622,7 +1622,7 @@ fn check_case_levels(
 /// is still unwritten; that is `SYNC_UNRESOLVABLE_RULE_NAMES`'s to count, not
 /// CF-36's.
 ///
-/// Three of the four left are one fact, and it is not a missing case: PS-29,
+/// The three left are one fact, and it is not a missing case: PS-29,
 /// PS-30 and SY-34 oblige a runner this workspace ships — the typed layer's
 /// fan-out runner, and `happenstance-sync`'s `Edge` — not an adapter. Their
 /// rules run against that runner in its own crate's tests, so there is no case
@@ -1630,8 +1630,9 @@ fn check_case_levels(
 /// contract-level would be false. CF-36 was written for adapter-obliging
 /// clauses. The route is a decision, owned by phase 21 (#68, under #100):
 /// whether a clause that obliges shipped library code is outside CF-36's
-/// reach, or its rules move into a family an adapter mounts. SY-2 is #320's.
-const CF36_UNDISCHARGED: [(&str, &str); 4] = [
+/// reach, or its rules move into a family an adapter mounts. SY-2 left under
+/// #320, which gave it a contract-level case, E2E-62, for its store-side rule.
+const CF36_UNDISCHARGED: [(&str, &str); 3] = [
     (
         "PS-29",
         "obliges the typed layer's fan-out runner, not an adapter. Its rule, \
@@ -1643,13 +1644,6 @@ const CF36_UNDISCHARGED: [(&str, &str); 4] = [
     (
         "PS-30",
         "the same shape as PS-29, against the same case and the same runner",
-    ),
-    (
-        "SY-2",
-        "the replication family; CF-36 homes its rules in `happenstance-sync-testkit`, absent \
-         when measured (`crates/happenstance-sync/src/lib.rs:23-24`) and present since #111. \
-         SY-2's case is still E2E-39 alone, and its rule checks only the transport's half: \
-         compensate-after-commit, which the clause's `Rejects` names, is #320",
     ),
     (
         "SY-34",
@@ -4146,8 +4140,8 @@ mod tests {
         let mut problems = Vec::new();
         let live = reconcile_cf36(
             &one_clause_with(
-                "SY-2",
-                "`compensation_is_atomic_with_the_losing_event`",
+                "SY-34",
+                "`a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class`",
                 "E2E-01",
             ),
             &levels,
@@ -4158,7 +4152,7 @@ mod tests {
         assert!(
             problems
                 .iter()
-                .any(|p| p.contains("SY-2") && p.contains("can only shrink")),
+                .any(|p| p.contains("SY-34") && p.contains("can only shrink")),
             "got {problems:?}"
         );
     }
@@ -4176,7 +4170,7 @@ mod tests {
     }
 
     /// The whole of check 10 against the real documents. §7.6 states the result
-    /// this asserts — *"None. All 61 cases are claimed by at least one clause."*
+    /// this asserts — *"None. All 62 cases are claimed by at least one clause."*
     /// — and until this check that sentence was a hand computation nothing
     /// reproduced.
     #[test]
@@ -4184,7 +4178,7 @@ mod tests {
         let root = workspace_root().unwrap();
         let clauses = parse_clauses(&read(&root, SPEC).unwrap());
         let cases = collect_cases(&read(&root, CASES).unwrap());
-        assert_eq!(cases.len(), 61, "§7.6's count of the document");
+        assert_eq!(cases.len(), 62, "§7.6's count of the document");
 
         let mut problems = Vec::new();
         check_case_ownership(&clauses, &cases, &mut problems);

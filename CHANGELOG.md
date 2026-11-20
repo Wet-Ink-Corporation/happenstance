@@ -230,6 +230,26 @@ deploy.
   for the Durable Object, `harness/workerd`, and the Postgres and Neon peers
   under `live-postgres` and `live-neon`. **A new rule is a minor for this crate;
   pin it exactly.**
+- **`happenstance-sync-testkit`: SY-2's authoring half,
+  `the_losing_event_is_never_read_unresolved`**, in the ingest family (#320).
+  The rule mounts the seat family's merge rule through the shipped
+  `runner::Adjudicate` hook and has it answer a conflicting claim with a
+  reversal. It hands the store the claim and the reversal as the runner does,
+  in one `IngestGroup`. While that ingest is pending, the rule reads the log on
+  a second handle each time the ingest yields. No read may show the losing
+  claim without its reversal, and the read after the ingest must show both. It
+  rejects compensate-after-commit in a store: one that commits the losing
+  event, awaits, and only then commits the compensation. Nothing fails, and
+  the log is right once the call returns, so SY-30's rule reached that store
+  only when its fixture could arm a fault (`tests/wrong_ingest_stores.rs`,
+  `Mistake::CompensatesAfterCommit`). The reader shares the ingest's task
+  rather than running in its own, so the rule needs no runtime and no `Send`
+  bound. A store that never yields in the middle of a call has no gap to be
+  read in. SY-2's `Rule:` line names the rule, and SY-2 cites a new
+  contract-level case, E2E-62. Both are a repair to the frozen clause, not an
+  amendment, so SY-2 leaves `CF36_UNDISCHARGED`. `IngestFixture` is unchanged,
+  so every existing fixture runs the rule with no edit. **A new rule is a
+  minor for this crate; pin it exactly.**
 
 ### Changed
 
