@@ -207,9 +207,9 @@ deploy.
   typed-layer test in `crates/happenstance/tests/projection_scopes.rs`, held
   against both runners and against a runner reading `scope()` alone and one
   dropping the event types.
-- **`happenstance-sync-testkit`: SY-33's rule, `refusal_is_never_condition_derived`**,
-  in the sync peer family (#465). SY-33 was frozen naming it, and it had never
-  been written. It drives every refusal the fixture declares through
+- **`happenstance-sync-testkit`: SY-33's rule,
+  `refusal_is_never_condition_derived`**, in the sync peer family (#465).
+  SY-33 was frozen naming it, and it had never been written. It drives every refusal the fixture declares through
   `SyncFixture::refusals` twice on one handle, once on the fresh receiver and
   once after the rule has grown its log, and requires each to be answered the
   same: accepted, or refused with the same `FailureClass`. In between it pushes a

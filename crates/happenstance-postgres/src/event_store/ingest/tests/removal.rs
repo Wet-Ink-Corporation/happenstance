@@ -606,7 +606,11 @@ const BLOCK_DEADLINE: Duration = Duration::from_secs(30);
 /// After [`BLOCK_DEADLINE`], because then the arrangement is wrong.
 async fn wait_until_blocked_behind(pool: &PgPool, pid: i32) {
     let blocked = async {
+        // Paced, so the poll yields between reads rather than spinning on
+        // `pg_stat_activity` until the deadline (#517).
+        let mut tick = tokio::time::interval(Duration::from_millis(10));
         loop {
+            tick.tick().await;
             let waiting: i64 = sqlx::query_scalar(BLOCKED_BEHIND_SQL)
                 .bind(pid)
                 .fetch_one(pool)
