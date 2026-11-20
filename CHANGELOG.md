@@ -284,6 +284,13 @@ deploy.
   and SY-38's refusal no longer covers an identity the store has recorded as
   removed. SY-11 and ES-39 point at it. `happenstance-sync`'s docs on
   `Ingested::skipped`, `IngestStore` and `IngestError::UnheldOwnIdentity` say so.
+- **CF-36's recorded breaches go from thirteen to four** (#100). VT-21 and
+  WF-9 cite a new contract-level case, E2E-61, in place of the mesh case
+  E2E-42. E2E-42 is `contract (sync)` now, because `sync_model_conformance!`
+  runs it against one adapter's fixtures, and that discharges seven `SY`
+  clauses. PS-29, PS-30 and SY-34 oblige a runner the workspace ships rather
+  than an adapter, and stay recorded for phase 21 to decide. SY-2 is #320's.
+  No normative text changes.
 
 ### `0.8.0` trace
 
