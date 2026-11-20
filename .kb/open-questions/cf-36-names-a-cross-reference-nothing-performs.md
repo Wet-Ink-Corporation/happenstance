@@ -150,3 +150,20 @@ clauses. Each group now has an owner, per `runbook/ledgers.md`, *The 1.0 disposi
   `kb-playbook-repair-frozen-clause-001`); VT-21 is `[PROVISIONAL]` and `freeze-by-13`.
 
 Sub-question 3 is unchanged. Phase 21's criterion is `CF36_UNDISCHARGED` empty.
+
+## Phase 21 — 2026-11-20 (#100)
+
+**Classification: repair** — `Cases:` lines, a new case, a re-levelled case, and `xtask`; no
+normative text and no signature. `CF36_UNDISCHARGED` goes from thirteen to four.
+
+- **VT-21, WF-9:** `Cases:` repointed at the new contract-level E2E-61, which is what their
+  single-store rules actually run.
+- **SY-4, SY-5, SY-7, SY-9, SY-10, SY-24, SY-25:** E2E-42 is re-levelled `contract (sync)`,
+  because `sync_model_conformance!` generates its chains from one adapter's fixture, which is
+  what the case file's own Levels paragraph counts as contract-level. SY-9's rule is still
+  unwritten, and `SYNC_UNRESOLVABLE_RULE_NAMES` counts it.
+- **PS-29, PS-30, SY-34 stay**, with a new reason: each obliges a runner the workspace ships (the
+  typed fan-out runner, `happenstance-sync`'s `Edge`), not an adapter, so no case an adapter
+  author could run exists. Whether such a clause is inside CF-36 at all is a decision, owned by
+  phase 21 (#68).
+- **SY-2** is #320's, which writes its authoring-half rule.

@@ -47,7 +47,7 @@ last_reviewed: 2026-11-15
 
 `cargo xtask spec-trace`'s check 4 — does every conformance rule a clause cites actually exist —
 does not run against every clause family uniformly. It runs only against families `has_suite`
-admits (`xtask/src/spec_trace.rs:2728-2734`):
+admits (`xtask/src/spec_trace.rs:2738-2744`):
 
 ```rust
 fn has_suite(clause_id: &str) -> bool {
@@ -78,10 +78,10 @@ before this workspace noticed.
 ## What holds the fix
 
 `spec_trace::tests::the_projection_family_is_checked_against_its_suite`
-(`xtask/src/spec_trace.rs:3838-3845`) now asserts `has_suite("PS-1")` and `has_suite("PS-37")`
+(`xtask/src/spec_trace.rs:3848-3855`) now asserts `has_suite("PS-1")` and `has_suite("PS-37")`
 directly, so a future regression — narrowing the prefix list back to exclude `PS` — fails the build
 rather than silently reopening the blind spot. The companion test,
-`the_replication_family_is_checked_and_cf_still_abstains` (`xtask/src/spec_trace.rs:3854-3870`),
+`the_replication_family_is_checked_and_cf_still_abstains` (`xtask/src/spec_trace.rs:3864-3880`),
 asserts `has_suite("SY-1")` and pins `CF-1`'s abstention, on the ground that `CF` clauses are about
 the suite rather than checked by it. Widening `has_suite` to admit every family unconditionally is
 therefore a build failure today, not a judgement call left to the next editor.
