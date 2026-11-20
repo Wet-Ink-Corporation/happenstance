@@ -282,6 +282,21 @@ No restart is needed: every append reads the identity row inside its own transac
 handle opened before step 2 stamps the new identity from its next append on. Events already in
 the database keep the identity they were written with.
 
+## What its conformance fixtures decline
+
+A rule whose capability a fixture declines still runs, and reports the fixture's stated
+reason as a `SKIP` line rather than vanishing from the binary (CF-18). A default
+`cargo test` does not show that line; `--show-output` does. So the declines are listed
+here, where a reader choosing this adapter will see them. Every capability the table does
+not name is supported.
+
+| Fixture | Capability | Why it is declined |
+| --- | --- | --- |
+| `PostgresFixture` | `READ_YOUR_OWN_WRITES` | Reads and `head` admit only rows below `pg_snapshot_xmin` (ADR-0024), so a committed append is not visible until every transaction open when it committed has ended. The named rules wait for the frontier (CF-42), and the model family runs its trailing model |
+| `PostgresProjectionFixture` and `LivePostgresProjectionFixture` | `RESET_REFUSAL` | No call marks a projection protected, so `reset` never returns `Refused`. A gap in scope, tracked as #406 |
+
+The reasons in full are on the constants in `tests/support/mod.rs`.
+
 ## Limits this store enforces
 
 | | |

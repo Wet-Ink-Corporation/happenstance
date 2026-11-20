@@ -70,7 +70,7 @@ source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/prose-guard-retired-and-what-it-owes.md
   - .kb/_intake/remediation-2026-09-04-briefs/stated-only-defects-and-the-reopen-must.md
   - .kb/_intake/remediation-2026-09-04-briefs/adapter-driver-reexport-policy.md
-last_reviewed: 2026-09-29
+last_reviewed: 2026-11-18
 ---
 
 # ES-6 is frozen and names a rule that cannot be written
@@ -271,3 +271,13 @@ repointed in the same edit, and `js.rs:168-173` was re-verified.
 
 Sub-questions 1 to 3 are unchanged: `store_error_crosses_a_join_handle` is still unwritten and
 declared `Scheduled`, and they stay open with no phase, not blocking 1.0.
+
+## Phase 21 audit — 2026-11-18
+
+**Proposed, not settled:** `kb-decision-0114` (ADR-0114, `status: proposed`, #188). Sub-question
+1: the rule is written. "Unwritable against today's port" holds for a rule bound by
+`SendEventStore`, and not for one bound by ADR-0009's marker. The proposal is a `happenstance-core`
+test that declares the marker as a downstream crate would and spawns `append` under it. Its
+negative is a `compile_fail,E0277` probe beside `SendStoreWithLocalError`. Phase 20 owns it.
+Sub-questions 2 and 3: an unresolvable entry must name an owner a reader can find. Review holds
+that, not a lint. This atom stays open until the owner accepts and the rule lands.

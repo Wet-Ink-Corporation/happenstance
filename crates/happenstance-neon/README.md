@@ -292,6 +292,21 @@ with `NeonError::MissingIdentity`, writing nothing, if the row is absent; an ing
 same way. The platform creates
 branches, not this crate, so put the statement in the tooling that does.
 
+## What its conformance fixtures decline
+
+A rule whose capability a fixture declines still runs, and reports the fixture's stated
+reason as a `SKIP` line rather than vanishing from the binary (CF-18). A default
+`cargo test` does not show that line; `--show-output` does. So the declines are listed
+here, where a reader choosing this adapter will see them. Every capability the table does
+not name is supported.
+
+| Fixture | Capability | Why it is declined |
+| --- | --- | --- |
+| `NeonFixture` | `READ_YOUR_OWN_WRITES` | The same visibility frontier as `happenstance-postgres` (ADR-0024), reached over HTTP. The named rules wait for the frontier (CF-42), and the model family runs its trailing model |
+| `NeonProjectionFixture` | `RESET_REFUSAL` | No call marks a projection protected, so `reset` never returns `Refused`. A gap in scope, not a judgement on the mechanism |
+
+The reasons in full are on the constants in `tests/support/mod.rs`.
+
 ## Limits this store enforces
 
 | | |
