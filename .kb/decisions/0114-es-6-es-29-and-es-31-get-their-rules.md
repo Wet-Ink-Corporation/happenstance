@@ -2,7 +2,7 @@
 id: kb-decision-0114
 title: ES-6, ES-29 and ES-31 get their rules, owned by phase 20, and none is demoted
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0114
 reversibility: medium
@@ -10,7 +10,7 @@ phase: 21
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed 2026-11-18 for #188, and not yet accepted: the owner's yes is pending. Three frozen
+  Accepted 2026-11-20 for #188, on the owner's yes to every recommendation (proposed 2026-11-18). Three frozen
   clauses name rules that nothing owns. Each is writable, so none is demoted, and phase 20, the
   last phase phase 21 waits on, owns all three.
   ES-6: store_error_crosses_a_join_handle is written as a happenstance-core test that declares
@@ -44,12 +44,12 @@ source_paths:
   - crates/happenstance/tests/projection_runner.rs
   - runbook/phases/20-docs-that-teach.md
   - spec/SPECIFICATION.md
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-20
 ---
 
 # ES-6, ES-29 and ES-31 get their rules, owned by phase 20, and none is demoted
 
-**Proposed on 2026-11-18 for #188, and awaiting the owner.** One line has landed on the proposing
+**Accepted on 2026-11-20 for #188, as recommended; proposed on 2026-11-18.** What follows describes the tree at acceptance; the follow-ups build it. One line has landed on the proposing
 branch, because it is additive: the owning-phase box in `runbook/phases/20-docs-that-teach.md`.
 Nothing else under "What acceptance changes" has been applied. This atom is the whole record.
 
@@ -136,7 +136,7 @@ Local appends record no guard (`crates/happenstance-sync/src/memory_ingest.rs:42
 wrong or foreign peer can send one. No rule in the sync testkit builds a guard with `after`. The
 ingest-side declaration is `xtask/src/spec_trace/sync_family.rs:86-92`, owed by #458's second half.
 
-**The fork, which belongs to the owner** (Decision 4 records the recommendation):
+**The fork, which the owner settled on 2026-11-20 at (i)** (Decision 4 records it):
 
 - **(i) Land the events and refuse the guard (recommended).** The group is recorded with no guard,
   so `read_groups` hands back `None`. This meets SY-1, because every event lands, and SY-33,
@@ -164,7 +164,7 @@ adapters and `MemoryIngestStore` change, which is a behaviour narrowing for the 
 2. **Phase 20 owns all three.** It is the last phase phase 21 waits on that is not `done`, which is
    PS-40's precedent in `runbook/ledgers.md`. The box is under "Work carried in" as #188.
 3. **ES-6: option A. ES-31: option A.**
-4. **ES-29: the shared rule with SY-6, on branch (i) unless the owner takes (ii).**
+4. **ES-29: the shared rule with SY-6, on branch (i), which the owner took on 2026-11-20.**
 5. **ES-6's open question is closed.** Sub-question 1 is answered by Decision 3. On sub-questions
    2 and 3: an `UNRESOLVABLE_RULE_NAMES` entry must name an owner a reader can find, either a phase
    or an issue. That is enforced by review here and not by a lint, because a lint over free text

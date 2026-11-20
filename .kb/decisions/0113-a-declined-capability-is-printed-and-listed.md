@@ -2,7 +2,7 @@
 id: kb-decision-0113
 title: A declined capability is printed past libtest's capture and listed in each adapter's README
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0113
 reversibility: high
@@ -10,7 +10,7 @@ phase: 21
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed 2026-11-18 for #145, and not yet accepted: the owner's yes is pending. CF-18 has two
+  Accepted 2026-11-20 for #145, on the owner's yes to every recommendation (proposed 2026-11-18). CF-18 has two
   residuals that declension by inheritance (ADR-0051) left open. First: a default cargo test still
   prints no SKIP line, because RuleOutcome::report uses println!, which libtest captures for a
   passing test. This record does not accept that gap and does not narrow CF-18's frozen Rejects
@@ -35,12 +35,12 @@ source_paths:
   - crates/happenstance-postgres/README.md
   - crates/happenstance-neon/README.md
   - spec/SPECIFICATION.md
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-20
 ---
 
 # A declined capability is printed past libtest's capture and listed in each adapter's README
 
-**Proposed on 2026-11-18 for #145, and awaiting the owner.** The README lines under Decision 3 have
+**Accepted on 2026-11-20 for #145, as recommended; proposed on 2026-11-18.** What follows describes the tree at acceptance; the follow-ups build it. The README lines under Decision 3 have
 landed on the proposing branch, because they are additive and need no specification change.
 Nothing else has been applied. This atom is the whole record.
 

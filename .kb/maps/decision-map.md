@@ -1063,10 +1063,10 @@ owner. None supersedes anything.
 
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
-| ADR-0111 | [`kb-decision-0111`](../decisions/0111-the-three-unclaimed-rules-are-claimed.md) | The three unclaimed rules are claimed, by ES-44, CF-44, CF-45 and ES-25's Rule line | proposed | 21 | — |
-| ADR-0112 | [`kb-decision-0112`](../decisions/0112-foreign-rollback-stays-non-normative-for-1-0.md) | A foreign rollback stays non-normative for 1.0, renewed against a store whose rollback acts on store-side state | proposed | 21 | — |
-| ADR-0113 | [`kb-decision-0113`](../decisions/0113-a-declined-capability-is-printed-and-listed.md) | A declined capability is printed past libtest's capture and listed in each adapter's README | proposed | 21 | — |
-| ADR-0114 | [`kb-decision-0114`](../decisions/0114-es-6-es-29-and-es-31-get-their-rules.md) | ES-6, ES-29 and ES-31 get their rules, owned by phase 20, and none is demoted | proposed | 21 | — |
+| ADR-0111 | [`kb-decision-0111`](../decisions/0111-the-three-unclaimed-rules-are-claimed.md) | The three unclaimed rules are claimed, by ES-44, CF-44, CF-45 and ES-25's Rule line | accepted | 21 | — |
+| ADR-0112 | [`kb-decision-0112`](../decisions/0112-foreign-rollback-stays-non-normative-for-1-0.md) | A foreign rollback stays non-normative for 1.0, renewed against a store whose rollback acts on store-side state | accepted | 21 | — |
+| ADR-0113 | [`kb-decision-0113`](../decisions/0113-a-declined-capability-is-printed-and-listed.md) | A declined capability is printed past libtest's capture and listed in each adapter's README | accepted | 21 | — |
+| ADR-0114 | [`kb-decision-0114`](../decisions/0114-es-6-es-29-and-es-31-get-their-rules.md) | ES-6, ES-29 and ES-31 get their rules, owned by phase 20, and none is demoted | accepted | 21 | — |
 
 ## Adding a row
 

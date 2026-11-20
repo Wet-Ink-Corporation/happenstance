@@ -2,7 +2,7 @@
 id: kb-decision-0112
 title: A foreign rollback stays non-normative for 1.0, renewed against a store whose rollback acts on store-side state
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0112
 reversibility: high
@@ -10,7 +10,7 @@ phase: 21
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed 2026-11-18 for #115, and not yet accepted: the owner's yes is pending. ADR-0075 took
+  Accepted 2026-11-20 for #115, on the owner's yes to every recommendation (proposed 2026-11-18). ADR-0075 took
   rollback out of PS-15's MUST and left a clause for it as phase 18's option. This record declines
   that option for 1.0. The non-normative sentence under PS-15 stays as it is. Under every in-tree
   shape, rollback consumes an owned batch and drops it, and that is PS-7's drop. The rule phase
@@ -30,12 +30,12 @@ source_paths:
   - runbook/phases/18-typed-runner.md
   - spec/SPECIFICATION.md
   - crates/happenstance-core/src/projection.rs
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-20
 ---
 
 # A foreign rollback stays non-normative for 1.0, renewed against a store whose rollback acts on store-side state
 
-**Proposed on 2026-11-18 for #115, and awaiting the owner.** Nothing under "What acceptance
+**Accepted on 2026-11-20 for #115, as recommended; proposed on 2026-11-18.** What follows describes the tree at acceptance; the follow-ups build it. Nothing under "What acceptance
 changes" has been applied. This atom is the whole record.
 
 ## Context

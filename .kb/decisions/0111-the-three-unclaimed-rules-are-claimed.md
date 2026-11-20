@@ -2,7 +2,7 @@
 id: kb-decision-0111
 title: The three unclaimed rules are claimed, by ES-44, CF-44, CF-45 and ES-25's Rule line
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0111
 reversibility: medium
@@ -10,7 +10,7 @@ phase: 21
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed 2026-11-18 for #185, and not yet accepted: the owner's yes is pending. One record over
+  Accepted 2026-11-20 for #185, on the owner's yes to every recommendation (proposed 2026-11-18). One record over
   the three UNCLAIMED_PENDING_ADR entries in xtask/src/spec_trace.rs. The read-fault rule gets a
   store clause, ES-44: a failure after read returned its stream is an Err item, never an end of
   stream. Its fixture half gets CF-44, CF-39's read-side twin. Both are frozen on landing, because
@@ -39,12 +39,12 @@ source_paths:
   - crates/happenstance-postgres/tests/support/mod.rs
   - crates/happenstance-neon/tests/support/mod.rs
   - spec/SPECIFICATION.md
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-20
 ---
 
 # The three unclaimed rules are claimed, by ES-44, CF-44, CF-45 and ES-25's Rule line
 
-**Proposed on 2026-11-18 for #185, and awaiting the owner.** Nothing under "What acceptance
+**Accepted on 2026-11-20 for #185, as recommended; proposed on 2026-11-18.** What follows describes the tree at acceptance; the follow-ups build it. Nothing under "What acceptance
 changes" has been applied: no clause is minted, no `[FROZEN]` text is edited, and
 `UNCLAIMED_PENDING_ADR` still has three entries. The plan is
 `.temper/plans/audit-debt-adrs.md`. This atom is the whole record; there is no long-form version.
