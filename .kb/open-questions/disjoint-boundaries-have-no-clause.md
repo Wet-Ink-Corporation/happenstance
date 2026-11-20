@@ -35,7 +35,7 @@ source_paths:
   - crates/happenstance-testkit/src/concurrency.rs
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
-last_reviewed: 2026-09-30
+last_reviewed: 2026-11-18
 ---
 
 # The DCB independence proposition is enforced by a rule and stated by no clause
@@ -77,7 +77,7 @@ extends to `Busy`, that is, whether a store may refuse commands that share nothi
 reports the refusal as transient. ADR-0077 records the narrowing and leaves that question here.
 
 This is one of **three** entries held in `UNCLAIMED_PENDING_ADR`
-(`xtask/src/spec_trace.rs:2992-3044`), a list that prints on every green `cargo xtask spec-trace`
+(`xtask/src/spec_trace.rs:3002-3054`), a list that prints on every green `cargo xtask spec-trace`
 run. It was two when this record was written — this gap and the model-family gap
 (`kb-open-question-model-family-rule-no-clause-001`) — and the read-fault gap
 (`kb-open-question-read-fault-rule-no-clause-001`) has since joined them. The list has a mechanism
@@ -132,3 +132,13 @@ nowhere.
    (`kb-decision-wi-2ab1f3`):** no. Independence is a promise about conflict, not liveness, so the
    clause states the form the rule now checks, and the rule is renamed
    `k_disjoint_boundaries_never_conflict`.
+
+## Phase 21 audit — 2026-11-18
+
+**Proposed, not settled:** `kb-decision-0111` (ADR-0111, `status: proposed`, #185) answers
+sub-question 1 with ES-25. The objection above, that ES-25 does not say *k disjoint commands all
+commit*, was true of the rule before ADR-0077. Since then, and since `kb-decision-wi-2ab1f3`, the rule
+asserts ES-25's *if and only if* under contention plus a progress anchor. ES-25 already carries that
+anchor through `exactly_one_of_n_contenders_commits`. So the record proposes a Rule-line repair and
+one rationale paragraph that puts the word "disjoint" into ES-25, with no new clause. This atom
+stays open until the owner accepts.

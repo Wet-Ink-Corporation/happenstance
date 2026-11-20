@@ -226,7 +226,7 @@ indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
 As assembled, this document carries 215 clause IDs, of which 208 are normative:
-**194 `[FROZEN]`**, **12 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
+**195 `[FROZEN]`**, **11 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -872,7 +872,7 @@ facts are silently dropped** — the one failure mode in the replication design
 with no error path and no observable symptom.
 
 The distinction between a device and an incarnation is what E2E-CASES flags as
-unsettled (`E2E-CASES.md:1581-1586`) and it has a consequence the ledger row does
+unsettled (`E2E-CASES.md:1608-1613`) and it has a consequence the ledger row does
 not carry: the peer's stable, human-meaningful identity — "the Yorkshire hub",
 "tablet 88" — cannot be the `StoreId`, because that name must survive a restore
 and the `StoreId` must not. Peer naming therefore belongs to `happenstance-sync`
@@ -1645,7 +1645,7 @@ against **this clause's number rather than against a constant**, because
 `MIN_SUPPORTED_EVENT_DATA_LEN` does not exist until phase 4 introduces it;
 `append_reports_exceeded_store_limits`, which VT-25's variant and CF-40's fixture
 ceilings made writable at phase 4
-`Cases:` E2E-42; and Turnstile's peer D
+`Cases:` E2E-61, repointed under #100 from a mesh case these single-store rules never ran; and Turnstile's peer D
 (`references/scenarios/README.md:1549-1554`), which has no case number
 `Rejects:` a ceiling. A single `MAX_EVENT_DATA_LEN` is either a straitjacket on
 Postgres — which will happily hold Turnstile's 340 KB seat map — or a lie on the
@@ -2425,7 +2425,7 @@ sync runner.
 `[FROZEN]`
 `Rule:` `wire::decode_accepts_an_over_capacity_value`;
 `append_reports_exceeded_store_limits`
-`Cases:` E2E-42
+`Cases:` E2E-61, repointed under #100 from the mesh case, as VT-21's
 `Rejects:` the assumption in PRESSURE-TEST §5.4 that each new bound is "a
 wire-compatibility break with no quarantine path". It is a break only if the
 bound is enforced in `Deserialize`, which VT-19 forbids for exactly this reason.
@@ -7062,7 +7062,7 @@ Three inputs bound this section and are not re-opened in it:
 ### 5.1 The bound decision: ingest never rejects
 
 The catalogue produced three answers from three domains and
-`E2E-CASES.md:1592-1596` records them as mutually contradictory. They are not.
+`E2E-CASES.md:1619-1623` records them as mutually contradictory. They are not.
 Two are the same answer and the third is a case where that answer costs nothing.
 
 **Kestrel Rotor's argument is the general one, and it wins on generality alone.**
@@ -7156,9 +7156,9 @@ ES-18 owns the replacement and disposes of what it replaces.
 Rule: `compensation_is_atomic_with_the_losing_event` (new,
 `happenstance-sync-testkit`), riding for its store-side half on ES-18;
 `the_losing_event_is_never_read_unresolved` (`happenstance-sync-testkit`).
-Cases: E2E-39, E2E-61.
+Cases: E2E-39, E2E-62.
 
-*The second rule and E2E-61 are a repair (#320), not an amendment.* The first
+*The second rule and E2E-62 are a repair (#320), not an amendment.* The first
 rule checks the transport's half, and ES-18 and SY-30's fault rule check a write
 that fails. Neither reaches the reader this clause names when nothing fails: a
 store that commits the losing event, awaits, and then commits the compensation.
@@ -7705,17 +7705,12 @@ event must not come back on re-delivery; a deployment that needs it to, a pruned
 replica re-hydrated from its hub, needs an explicit operation that clears the
 record, not a change to ingest.
 
-`[PROVISIONAL — falsified by a deployment in which a removed event must come back
-on re-delivery, or by an adapter that cannot keep its allocator across a
-removal]` — minted by [ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)
-(proposed) at `0.8.0` (#483, #484). Freezes when the rule is green on SQLite, the
-Durable Object (host and `workerd`), Postgres and Neon, so the freeze rests on the
-stores whose writers do not serialise and not on SQLite alone. Until each adapter's
-change grants `IngestFixture::REMOVAL`, its mounted ingest family reports the rule
-declined. Green on `MemoryIngestStore`, whose record is a set beside its log, and
-on `PostgresEventStore` against a live PostgreSQL 17.10, whose record is a table a
-`BEFORE DELETE` trigger writes. `NeonEventStore`'s fixture grants `REMOVAL`; its
-run is `live-neon`'s.
+`[FROZEN]` — by [ADR-0115](../.kb/decisions/0115-sy-40-is-frozen.md) at `0.8.0`, on the rule green, not declined, on all five
+adapters that implement ingest: SQLite and the Durable Object on the host, the object under `workerd` warm and cold, a live
+PostgreSQL and a live Neon endpoint (run 44344907519). Minted provisional by [ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)
+(#483, #484). Reopened by a deployment in which a removed event must come back on re-delivery, or by an adapter that cannot keep
+its allocator across a removal. Each store's record is a table its own delete trigger writes; `MemoryIngestStore`'s is a set
+beside its log.
 Rule: `a_removed_event_is_not_readmitted` (`happenstance-sync-testkit`) — four
 arrangements on three fresh fixtures; (c) runs on (b)'s store after its removal:
 (a) a removed foreign event offered again through a handle held across the
@@ -8237,7 +8232,7 @@ replication is whole-log or scoped is DEFERRED"*, against an experiment: build a
 spoke holding a deliberately filtered subset of a hub's log, and attempt a
 position-based resume against it. Its instrument was the testkit-adjacent store
 holding only a suffix or a filtered subset of its own log
-(E2E-CASES.md:1679-1684), which is CF-27's and which phase 14 builds after this
+(E2E-CASES.md:1706-1711), which is CF-27's and which phase 14 builds after this
 phase. Whole-log needs neither, so CF-27 stays phase 14's and the sequencing
 hazard the ledger recorded is gone.
 
@@ -9244,7 +9239,7 @@ and say
 nothing about visibility — the property Wattline's nineteen-millisecond window
 breaks and the property `Guard::after` is sound only under. Shipping
 this rule without the fixture would violate CF-1: it would be a rule that has
-never failed anything, which is precisely what E2E-CASES.md:1555-1561 warns
+never failed anything, which is precisely what E2E-CASES.md:1582-1588 warns
 against.
 
 **The experiment this clause deferred has been run, and it is why the marker
@@ -10060,7 +10055,7 @@ and run through the event-store, concurrency and model families with its pass li
 a last-call-only report, leaky membership). Recorded limit: it masks ingest-side harms (`experiments/retention-reader`'s controls), so an ingest
 claim needs `Fixture::REMOVAL`, not the decorator. Reopened by an instrument whose report misstates what it withholds while the suite passes,
 or by a suite rule that can tell a holed log from a young one. The decision this marker waited on,
-E2E-CASES.md:1663-1669's eleventh open decision, was taken by ADR-0028: the report shape is instrument-local, not a port surface.
+E2E-CASES.md:1690-1696's eleventh open decision, was taken by ADR-0028: the report shape is instrument-local, not a port surface.
 [ADR-0028](../.kb/decisions/0028-what-a-store-may-forget.md) widens the instrument
 from a suffix to an arbitrary retained set, because a suffix-only instrument
 cannot falsify the floor that ES-39 rejects. It also names a `Fixture`
@@ -10422,7 +10417,7 @@ CF-33, which forbids a conformance rule to assert on an operation count; every
 plausible answer to that question touches this clause's text, so the marker stays
 until it is answered.]`
 Rule: none — the harness is not the bar, which is the clause's content.
-Cases: E2E-CASES.md:1671-1677 records this as one of the two things that are
+Cases: E2E-CASES.md:1698-1704 records this as one of the two things that are
 neither blocked nor cases.
 Rejects: a benchmark result gating a merge. A threshold nobody can justify
 becomes a threshold everybody raises, and the number stops meaning anything the
@@ -10679,9 +10674,9 @@ between them because its *shape* does not wait on a transport but its
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 41 | 33 | 3 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 40 | 38 | 2 | 0 | 0 |
+| §5 `SyncPeer` | `SY` | 40 | 39 | 1 | 0 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **215** | **194** | **12** | **2** | **7** |
+| **Total** | | **215** | **195** | **11** | **2** | **7** |
 
 ### 7.2 The table
 
@@ -10709,7 +10704,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-18 | FROZEN | compile tests `event_new_accepts_a_held_event_type` and `command_handler_compo… | E2E-51 |
 | VT-19 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set`, `wire::decode_accepts_an_over_… | E2E-40, E2E-42 |
 | VT-20 | FROZEN | unit tests `rejects_invalid_event_types` and `rejects_invalid_tags`; `store_ac… | E2E-40 |
-| VT-21 | FROZEN | `store_accepts_the_guaranteed_minimum_payload`, `append_reports_exceeded_store… | E2E-42 |
+| VT-21 | FROZEN | `store_accepts_the_guaranteed_minimum_payload`, `append_reports_exceeded_store… | E2E-61 |
 | VT-22 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tag_count` | E2E-40 |
 | VT-23 | PROVISIONAL | `store_evaluates_a_query_at_the_guaranteed_minimum_item_count` | E2E-36, E2E-40 |
 | VT-24 | FROZEN | `store_accepts_the_guaranteed_minimum_batch_size`, `bulk_ingest_is_idempotent_… | E2E-35, E2E-36, E2E-39 |
@@ -10738,7 +10733,7 @@ between them because its *shape* does not wait on a transport but its
 | WF-6 | FROZEN | `wire::store_id_encodes_as_hex_in_json`, `wire::store_id_encodes_as_bytes_in_p… | E2E-34, E2E-42 |
 | WF-7 | FROZEN | `wire::round_trips_in_json`, `wire::round_trips_in_postcard`, `wire::round_tri… | E2E-33, E2E-42 |
 | WF-8 | FROZEN | `wire::rejects_an_unknown_format_version`, `wire::version_is_readable_before_t… | E2E-35, E2E-42 |
-| WF-9 | FROZEN | `wire::decode_accepts_an_over_capacity_value`, `append_reports_exceeded_store_… | E2E-42 |
+| WF-9 | FROZEN | `wire::decode_accepts_an_over_capacity_value`, `append_reports_exceeded_store_… | E2E-61 |
 | WF-10 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set`, `wire::decode_rejects_an_uncon… | E2E-40 |
 | WF-11 | PROVISIONAL | `wire::payload_is_base64_in_json`, `wire::payload_is_raw_in_postcard` | E2E-33 |
 | WF-12 | FROZEN | `read_options_is_not_serialisable`, a **const-evaluation assertion in `crates/… | E2E-58 |
@@ -10842,7 +10837,7 @@ between them because its *shape* does not wait on a transport but its
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
 | SY-1 | FROZEN | `ingest_never_rejects` | E2E-33, E2E-39, E2E-42, E2E-45, E2E-47 |
-| SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event`, `the_losing_event_is_never_rea… | E2E-39, E2E-61 |
+| SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event`, `the_losing_event_is_never_rea… | E2E-39, E2E-62 |
 | SY-3 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-39 |
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` | E2E-42 |
@@ -10880,7 +10875,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-37 | FROZEN | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |
 | SY-38 | FROZEN | `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test, `crat… | E2E-42, E2E-34 |
 | SY-39 | FROZEN | `an_append_reads_back_as_one_group`, `an_ingested_group_keeps_its_boundary_and… | E2E-35, E2E-39 |
-| SY-40 | PROVISIONAL | `a_removed_event_is_not_readmitted` | E2E-46, E2E-42 |
+| SY-40 | FROZEN | `a_removed_event_is_not_readmitted` | E2E-46, E2E-42 |
 
 #### `CF` — conformance obligations (§6)
 
@@ -10919,7 +10914,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-31 | FROZEN | `cargo xtask spec-trace` (CF-38), which fails when a rule name referenced by a… | *all* |
 | CF-32 | FROZEN | a `cargo xtask ci` manifest check, added at phase 3 stage 6. It reads the `[pa… | *(none — see clause)* |
 | CF-33 | FROZEN | a `cargo xtask ci` lint step over `happenstance-testkit/src`, rejecting `std::… | *(none — see clause)* |
-| CF-34 | PROVISIONAL | *(none — see clause)* | E2E-CASES.md:1671-1677 records this as one of the two things that are neither … |
+| CF-34 | PROVISIONAL | *(none — see clause)* | E2E-CASES.md:1698-1704 records this as one of the two things that are neither … |
 | CF-35 | FROZEN | `cargo xtask spec-trace` (CF-38). | *all* |
 | CF-36 | FROZEN | `cargo xtask spec-trace` (CF-38), cross-referencing each case's level marker (… | E2E-28, E2E-29, E2E-39, E2E-42 |
 | CF-37 | FROZEN | `cargo xtask spec-trace` (CF-38). | *all* |
@@ -11222,7 +11217,7 @@ recounted it against §7.2 rather than against itself.
 | **ES-42** — `read`'s return carries no `+ Unpin` | Nothing. Its `Rule:` is compile-level — ADR-0011's E11 erasure wrapper | **Acceptable, and the only one of the five that expires.** Its marker requires re-evaluation before phase 12, because adding a bound to an opaque return type after publish is breaking. A case naming it would be a case about what a *consumer* can write, not about what a store does, and E2E-CASES is a catalogue of store behaviour |
 | **CF-32** — the testkit carries its own `version` key | Nothing; a packaging obligation with a machine check | **Acceptable.** CF-35 permits a clause whose check is a manifest check rather than a behavioural one, and there is no user-visible behaviour to write a case against |
 | **CF-33** — no rule may read a clock | Nothing; it constrains the suite | **Acceptable**, same reason |
-| **CF-34** — benchmarks are not conformance | `E2E-CASES.md:1671-1677`, which records the harness as one of the two things that are neither blocked nor cases | **Acceptable**, and the citation is the right one |
+| **CF-34** — benchmarks are not conformance | `E2E-CASES.md:1698-1704`, which records the harness as one of the two things that are neither blocked nor cases | **Acceptable**, and the citation is the right one |
 | **PS-3** — ship behind `unstable-projection` | "none directly", then E2E-15 through E2E-25 | **Acceptable.** It is a packaging decision that makes a range of cases safe to answer before publication |
 | **PS-33** — evaluate ADR-0007's falsifier | "none directly", then E2E-26 through E2E-28 | **Closed at the typed layer's phase exit.** It was listed in §7.3 as belonging in a work list, and it has gone there: the clause is `[NON-NORMATIVE]` with its ID retained, so it no longer owes this table a case. The row stays because a defect list that deletes its own entries cannot be audited |
 
@@ -11235,9 +11230,10 @@ that nobody reads the unchanged number as evidence that nothing moved.
 
 ### 7.6 E2E cases no clause claims
 
-**None. All 61 cases are claimed by at least one clause.** E2E-59 joined at `0.8.0`,
+**None. All 62 cases are claimed by at least one clause.** E2E-59 joined at `0.8.0`,
 claimed by PS-40 alone (ADR-0109), E2E-60 in the same release, claimed by PS-41
-alone (the owner's call D3 = A), and E2E-61 too, claimed by SY-2 alone (#320).
+alone (the owner's call D3 = A), E2E-61 too, claimed by VT-21 and WF-9 (#100), and
+E2E-62, claimed by SY-2 alone (#320).
 
 That result is suspicious enough to state how it was reached, because "the defect
 list is empty" is the shape of a list that was never computed.

@@ -101,6 +101,9 @@ deploy.
   compensates a group of removed and held events. **A new rule is a minor for
   this crate; pin it exactly.** It runs only against a fixture that grants
   `REMOVAL`, so no adapter's CI turns red until that adapter grants it.
+  **SY-40 is `[FROZEN]`** (ADR-0115). It was minted provisional, and the rule has
+  since run green, not declined, on all five adapters that implement ingest,
+  Neon against a live endpoint among them.
 - `happenstance-sqlite`: the removal record (#483, #484, SY-40). Migration 3
   adds a table, `event_removed`, and an `AFTER DELETE` trigger on `event` that
   records the origin identity of every row deleted from the file, by any client.
@@ -207,9 +210,9 @@ deploy.
   typed-layer test in `crates/happenstance/tests/projection_scopes.rs`, held
   against both runners and against a runner reading `scope()` alone and one
   dropping the event types.
-- **`happenstance-sync-testkit`: SY-33's rule, `refusal_is_never_condition_derived`**,
-  in the sync peer family (#465). SY-33 was frozen naming it, and it had never
-  been written. It drives every refusal the fixture declares through
+- **`happenstance-sync-testkit`: SY-33's rule,
+  `refusal_is_never_condition_derived`**, in the sync peer family (#465).
+  SY-33 was frozen naming it, and it had never been written. It drives every refusal the fixture declares through
   `SyncFixture::refusals` twice on one handle, once on the fresh receiver and
   once after the rule has grown its log, and requires each to be answered the
   same: accepted, or refused with the same `FailureClass`. In between it pushes a
@@ -243,7 +246,7 @@ deploy.
   rather than running in its own, so the rule needs no runtime and no `Send`
   bound. A store that never yields in the middle of a call has no gap to be
   read in. SY-2's `Rule:` line names the rule, and SY-2 cites a new
-  contract-level case, E2E-61. Both are a repair to the frozen clause, not an
+  contract-level case, E2E-62. Both are a repair to the frozen clause, not an
   amendment, so SY-2 leaves `CF36_UNDISCHARGED`. `IngestFixture` is unchanged,
   so every existing fixture runs the rule with no edit. **A new rule is a
   minor for this crate; pin it exactly.**
@@ -301,6 +304,13 @@ deploy.
   and SY-38's refusal no longer covers an identity the store has recorded as
   removed. SY-11 and ES-39 point at it. `happenstance-sync`'s docs on
   `Ingested::skipped`, `IngestStore` and `IngestError::UnheldOwnIdentity` say so.
+- **CF-36's recorded breaches go from thirteen to four** (#100). VT-21 and
+  WF-9 cite a new contract-level case, E2E-61, in place of the mesh case
+  E2E-42. E2E-42 is `contract (sync)` now, because `sync_model_conformance!`
+  runs it against one adapter's fixtures, and that discharges seven `SY`
+  clauses. PS-29, PS-30 and SY-34 oblige a runner the workspace ships rather
+  than an adapter, and stay recorded for phase 21 to decide. SY-2 is #320's.
+  No normative text changes.
 
 ### `0.8.0` trace
 

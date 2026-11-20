@@ -174,6 +174,23 @@ connection itself and hands it to `SqliteEventStore::open_on`, and re-mints with
 `SqliteEventStore::remint_identity_on`. Neither sets a pragma, so this table then
 describes nothing: the durability and contention trade-offs are the caller's.
 
+## What its conformance fixtures decline
+
+A rule whose capability a fixture declines still runs, and reports the fixture's stated
+reason as a `SKIP` line rather than vanishing from the binary (CF-18). A default
+`cargo test` does not show that line; `--show-output` does. So the declines are listed
+here, where a reader choosing this adapter will see them. Every capability the table does
+not name is supported.
+
+| Fixture | Capability | Why it is declined |
+| --- | --- | --- |
+| `SqliteFixture` | `MID_BATCH_FAULT` | By scope, not by incapacity. The injection exists, an `AFTER INSERT` trigger exercised by `tests/append.rs`, and is not armed from the fixture, so that ES-35's fault falsifier is not retired as a side effect. Atomicity under a fault is still checked by that test |
+| `SqliteFixture` | `READ_FAULT` | By incapacity. A read is one `rusqlite` statement held open over a local file, so there is no fetch between two pages to fail |
+| `SqliteFixture` | `HELD_ABOVE_FRONTIER` | By the testkit's default, which is true here: a row is visible from the moment it commits, so nothing is ever held above a frontier |
+
+The projection fixture, `SqliteProjectionFixture`, declines nothing. The reasons in full are
+on the constants in `tests/support/mod.rs`.
+
 ## Limits this store enforces
 
 `append` refuses anything above these as `AppendError::ExceedsStoreLimit` — never
