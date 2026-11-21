@@ -11,7 +11,7 @@
 //! Positions always come from the store's own snapshot and never from a
 //! literal: the specification permits gaps.
 
-use core::cell::Cell;
+use core::cell::{Cell, RefCell};
 use core::num::NonZeroUsize;
 use core::pin::Pin;
 use core::task::{Context, Poll};
@@ -22,7 +22,7 @@ use happenstance::{
     AppendCondition, AppendError, ApplyFailure, Checkpoint, Chunk, Codec, CodecError, Delivered,
     DomainEvent, Event, EventId, EventStore, EventType, Json, MemoryEventStore, MemoryStoreError,
     Policy, Projection, ProjectionId, ProjectionStore, Query, ReadOptions, SequencePosition,
-    SequencedEvent, Tags, checkpoint_id,
+    SequencedEvent, Source, Tags, checkpoint_id,
 };
 use happenstance_testkit::{RecordingBatch, RecordingProjectionStore, RecordingStoreError};
 
@@ -262,11 +262,13 @@ pub(crate) enum ReadFault {
 }
 
 /// A `MemoryEventStore` counting `read` calls and the items they yielded,
-/// and failing every read after it has yielded `fail_after` items.
+/// recording the query each read asked for, and failing every read after it
+/// has yielded `fail_after` items.
 #[derive(Debug, Default)]
 pub(crate) struct Instrumented {
     pub(crate) inner: MemoryEventStore,
     reads: Cell<usize>,
+    queries: RefCell<Vec<Query>>,
     delivered: Cell<usize>,
     pub(crate) fail_after: Option<usize>,
 }
@@ -291,8 +293,20 @@ impl Instrumented {
         self.delivered.get()
     }
 
+    /// The query of every read so far, in the order they were asked, leaving
+    /// the record empty.
+    pub(crate) fn take_queries(&self) -> Vec<Query> {
+        self.queries.take()
+    }
+
     pub(crate) fn snapshot(&self) -> Vec<SequencedEvent> {
         self.inner.snapshot()
+    }
+
+    /// The instrument as a runner's source, under the identity of the store
+    /// it wraps.
+    pub(crate) const fn source(&self) -> Source<'_, Self> {
+        Source::new(self, self.inner.store_id())
     }
 }
 
@@ -342,6 +356,8 @@ impl EventStore for Instrumented {
         options: ReadOptions,
     ) -> impl Stream<Item = Result<SequencedEvent, ReadFault>> {
         self.reads.set(self.reads.get() + 1);
+        // Owned: the instrument keeps what it was asked after the borrow ends.
+        self.queries.borrow_mut().push(query.clone());
         Counted {
             inner: Box::pin(EventStore::read(&self.inner, query, options)),
             delivered: &self.delivered,

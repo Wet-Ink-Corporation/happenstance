@@ -73,7 +73,7 @@ Pick the pieces your app needs. Every arrangement keeps the same guarantees.
 | Huge views that stay on the server | A server-side read model, queried over HTTP, with read-your-writes | ✅ today ([`tickets-over-http`](examples/tickets-over-http)) |
 | A small local view of a big central store | A projection reads the central log and keeps a local SQLite view | ✅ today |
 | Rules that span several things | One read and one conditional write, across any entities | ✅ today ([`handles-and-quotas`](examples/handles-and-quotas)) |
-| A lean device and a complete cloud | The device prunes history the hub has confirmed | 🛣️ roadmap; 0.7 reports a peer that has been away longer than the hub remembers |
+| A lean device and a complete cloud | The device prunes history the hub has confirmed | 🛣️ roadmap; 0.7 reports a peer that has been away longer than the hub remembers, and from 0.8 a pruned event is not resurrected on a re-pull |
 | Edge hubs close to your users | A Durable Object per tenant, syncing devices nearby and forwarding to Neon | 🛣️ roadmap |
 
 [Choose a topology](https://wet-ink-corporation.github.io/happenstance/guide/choose-a-topology/)
@@ -214,8 +214,8 @@ Rust DCB library, Postgres-only and macro-driven.
 
 | | |
 |---|---|
-| **Today** | Typed events, decision models and projection runners; SQLite, Postgres, Neon and Durable Object stores; sync between stores over one edge at a time, with a merge rule that adjudicates as it syncs and a report when a peer has been away longer than its far side remembers (0.7) |
-| **Next** | Retention: devices that keep less than the hub, pruning without resurrecting what was pruned |
+| **Today** | Typed events, decision models and projection runners; SQLite, Postgres, Neon and Durable Object stores; sync between stores over one edge at a time, with a merge rule that adjudicates as it syncs and a report when a peer has been away longer than its far side remembers (0.7); a store that pruned events neither takes them back nor refuses them when a peer offers them again, and a projection's checkpoint is pinned to its source store (0.8) |
+| **Next** | Retention: devices that keep less than the hub, built on 0.8's removal record |
 | **1.0** | Frozen sync, a runner that links several edges, and a stable promise for every surface |
 | **Exploring** | SQLite in the browser, as the offline end of sync |
 

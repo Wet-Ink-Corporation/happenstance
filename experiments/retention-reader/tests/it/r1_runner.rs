@@ -3,7 +3,10 @@
 
 use std::collections::BTreeSet;
 
-use happenstance::{EventId, MemoryProjectionStore, SequencePosition};
+use happenstance::{
+    EventId, Json, MemoryProjectionStore, ProjectionError, SequencePosition, Source, SourceMark,
+    run_projection,
+};
 use happenstance_sync::{IngestGroup, IngestStore, ReplicatedEvent};
 use happenstance_testkit::block_on;
 use retention_reader::domain::Counter;
@@ -11,7 +14,7 @@ use retention_reader::holed::Holed;
 use retention_reader::seams::{seams, young_twin};
 use retention_reader::shared::Shared;
 
-use crate::support::{Error, Outcome, append_each, interleaved, project};
+use crate::support::{Error, Outcome, append_each, chunk, interleaved, project, project_from};
 
 /// The positions at `indexes` into `landed`.
 fn at(landed: &[SequencePosition], indexes: &[usize]) -> Result<Vec<SequencePosition>, Error> {
@@ -152,10 +155,16 @@ fn pruning_ahead_of_the_checkpoint_is_never_delivered() -> Outcome {
 /// below A's checkpoint are skipped silently, and an event already applied
 /// from A, which sits above it in B, is applied again.
 ///
-/// Nothing in the runner stops it, and no completeness report would: both
+/// Nothing in the runner stopped it, and no completeness report would: both
 /// stores are complete. The two stores' identities differ, and each is
-/// reachable today (`IngestStore::store_id`, the origin in every `EventId`);
-/// the checkpoint records no source to compare them with.
+/// reachable (`IngestStore::store_id`, the origin in every `EventId`); the
+/// checkpoint recorded no source to compare them with.
+///
+/// **Closed by #485** (PS-40, ADR-0109). The checkpoint is now pinned to the
+/// store it was built from, and the run on B stops with
+/// `ProjectionError::SourceChanged` before it reads anything. This test
+/// asserts the refusal where it used to assert the hazard: B's own events
+/// stay unapplied because nothing is applied, and nothing is applied twice.
 #[test]
 fn a_source_switch_resumes_against_the_wrong_store() -> Outcome {
     block_on(async {
@@ -164,7 +173,8 @@ fn a_source_switch_resumes_against_the_wrong_store() -> Outcome {
         append_each(&a, events.get(..8).ok_or("twelve")?).await?;
         let models = MemoryProjectionStore::new();
         let mut counter = Counter::new("claims")?;
-        let on_a = project(&a, &models, &mut counter).await?;
+        let a_id = IngestStore::store_id(&a).await?;
+        let on_a = project_from(Source::new(&a, a_id), &models, &mut counter).await?;
 
         // B: four events of its own, then the last five of A's, ingested as a
         // rebuild-from-the-hub source would hold them.
@@ -182,7 +192,9 @@ fn a_source_switch_resumes_against_the_wrong_store() -> Outcome {
             .map(|one| IngestGroup::new(one, &[]))
             .collect();
         b.ingest(&groups).await?;
-        let on_b = project(&b, &models, &mut counter).await?;
+        let b_id = IngestStore::store_id(&b).await?;
+        let on_b =
+            run_projection(Source::new(&b, b_id), &models, &mut counter, &Json, chunk()).await;
 
         let b_held = seams(&b, &[]).await?.held;
         let local_ids: Vec<EventId> = b_held
@@ -190,31 +202,24 @@ fn a_source_switch_resumes_against_the_wrong_store() -> Outcome {
             .filter(|e| local.contains(&e.position))
             .map(|e| e.id)
             .collect();
-        let replayed: Vec<EventId> = b_held
-            .iter()
-            .filter(|e| Some(e.position) > on_a.through)
-            .map(|e| e.id)
-            .collect();
         assert_eq!(on_a.applied, 8);
         assert_eq!(local_ids.len(), 4);
+        assert_ne!(a_id, b_id, "two stores, two identities");
+        let Err(ProjectionError::SourceChanged {
+            recorded, found, ..
+        }) = on_b
+        else {
+            return Err("the run on B was not refused as a source change".into());
+        };
+        assert_eq!((recorded, found), (SourceMark::of(a_id), b_id));
         assert!(
             local_ids
                 .iter()
                 .all(|id| !counter.applied().contains_key(id)),
-            "B's own events were skipped"
+            "nothing of B's was applied"
         );
-        assert_eq!(on_b.applied, replayed.len());
-        assert_eq!(
-            counter.applied_twice().collect::<Vec<_>>(),
-            replayed,
-            "applied twice"
-        );
-        assert!(!replayed.is_empty());
-        assert_ne!(
-            IngestStore::store_id(&a).await?,
-            IngestStore::store_id(&b).await?,
-            "the identity that would have told it is reachable today"
-        );
+        assert_eq!(counter.applied().len(), 8, "only A's eight");
+        assert_eq!(counter.applied_twice().count(), 0, "nothing applied twice");
         Ok(())
     })
 }

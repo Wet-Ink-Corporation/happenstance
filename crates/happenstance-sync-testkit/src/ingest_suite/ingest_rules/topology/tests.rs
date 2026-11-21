@@ -42,12 +42,15 @@ async fn open() -> MemoryIngestFixture {
 }
 
 /// The two ends exchange their whole logs, each way once, judging nothing.
-async fn meet<S: EventStore + IngestStore>(edge: &Edge<S>) -> Result<(), Violation> {
+async fn meet<S: EventStore + IngestStore, F>(edge: &Edge<S, F>) -> Result<(), Violation> {
     ship(&edge.near, &edge.far).await?;
     ship(&edge.far, &edge.near).await
 }
 
-async fn ship<S: EventStore + IngestStore>(from: &End<S>, to: &End<S>) -> Result<(), Violation> {
+async fn ship<S: EventStore + IngestStore, F>(
+    from: &End<S, F>,
+    to: &End<S, F>,
+) -> Result<(), Violation> {
     let shipped: Vec<ReplicatedEvent> = read_all(&from.store, SY_10)
         .await?
         .into_iter()
@@ -66,8 +69,8 @@ fn answered(own_log: &[SequencedEvent], reversal: EventId) -> Option<EventId> {
 /// Who holds the seat once the two ends have met: every claim no reversal
 /// answers. `own` holds each end's log as it was before the meeting, where
 /// each reversal still sits above the claim its writer answered.
-async fn standing<S: EventStore + IngestStore>(
-    edge: &Edge<S>,
+async fn standing<S: EventStore + IngestStore, F>(
+    edge: &Edge<S, F>,
 ) -> Result<BTreeSet<EventId>, Violation> {
     let own = [
         (edge.near.id, read_all(&edge.near.store, SY_10).await?),

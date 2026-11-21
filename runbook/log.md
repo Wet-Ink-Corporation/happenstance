@@ -10,6 +10,21 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-20 — `0.8.0`, batch 10 closed out
+
+*Committed on `claude/0.8.0-release`, cut from `origin/phase-21-prep` after #523.* The owner
+accepted ADR-0111..0114 at every recommendation (#506), so phase 20 owns their follow-ups.
+Merged into `phase-21-prep` this session: #506; #519 (#517's paced poll and changelog wrap,
+and #148's session-log entry); #520 (ADR-0115, which freezes SY-40 on CI run 44344907519,
+green on all five ingest adapters and Neon live among them); #521 (#100, CF-36 from thirteen
+breaches to four, with E2E-61); #522 (#320, SY-2's authoring rule, E2E-62); and #523 (#480,
+the `COMPACTION` declension). The release commit moves all nine crates, the pins, the seven
+examples and eight lockfiles to `0.8.0`, completes the trace (H7, H8), adds the fixture
+author's section to `docs/upgrading-to-0-8.md`, and updates SECURITY, the READMEs, the site
+reference and CLAUDE.md's two stale counts. Verified: `cargo semver-checks check-release
+--workspace --baseline-version 0.7.0 --release-type minor` (no lint), `spec-trace`, `lints`,
+`lint-kb`; the live jobs ran on each merged PR.
+
 ## 2026-11-16 — `0.7.0`, retention and the adjudication hook (phase 14)
 
 *Committed on `claude/project-thread-xxl8lr-070`, cut from `origin/phase-14` at `2c19afd1`,

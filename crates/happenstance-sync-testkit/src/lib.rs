@@ -43,6 +43,7 @@
 //! | [`peer_takes_a_batch_at_its_declared_limits`](rules::peer_takes_a_batch_at_its_declared_limits) | SY-18 | a peer that refuses a push its own batch limits admit: more events, or more bytes, than it really takes |
 //! | [`push_envelope_preserves_group_boundaries`](rules::push_envelope_preserves_group_boundaries) | SY-30 | a peer that merges the groups of a page into one, or strips the guard a group was pushed with |
 //! | [`every_refusal_states_its_class`](rules::every_refusal_states_its_class) | SY-36 | a peer whose errors all state one failure class, whatever the failure |
+//! | [`refusal_is_never_condition_derived`](rules::refusal_is_never_condition_derived) | SY-33 | a peer whose refusal of a push appears, vanishes or changes class with what it holds: a "duplicate" or "conflict" refusal |
 //! | [`nothing_waiting_means_the_next_pull_is_empty`](rules::nothing_waiting_means_the_next_pull_is_empty) | SY-37 | a peer that says nothing is waiting when its page ran out, not its log |
 //! | [`ack_never_confirms_a_non_durable_event`](rules::ack_never_confirms_a_non_durable_event) | SY-31 | a peer that confirms an event before it is durable |
 //! | [`round_trip_preserves_the_whole_log`](rules::round_trip_preserves_the_whole_log) | SY-28, SY-27 | a peer that withholds from its counterpart the events a type or tag filter matches, among those the rule's log carries |
@@ -52,8 +53,9 @@
 //! this crate's `tests/wrong_peers.rs` — SY-18's in `tests/wrong_limits.rs`,
 //! over [`KvCappedFixture`], its batch rule's in `tests/wrong_peers.rs`,
 //! SY-23's in `tests/wrong_orders.rs`, SY-28's in `tests/wrong_scopes.rs`,
-//! SY-31's across a reopen in `tests/wrong_reopens.rs`, and SY-32's in
-//! `tests/wrong_retention.rs` — where the rule is shown to fail it. A rule no
+//! SY-31's across a reopen in `tests/wrong_reopens.rs`, SY-32's in
+//! `tests/wrong_retention.rs`, and SY-33's in `tests/wrong_refusals.rs` —
+//! where the rule is shown to fail it. A rule no
 //! peer can fail is decorative. The mount also emits
 //! `every_declined_capability_is_stated_by_this_fixture`, which fails a
 //! fixture that leaves [`REOPEN`](SyncFixture::REOPEN) at this crate's default
@@ -124,9 +126,12 @@
 //! | [`ingest_group_is_atomic_under_a_mid_group_fault`](ingest_rules::ingest_group_is_atomic_under_a_mid_group_fault) | SY-30 | a group written in chunks without a transaction, a compensation committed apart, a fault answered `Ok`, and an armed fault that never fires |
 //! | [`ingest_validates_every_event_not_the_head`](ingest_rules::ingest_validates_every_event_not_the_head) | SY-18 | per-event ceilings checked on each group's head only, a compensation never checked, and a ceiling off by one |
 //! | [`ingest_holds_the_call_to_its_tags_per_batch_ceiling`](ingest_rules::ingest_holds_the_call_to_its_tags_per_batch_ceiling) | VT-36, SY-18 | a tags-per-batch ceiling held to each group apart, a compensation left out of the total, a ceiling off by one, and a total refused as per-event, `Park` rather than `Split` |
+//! | [`ingest_holds_the_call_to_its_events_per_batch_ceiling`](ingest_rules::ingest_holds_the_call_to_its_events_per_batch_ceiling) | VT-24 | an events-per-call ceiling held to each group apart, a compensation left out of the length, a ceiling off by one, and a call refused after it was written |
+//! | [`the_losing_event_is_never_read_unresolved`](ingest_rules::the_losing_event_is_never_read_unresolved) | SY-2 | a store that commits the losing event of an adjudicated conflict, awaits, and only then commits its compensation, so a reader inside the call reads the loser unresolved |
 //! | [`only_the_adjudicator_compensates`](ingest_rules::only_the_adjudicator_compensates) | SY-7 | a compensation minted under an incarnation the store never read, so its log names an author nobody assigned |
 //! | [`directional_merge_rules_compose`](ingest_rules::directional_merge_rules_compose) | SY-10 | a store with the merge rule built in, which answers a group whose travelling guard its log breaks with a reversal of its own, and so judges, as a spoke, what the hub sends; and one that re-mints its own claim when a peer's claim on the seat arrives |
 //! | [`bulk_ingest_is_idempotent_in_bounded_round_trips`](ingest_rules::bulk_ingest_is_idempotent_in_bounded_round_trips) | SY-14, VT-24 | a store that consults what it holds for the first 64 events of a call only and writes a held event past them again, and one that refuses a call of VT-24's 128 events as over its batch limit |
+//! | [`a_removed_event_is_not_readmitted`](ingest_rules::a_removed_event_is_not_readmitted) | SY-40, SY-38, SY-11 | a store that dedupes only against what it holds and re-admits a removed foreign event, one that refuses a removed own event as an unheld claim, one that skips every unheld own claim once anything was removed, one that keeps its removal record per handle, and one that compensates a group of removed and held events |
 //!
 //! Each wrong store lives in `tests/wrong_ingest_stores.rs`, where a test runs
 //! the whole family against it and asserts it fails exactly its rule.
@@ -156,7 +161,7 @@
 //!
 //! ## Capabilities
 //!
-//! Three rules need the fixture's co-operation, and say so rather than pass
+//! Four rules need the fixture's co-operation, and say so rather than pass
 //! when they do not get it. SY-30's needs
 //! [`MID_GROUP_FAULT`](IngestFixture::MID_GROUP_FAULT) and
 //! [`arm_mid_group_fault`](IngestFixture::arm_mid_group_fault), because only
@@ -167,10 +172,14 @@
 //! the adapter's own constant. VT-36's reads
 //! [`MAX_TAGS_PER_BATCH`](IngestFixture::MAX_TAGS_PER_BATCH), mirrored the
 //! same way; only a store whose call has a tags wall of its own states one,
-//! today `happenstance-cloudflare`'s. [`MemoryIngestFixture`] declines the fault in its own words and declares
-//! no ceiling, so it reports all three rules skipped; the faithful store in
+//! today `happenstance-cloudflare`'s. VT-24's reads
+//! [`MAX_EVENTS_PER_BATCH`](IngestFixture::MAX_EVENTS_PER_BATCH), which each
+//! shipped adapter's fixture states, and VT-36's checks its own ceiling is
+//! reachable under it.
+//! [`MemoryIngestFixture`] declines the fault in its own words and declares
+//! no ceiling, so it reports all four rules skipped; the faithful store in
 //! `tests/wrong_ingest_stores.rs` runs them, and `happenstance-sqlite`'s
-//! ingest spike runs the first two. The mount also emits
+//! ingest spike runs all but VT-36's. The mount also emits
 //! `every_declined_capability_is_stated_by_this_fixture`, which fails a
 //! fixture whose declension is this crate's default
 //! ([`ingest_declensions_are_stated`]).
@@ -364,13 +373,14 @@ mod ingest_fixture;
 // to is one `cargo xtask spec-trace` refuses.
 mod ingest_suite;
 pub use ingest_fixture::{
-    IngestFixture, MemoryIngestFixture, MemoryIngestHandle, UNSTATED_MID_GROUP_FAULT,
-    ingest_declensions_are_stated,
+    IngestFixture, MemoryIngestFixture, MemoryIngestHandle, UNSTATED_INGEST_REMOVAL,
+    UNSTATED_MID_GROUP_FAULT, ingest_declensions_are_stated,
 };
 pub use ingest_suite::{
-    MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON,
-    NO_PER_EVENT_LIMITS, NO_PER_EVENT_LIMITS_REASON, NO_TAGS_PER_BATCH_LIMIT,
-    NO_TAGS_PER_BATCH_LIMIT_REASON, ingest_rules,
+    MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_EVENTS_PER_BATCH_LIMIT,
+    NO_EVENTS_PER_BATCH_LIMIT_REASON, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON, NO_PER_EVENT_LIMITS,
+    NO_PER_EVENT_LIMITS_REASON, NO_TAGS_PER_BATCH_LIMIT, NO_TAGS_PER_BATCH_LIMIT_REASON,
+    TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON, ingest_rules,
 };
 
 // The write-group family (#420), declared after the ingest family for the

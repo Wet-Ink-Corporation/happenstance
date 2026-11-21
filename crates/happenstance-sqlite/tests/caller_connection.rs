@@ -17,7 +17,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use happenstance_core::{Event, EventStore, Query, ReadOptions, SequencedEvent, StoreId, collect};
+use happenstance_core::{Event, EventStore, Query, ReadOptions, SequencedEvent, collect};
 use happenstance_sqlite::event_store::SqliteEventStore;
 use rusqlite::Connection;
 
@@ -239,10 +239,10 @@ fn remint_identity_on_migrates_a_fresh_file() {
 #[cfg(feature = "sync")]
 mod ingest {
     use super::{
-        Connection, SequencedEvent, SqliteEventStore, StoreId, TempDb,
-        assert_callers_settings_held, callers_connection, event, log,
+        Connection, SequencedEvent, SqliteEventStore, TempDb, assert_callers_settings_held,
+        callers_connection, event, log,
     };
-    use happenstance_core::{EventId, EventStore, RecordedAt, SequencePosition};
+    use happenstance_core::{EventId, EventStore, RecordedAt, SequencePosition, StoreId};
     use happenstance_sqlite::happenstance_sync::{IngestGroup, IngestStore, ReplicatedEvent};
 
     /// The brief's journal: 300 events from one foreign origin.

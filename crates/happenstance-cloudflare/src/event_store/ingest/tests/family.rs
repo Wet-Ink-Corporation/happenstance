@@ -8,8 +8,9 @@
 
 use core::future::Future;
 
+use happenstance_core::SequencePosition;
 use happenstance_sync_testkit::{IngestFixture, Violation};
-use happenstance_testkit::Capability;
+use happenstance_testkit::{Capability, Removed};
 
 use crate::event_store::ingest::{CloudflareIngestStore, model};
 use crate::event_store::{Ceilings, CloudflareEventStore};
@@ -59,6 +60,15 @@ impl IngestFixture for CloudflareIngestFixture {
     /// Mirrored from the ceilings the store declares: the call is the batch,
     /// so VT-36's ingest rule holds every group and compensation to it.
     const MAX_TAGS_PER_BATCH: Option<usize> = Some(Ceilings::DECLARED.tags_per_batch);
+    /// Mirrored from the ceilings the store declares: the call is the batch,
+    /// so VT-24's ingest rule holds every group and compensation to it.
+    const MAX_EVENTS_PER_BATCH: Option<usize> = Some(Ceilings::DECLARED.events_per_batch);
+
+    /// Supported, through a raw `DELETE` on the object's own SQL: the
+    /// retention job the record's trigger hears (SY-40). `sqlite_sequence` and
+    /// `store_meta` are not touched, so the removal never rewinds the
+    /// allocator or mints a new incarnation.
+    const REMOVAL: Capability = Capability::SUPPORTED;
 
     /// Through the public constructor, as a consumer builds one.
     fn connect(&self) -> impl Future<Output = Self::Store> {
@@ -80,6 +90,14 @@ impl IngestFixture for CloudflareIngestFixture {
     /// names are distinct from the event-store fixture's `mid_batch_fault`.
     fn arm_mid_group_fault(&self, after: usize) -> impl Future<Output = Result<(), Violation>> {
         core::future::ready(self.arm(after))
+    }
+
+    /// Deletes the named events through the unit tests' `support::remove`:
+    /// per position the tag rows, then the event row. It panics on a failed
+    /// statement, for `connect`'s reason: a broken test environment.
+    fn remove_outside_port(&self, positions: &[SequencePosition]) -> impl Future<Output = Removed> {
+        super::support::remove(&self.sql, positions);
+        core::future::ready(Removed::Deleted)
     }
 }
 

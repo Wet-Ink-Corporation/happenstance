@@ -21,6 +21,10 @@
 //! * the discard of a skipped event's staged row, [`discard_staged_sql`];
 //! * the own-identity check (SY-38), decided by the stamp's outcome and the
 //!   head read once as the call's first read, with no lookup ahead of it;
+//! * the removal record's probe (SY-40, `removal::Probe`), which drops an
+//!   event whose identity the record's trigger holds before append's `INSERT`
+//!   stages it, so it is a skip and never that refusal. One `EXISTS` per call
+//!   when the record is empty, a point lookup per event when it is not;
 //! * one `transactionSync` per call (below);
 //! * the watermark, [`watermark_sql`], one `GROUP BY` over the origin index.
 //!
@@ -106,6 +110,7 @@ use happenstance_sync::{
     ReplicatedEvent, Watermark, WriteGroupStore,
 };
 
+use super::removal::Probe;
 use super::{
     CloudflareEventStore, CloudflareEventStoreError, MAX_SAFE_POSITION, decode_position,
     insert_statement, max_position, now, position_as_i64,
@@ -341,7 +346,7 @@ impl CloudflareIngestStore {
     ) -> Result<Ingested, Refusal> {
         // Read inside the transaction, so the claim check and the compensation
         // stamp use the identity current when the call runs.
-        let own = self.store.store_id()?;
+        let own = self.store.incarnation()?;
         // The head, read as the call's first read, and only when the call
         // carries a claim. A claim is judged only against `ClaimCheck::Against`,
         // so none is ever judged without it; its `None` is an empty store,
@@ -352,9 +357,15 @@ impl CloudflareIngestStore {
             ClaimCheck::NoClaim
         };
 
+        // The removal record (SY-40), asked once whether it holds anything,
+        // inside the transaction, where no removal can land before the writes
+        // it decides.
+        let removed = Probe::open(&self.store.sql, &self.store.tables)?;
+
         let call = Call {
             own,
             claims,
+            removed,
             insert: insert_statement(&self.store.tables),
             recorded_at,
         };
@@ -375,7 +386,7 @@ impl CloudflareIngestStore {
     /// names it. The compensation joins it through append's writer.
     fn write_group(
         &self,
-        call: &Call,
+        call: &Call<'_>,
         group: &GroupPlan<'_>,
         ingested: &mut Ingested,
     ) -> Result<(), Refusal> {
@@ -383,6 +394,15 @@ impl CloudflareIngestStore {
         // Encoded once, at the first candidate, and only if there is a guard.
         let mut stored_guard: Option<Vec<u8>> = None;
         for (event, origin) in &group.events {
+            // Recorded as removed (SY-40): held, so skipped before append's
+            // `INSERT` stages it. It spends no position, cannot be refused
+            // under SY-38 and cannot name the group or carry its guard. One
+            // the record does not hold goes through the stamp's `UNIQUE` as
+            // before, so a held event still dedupes there (VT-8).
+            if call.removed.recorded(origin.store, origin.position)? {
+                ingested.skipped = ingested.skipped.saturating_add(1);
+                continue;
+            }
             let position = self
                 .store
                 .insert_row(&call.insert, &event.event, event.recorded_at)?;
@@ -659,11 +679,13 @@ impl<'a> TryFrom<&IngestGroup<'a>> for GroupPlan<'a> {
 }
 
 /// What every group of one call is written against.
-struct Call {
+struct Call<'s> {
     /// This store's identity, read inside the transaction.
     own: StoreId,
     /// Whether, and against what, a claim of `own` is judged.
     claims: ClaimCheck,
+    /// The removal record, borrowing the store's storage for the call.
+    removed: Probe<'s>,
     /// Append's `INSERT`, rendered once per call.
     insert: String,
     /// The compensation's one recorded time.

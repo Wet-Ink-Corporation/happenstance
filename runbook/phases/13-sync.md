@@ -195,7 +195,7 @@ provides the atomicity and the identity that makes it idempotent.
       falsifier, and SY-28's after it, is a spoke holding a deliberately filtered
       subset of a hub's log, attempting a position-based resume against it. That
       is the same testkit-adjacent instrument as CF-27's suffix store
-      (`spec/E2E-CASES.md:1679-1684`), which the ledger gives to phase 14 —
+      (`spec/E2E-CASES.md:1706-1711`), which the ledger gives to phase 14 —
       and 14 runs after this phase. So either this phase builds the instrument, in
       a shape phase 14 then extends into the suffix store, or a record
       re-dispositions SY-27 and SY-28 before this phase exits. Freezing either

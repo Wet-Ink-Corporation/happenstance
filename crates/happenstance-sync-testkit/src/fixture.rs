@@ -76,6 +76,13 @@ pub trait SyncFixture {
     /// with the stated reason when it is declined.
     ///
     /// Nothing in the port compacts, so the operation is the adapter's.
+    ///
+    /// # Defaulted, and checked
+    ///
+    /// Defaulted to a declension, in [`UNSTATED_COMPACTION`]'s words, as
+    /// [`REOPEN`](Self::REOPEN) is, and checked the same way: a fixture that
+    /// inherits it is told so in its own CI by [`sync_declensions_are_stated`]
+    /// (#480).
     const COMPACTION: Capability = Capability::declined(UNSTATED_COMPACTION);
 
     /// Makes `peer` forget the longest prefix of its log, in its forwarding
@@ -171,16 +178,15 @@ pub const UNSTATED_SYNC_REOPEN: &str = "this fixture has not said whether its pe
      no medium outside the process has nothing a reopen could read back, and this \
      is that answer given by default rather than by its author";
 
-/// CF-18's machine-checked half for the sync-peer family, for
-/// [`SyncFixture::REOPEN`] only: `F` must not decline it with the reason it
-/// would inherit by saying nothing.
+/// CF-18's machine-checked half for the sync-peer family: `F` must not
+/// decline [`SyncFixture::REOPEN`] or [`SyncFixture::COMPACTION`] with the
+/// reason it would inherit by saying nothing.
 ///
-/// [`SyncFixture::COMPACTION`] is not checked. Its inherited
-/// [`UNSTATED_COMPACTION`] is accepted for now because every adapter fixture
-/// in this workspace (Postgres, Neon, Cloudflare and the workerd harness)
-/// inherits it today, so checking it here would turn every mounted sync suite
-/// red in the change that added the capability. Requiring a stated reason for
-/// it is follow-up issue #480.
+/// `COMPACTION` joined the check in #480, one release after the capability:
+/// every adapter fixture in this workspace inherited its default when it was
+/// added, and each now states its own reason. A downstream fixture silent on
+/// it fails this check from the release that carries #480, which is why that
+/// release is a minor.
 ///
 /// [`ingest_declensions_are_stated`](crate::ingest_declensions_are_stated)'s
 /// twin. Emitted once per mounted suite by
@@ -193,12 +199,15 @@ pub const UNSTATED_SYNC_REOPEN: &str = "this fixture has not said whether its pe
 ///
 /// # Errors
 ///
-/// A [`Violation`] of CF-18 if `F` declines [`SyncFixture::REOPEN`] with the
+/// A [`Violation`] of CF-18 naming every capability `F` declines with the
 /// inherited reason.
 pub fn sync_declensions_are_stated<F: SyncFixture>(
     _opener: impl AsyncFn() -> F,
 ) -> Result<(), Violation> {
-    let declared = [("REOPEN", F::REOPEN, UNSTATED_SYNC_REOPEN)];
+    let declared = [
+        ("REOPEN", F::REOPEN, UNSTATED_SYNC_REOPEN),
+        ("COMPACTION", F::COMPACTION, UNSTATED_COMPACTION),
+    ];
     let unstated: Vec<&str> = declared
         .iter()
         .filter(|(_, capability, default)| capability.reason() == Some(*default))
@@ -216,9 +225,9 @@ pub fn sync_declensions_are_stated<F: SyncFixture>(
 
 /// What [`SyncFixture::COMPACTION`] says when a fixture says nothing.
 ///
-/// `pub` so an adapter author can read what their silence says. Unlike
-/// [`UNSTATED_SYNC_REOPEN`], it is not checked: [`sync_declensions_are_stated`]
-/// accepts a fixture that inherits it, until #480.
+/// `pub` so an adapter author can read what their silence says. As with
+/// [`UNSTATED_SYNC_REOPEN`], a fixture cannot agree with it by naming it:
+/// [`sync_declensions_are_stated`] compares the text.
 pub const UNSTATED_COMPACTION: &str = "this fixture cannot make its peer forget a prefix of its log; nothing \
      in the port compacts, so compaction has to come from the adapter and this one has none to \
      offer";
@@ -263,6 +272,10 @@ pub const MAX_PROVOKED_BATCH_BYTES: usize = 64 * 1024 * 1024;
 /// thirty-two times the minimum conformant limit, and above the 257 events the
 /// largest push of SY-37's count-cut log carries, so a peer whose limits
 /// refuse that push refuses the batch rule's corner too.
+///
+/// VT-24's ingest rule caps its calls by it for the same reason: it sizes
+/// them from the fixture's declared `MAX_EVENTS_PER_BATCH`, and a declared
+/// ceiling at or above this is not exercised.
 pub const MAX_PROVOKED_BATCH_EVENTS: usize = 4_096;
 
 /// The oversized-push refusal, provoked on `peer` and declared
@@ -470,15 +483,19 @@ mod tests {
         sync_declensions_are_stated,
     };
 
-    /// A fixture over the reference peer whose `REOPEN` is `$reopen`, or the
-    /// trait's default when none is given.
+    /// A fixture over the reference peer whose `REOPEN` is `$reopen` and
+    /// whose `COMPACTION` is `$compaction`, or the trait's defaults for both
+    /// when neither is given.
     macro_rules! over_the_reference {
-        ($name:ident $(, $reopen:expr)?) => {
+        ($name:ident $(, $reopen:expr, $compaction:expr)?) => {
             struct $name(MemorySyncFixture);
 
             impl SyncFixture for $name {
                 type Peer = MemorySyncHandle;
-                $(const REOPEN: Capability = $reopen;)?
+                $(
+                    const REOPEN: Capability = $reopen;
+                    const COMPACTION: Capability = $compaction;
+                )?
 
                 async fn connect(&self) -> Self::Peer {
                     self.0.connect().await
@@ -492,10 +509,16 @@ mod tests {
     }
 
     over_the_reference!(Silent);
-    over_the_reference!(Supports, Capability::SUPPORTED);
+    over_the_reference!(Supports, Capability::SUPPORTED, Capability::SUPPORTED);
     over_the_reference!(
         States,
-        Capability::declined("a test fixture over the reference peer, which keeps no medium")
+        Capability::declined("a test fixture over the reference peer, which keeps no medium"),
+        Capability::declined("a test fixture that does not drive the reference peer's compaction")
+    );
+    over_the_reference!(
+        SilentOnCompaction,
+        Capability::declined("a test fixture over the reference peer, which keeps no medium"),
+        Capability::declined(UNSTATED_COMPACTION)
     );
 
     /// A fixture that says nothing declines compaction in this crate's words,
@@ -524,8 +547,22 @@ mod tests {
         );
     }
 
+    /// A fixture that states `REOPEN` and inherits `COMPACTION` is rejected,
+    /// and the violation names the capability it was silent on (#480).
     #[test]
-    fn a_supported_or_stated_reopen_passes() {
+    fn a_fixture_that_inherits_the_default_compaction_declension_is_rejected() {
+        let violation =
+            sync_declensions_are_stated(async || SilentOnCompaction(MemorySyncFixture::new()))
+                .expect_err("an inherited COMPACTION declension is unstated");
+
+        assert_eq!(violation.clause(), "CF-18");
+        let message = violation.to_string();
+        assert!(message.contains("COMPACTION"), "{message}");
+        assert!(!message.contains("REOPEN"), "{message}");
+    }
+
+    #[test]
+    fn a_supported_or_stated_reopen_and_compaction_pass() {
         assert_eq!(
             sync_declensions_are_stated(async || Supports(MemorySyncFixture::new())),
             Ok(())
@@ -545,9 +582,10 @@ mod tests {
         assert_eq!(reopened, Reopened::Nothing);
     }
 
-    /// The reference fixture states its declension, so its own mount passes.
+    /// The reference fixture states its declension and supports compaction,
+    /// so its own mount passes.
     #[test]
-    fn the_reference_fixture_states_its_reopen_declension() {
+    fn the_reference_fixture_states_its_declensions() {
         assert_eq!(
             sync_declensions_are_stated(async || MemorySyncFixture::new()),
             Ok(())

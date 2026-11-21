@@ -98,14 +98,14 @@ impl NeonFixture {
         &self.config
     }
 
-    /// Applies migrations 1 and 3 into this instance's schema. Idempotent, once.
+    /// Applies migrations 1, 3 and 4 into this instance's schema. Idempotent, once.
     async fn migrate(&self) {
         self.migrated
             .get_or_init(|| async {
                 sweep_once().await;
                 execute(
-                    migration::request(&event_log_migrations(), &self.config),
-                    "migrations 1 and 3",
+                    event_log_request(&self.config),
+                    "migrations 1, 3 and 4",
                     self.schema(),
                 )
                 .await;
@@ -818,10 +818,18 @@ async fn settle_probe(probe: &str) -> bool {
         == Some("true")
 }
 
-/// The event log's migrations, 1 then 3, as one template: what this build
-/// expects of a schema, applied in one batch so a schema has both or neither.
+/// The event log's migrations, 1 and 3 rendered and split, then
+/// `migration::removal_record_request`'s table and trigger (#483, #484): what
+/// this build expects of a schema, applied in one batch so a schema has all of
+/// it or none. Twinned with the library target's `endpoint.rs`, in another
+/// crate.
 ///
 /// Defined last, so the lines above keep the numbers the knowledge base cites.
-fn event_log_migrations() -> String {
-    format!("{}\n{}", migration::MIGRATION_1, migration::MIGRATION_3)
+fn event_log_request(config: &NeonConfig) -> SqlRequest {
+    let log = format!("{}\n{}", migration::MIGRATION_1, migration::MIGRATION_3);
+    let mut request = migration::request(&log, config);
+    request
+        .statements
+        .extend(migration::removal_record_request(config).statements);
+    request
 }

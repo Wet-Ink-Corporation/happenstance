@@ -21,13 +21,19 @@
 //!   it stamps from, and [`refusal_statement`] raises
 //!   [`UNIDENTIFIED_SQLSTATE`] when that row is gone, so a store with no
 //!   identity ingests nothing rather than committing rows with a NULL origin;
+//! * the removal record (SY-40, ADR-0110): [`lock_statement`] takes the
+//!   record `IN SHARE MODE` first, and the write's insert reads its rows
+//!   through an anti-join on the record, so an event whose identity the store
+//!   recorded as removed is a skip, counted as one, and never lands again nor
+//!   counts as a claim;
 //! * [`WATERMARK_SQL`], one `GROUP BY` over the origin index.
 //!
 //! No append condition is evaluated (SY-1).
 //!
 //! # One request, one transaction
 //!
-//! An ingest is **one round trip** of two statements at `REPEATABLE READ`.
+//! An ingest is **one round trip** of four statements at `REPEATABLE READ`:
+//! the record's lock, the write, the refusal and the write-group stamp.
 //! `REPEATABLE READ` makes the server refuse, with `40001`, an `ON CONFLICT`
 //! that meets a row committed by a transaction the call's snapshot cannot
 //! see, so a claim on a row committed during the call is never taken for a
@@ -83,7 +89,9 @@ use happenstance_sync::{
 
 use super::remint::stored_store_id;
 use super::{NeonEventStore, decode_body, first_result_set, position_from_text};
+use crate::config::NeonConfig;
 use crate::error::{NeonError, NeonSqlError};
+use crate::migration::qualified_removed;
 use crate::transport::{HttpResponse, SqlRequest, SqlStatement, SqlTransport};
 use crate::wire::{ResponseBody, ResultSet};
 
@@ -124,7 +132,46 @@ const WATERMARK_SQL: &str = "SELECT encode(origin_store, 'base64') AS s, \
      max(origin_position)::text AS p FROM {event} \
      WHERE origin_store IS NOT NULL AND origin_position IS NOT NULL GROUP BY origin_store";
 
-/// The request's second statement: aborts the batch, and with it everything
+/// The request's first statement: `LOCK TABLE` on the removal record `IN
+/// SHARE MODE` (SY-40, ADR-0110, D-8).
+///
+/// `SHARE` is the weakest mode that conflicts with the `ROW EXCLUSIVE` the
+/// record's trigger takes on a `DELETE` and does not conflict with itself, so
+/// concurrent ingests do not wait on each other, appends never touch the
+/// table, and a removal and an ingest exclude each other. Held to the end of
+/// the request's transaction. No parameter, and the record schema-qualified,
+/// as every name this adapter sends is.
+pub(super) fn lock_statement(config: &NeonConfig) -> SqlStatement {
+    SqlStatement::new(format!(
+        "LOCK TABLE {} IN SHARE MODE",
+        qualified_removed(config)
+    ))
+}
+
+/// Where the ingest statement's counts sit in the request's answer: second,
+/// after the lock's empty set.
+pub(super) const COUNTS_SET: usize = 1;
+
+/// The statements of an ingest request after its first, which must be the
+/// removal record's lock (SY-40): the request exactly as it stood before the
+/// record. The tests that pinned that request keep every assertion over this
+/// slice, and assert the lock and the whole length beside them.
+///
+/// # Panics
+///
+/// When the first statement is not [`lock_statement`]'s.
+#[cfg(test)]
+pub(super) fn after_lock<'r>(request: &'r SqlRequest, config: &NeonConfig) -> &'r [SqlStatement] {
+    match request.statements.split_first() {
+        Some((lock, rest)) if lock.query == lock_statement(config).query => rest,
+        _ => panic!(
+            "an ingest request opens with the record's lock: {:?}",
+            request.statements
+        ),
+    }
+}
+
+/// The request's third statement: aborts the batch, and with it everything
 /// the first statement wrote, when the first found no identity row
 /// ([`UNIDENTIFIED_GUC`]) or left a claim in [`UNHELD_GUC`].
 ///
@@ -234,14 +281,6 @@ impl<T> NeonEventStore<T> {
     pub(super) fn watermark_statement(&self) -> SqlStatement {
         SqlStatement::new(WATERMARK_SQL.replace("{event}", &self.config().qualified_event()))
     }
-
-    /// The meta row's identity, base64, as column `v`.
-    pub(super) fn identity_statement(&self) -> SqlStatement {
-        SqlStatement::new(format!(
-            "SELECT encode(v, 'base64') AS v FROM {} WHERE k = 'store_id'",
-            self.config().qualified_meta()
-        ))
-    }
 }
 
 // The bare flavour, the only one `NeonEventStore` has, and only that name in
@@ -262,13 +301,8 @@ impl<T: SqlTransport> IngestStore for NeonEventStore<T> {
     /// `MissingIdentity` when the meta row is absent; `MalformedIdentity` when
     /// it is not sixteen bytes; `MalformedPayload` when it is not base64.
     async fn store_id(&self) -> Result<StoreId, Self::Error> {
-        let response = self
-            .transport()
-            .round_trip(SqlRequest::single(self.identity_statement()).read_only())
-            .await
-            .map_err(NeonError::Transport)?;
-        let body = decode_body::<T::Error>(&response, self.config().max_response_bytes)?;
-        identity_from(first_result_set::<T::Error>(&body)?)
+        // The inherent read, which needs no feature (#485).
+        NeonEventStore::store_id(self).await
     }
 
     async fn ingest(
@@ -338,26 +372,38 @@ impl<E> Classify for NeonError<E> {
 }
 
 /// Connection exceptions (`08`), insufficient resources (`53`), a
-/// serialisation failure, a deadlock, and the three operator interventions
+/// serialisation failure, a deadlock, a lock not granted within a configured
+/// `lock_timeout` (`55P03`: an ingest and a removal wait for each other on the
+/// removal record, SY-40), and the three operator interventions
 /// (`57P01`–`57P03`): the work was aborted whole or never started, and time or
 /// an operator cures it. Matched on the code, as Postgres's is, rather than by
 /// a variant per code.
 fn transient_sqlstate(code: &str) -> bool {
     code.starts_with("08")
         || code.starts_with("53")
-        || matches!(code, "40001" | "40P01" | "57P01" | "57P02" | "57P03")
+        || matches!(
+            code,
+            "40001" | "40P01" | "55P03" | "57P01" | "57P02" | "57P03"
+        )
 }
 
 /// What one ingest answer says, mapped onto the port's error.
 ///
-/// The second result set, the `DO` block's, carries nothing and is not read.
+/// The counts are the ingest statement's set, at [`COUNTS_SET`]; the lock's,
+/// the `DO` block's and the stamp's carry nothing and are not read.
 fn decode_ingest_answer<E>(
     response: &HttpResponse,
     max_response_bytes: usize,
     groups: &[IngestGroup<'_>],
 ) -> Result<Ingested, IngestError<NeonError<E>>> {
     let body = ingest_body(response, max_response_bytes, groups)?;
-    ingested_from(first_result_set::<E>(&body).map_err(IngestError::Store)?)
+    let counts = body
+        .result_sets()
+        .get(COUNTS_SET)
+        .ok_or(IngestError::Store(NeonError::MissingColumn {
+            column: "results",
+        }))?;
+    ingested_from(counts)
 }
 
 /// An ingest answer's body, or the refusal it carries mapped onto the
@@ -430,18 +476,6 @@ fn claimed(detail: Option<&str>, groups: &[IngestGroup<'_>]) -> Option<EventId> 
         .flat_map(|group| group.events)
         .nth(index)
         .map(|replicated| replicated.id)
-}
-
-/// The identity an [`identity_statement`](NeonEventStore::identity_statement)
-/// answered.
-///
-/// # Errors
-///
-/// `MissingIdentity` when the meta row is absent, and what
-/// `stored_store_id` refuses.
-pub(super) fn identity_from<E>(set: &ResultSet) -> Result<StoreId, NeonError<E>> {
-    let stored = set.text(0, "v").ok_or(NeonError::MissingIdentity)?;
-    stored_store_id(stored)
 }
 
 /// The watermark a [`watermark_statement`](NeonEventStore::watermark_statement)

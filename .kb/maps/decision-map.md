@@ -1026,9 +1026,60 @@ SY-34's Rule lines and §6.5's Durability / `SyncPeer` cell are repaired. It sup
 | --- | --- | --- | --- | --- | --- |
 | ADR-0108 | [`kb-decision-0108`](../decisions/0108-phase-14s-clauses-are-frozen.md) | Phase 14's clauses are frozen, SY-32 with a CF-25 acceptance, and five frozen lines are repaired | accepted | 14 | — |
 
+## 2026-11-16: a typed checkpoint is pinned to its source store (#485), accepted 2026-11-17
+
+ADR-0109 is written straight here with no intake step. It was proposed on 2026-11-16 and the
+owner accepted it on 2026-11-17. It records the owner's answers 485-Q1..Q6: the runners take a `Source`, a sibling
+`name#digest` checkpoint holds a mark of the store's identity, a 0.7.x checkpoint is adopted,
+three adapters gain `store_id`, and PS-40 is minted `[PROVISIONAL]`. It supersedes nothing;
+ADR-0063's port and ADR-0102's PS-25 id are unchanged.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0109 | [`kb-decision-0109`](../decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md) | A typed checkpoint is pinned to the event store it was built from, and PS-40 is minted provisional | accepted | — | — |
+
+## 2026-11-17: a removed event is not readmitted by ingest (#483, #484), proposed
+
+ADR-0110 is written straight here with no intake step. It records the owner's answers D-1..D-10
+(all A, 2026-11-17): a trigger-written removal record per store, read only inside ingest, which
+skips a recorded identity rather than re-admitting or refusing it. It amends the frozen SY-1 and
+SY-38, points SY-11 and ES-39 at the new clause, and mints SY-40 `[PROVISIONAL]`. Its text awaits
+the owner's acceptance. It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0110 | [`kb-decision-0110`](../decisions/0110-a-removed-event-is-not-readmitted.md) | A store that removed an event records it, and ingest skips it, and SY-40 is minted provisional | accepted | — | — |
+
+## 2026-11-18: phase 21's audit debt (#185, #115, #145, #188), proposed
+
+ADR-0111 to ADR-0114 are written straight here with no intake step. They are proposals the owner
+has not yet accepted, prepared overnight from `.temper/plans/audit-debt-adrs.md`. None of them
+mints a clause, edits `[FROZEN]` text or changes `spec_trace.rs`. Each one says what acceptance
+would change. ADR-0111 claims the three rules in `UNCLAIMED_PENDING_ADR`. ADR-0112 keeps a foreign
+rollback non-normative for 1.0 and renews it. ADR-0113 prints a declined capability past libtest's
+capture and lists the declines in each adapter's README; those README lines have landed. ADR-0114
+gives ES-6, ES-29 and ES-31 their rules under phase 20, and leaves SY-6's refusal shape to the
+owner. None supersedes anything.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0111 | [`kb-decision-0111`](../decisions/0111-the-three-unclaimed-rules-are-claimed.md) | The three unclaimed rules are claimed, by ES-44, CF-44, CF-45 and ES-25's Rule line | accepted | 21 | — |
+| ADR-0112 | [`kb-decision-0112`](../decisions/0112-foreign-rollback-stays-non-normative-for-1-0.md) | A foreign rollback stays non-normative for 1.0, renewed against a store whose rollback acts on store-side state | accepted | 21 | — |
+| ADR-0113 | [`kb-decision-0113`](../decisions/0113-a-declined-capability-is-printed-and-listed.md) | A declined capability is printed past libtest's capture and listed in each adapter's README | accepted | 21 | — |
+| ADR-0114 | [`kb-decision-0114`](../decisions/0114-es-6-es-29-and-es-31-get-their-rules.md) | ES-6, ES-29 and ES-31 get their rules, owned by phase 20, and none is demoted | accepted | 21 | — |
+
 ## Adding a row
 
 A new decision atom gets a row in ADR-number order under the wave section that introduced it
 (open a new `##` section per wave, the way [`domain-map.md`](domain-map.md) opens a new section
 per domain). A supersession updates two rows in the same edit: the new atom's row, and the old
 atom's `Status` and `Supersedes / superseded by` cells — never delete a superseded row.
+
+## 2026-11-20: SY-40 is frozen
+
+ADR-0115 freezes SY-40 at `0.8.0` on the condition ADR-0110 wrote into its marker: the rule green, not declined, on SQLite, the
+Durable Object (host and `workerd`), Postgres and Neon, with the Neon leg against a live endpoint (#517). It supersedes nothing.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0115 | [`kb-decision-0115`](../decisions/0115-sy-40-is-frozen.md) | SY-40 is frozen, on its rule green on all five adapters that implement ingest | accepted | 20 | — |

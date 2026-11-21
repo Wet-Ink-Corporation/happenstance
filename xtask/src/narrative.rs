@@ -210,6 +210,15 @@ mod upgrading_to_0_6 {
     #![doc = include_str!("../../docs/upgrading-to-0-6.md")]
 }
 
+// The fourth upgrade guide. Its `rust` fences run one view through a `Source`
+// both ways over a memory store, and adopt a checkpoint written the way 0.7
+// wrote it, asserting that the run resumes past it and pins the store it read.
+// The SQLite spelling and the 0.7 call sit in `text` fences.
+#[cfg(doctest)]
+mod upgrading_to_0_8 {
+    #![doc = include_str!("../../docs/upgrading-to-0-8.md")]
+}
+
 // The first how-to. Three fences: a zero `Retry` refused at compile time
 // (E0080); the reply each exhausted or failed command gets; and two deliveries
 // of one request racing, where the loser is refused and its retry and a late

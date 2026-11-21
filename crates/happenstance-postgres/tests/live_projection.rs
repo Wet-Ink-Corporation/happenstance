@@ -571,9 +571,15 @@ async fn run_projection_drives_a_row_writing_projection_through_a_live_batch() {
     let models = fixture.connect().await;
     let mut ledger = Ledger::new(None);
 
-    let progressed = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
-        .await
-        .unwrap();
+    let progressed = run_projection(
+        (&events).into(),
+        &models,
+        &mut ledger,
+        &Json,
+        chunk_of_two(),
+    )
+    .await
+    .unwrap();
 
     assert_eq!(progressed.applied, 5, "every deposit was applied once");
     assert_eq!(
@@ -629,9 +635,15 @@ async fn a_server_refused_statement_rolls_the_live_chunk_back_through_the_runner
     let models = fixture.connect().await;
     let mut ledger = Ledger::new(Some("mallory"));
 
-    let refused = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
-        .await
-        .expect_err("the server refused the fourth deposit's statement");
+    let refused = run_projection(
+        (&events).into(),
+        &models,
+        &mut ledger,
+        &Json,
+        chunk_of_two(),
+    )
+    .await
+    .expect_err("the server refused the fourth deposit's statement");
 
     assert!(
         matches!(
@@ -678,17 +690,36 @@ async fn a_server_refused_statement_rolls_the_live_chunk_back_through_the_runner
 async fn a_commit_fault_takes_the_projections_rows_with_it() {
     let fixture = LivePostgresProjectionFixture::new();
     create_ledger(&fixture).await.unwrap();
-    fixture.arm_commit_fault().await;
     let events = MemoryEventStore::new();
+    let models = fixture.connect().await;
+    let mut ledger = Ledger::new(None);
+    // The trigger refuses every checkpoint write, the source pin's too
+    // (PS-40), so the view is pinned by an idle run before it is armed: the
+    // commit this test faults is the first chunk's.
+    let idle = run_projection(
+        (&events).into(),
+        &models,
+        &mut ledger,
+        &Json,
+        chunk_of_two(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(idle, Progressed::default());
+    fixture.arm_commit_fault().await;
     deposit(&events, &[("alice", 1), ("bob", 20), ("alice", 300)])
         .await
         .unwrap();
-    let models = fixture.connect().await;
-    let mut ledger = Ledger::new(None);
 
-    let refused = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
-        .await
-        .expect_err("the armed trigger refuses the first commit");
+    let refused = run_projection(
+        (&events).into(),
+        &models,
+        &mut ledger,
+        &Json,
+        chunk_of_two(),
+    )
+    .await
+    .expect_err("the armed trigger refuses the first commit");
 
     assert!(
         matches!(
@@ -952,9 +983,15 @@ async fn a_savepoint_in_apply_lets_skip_record_a_server_refusal() {
     let models = fixture.connect().await;
     let mut ledger = GuardedLedger::new(Guard::Savepoint);
 
-    let progressed = run_projection(&events, &models, &mut ledger, &Json, chunk_of_three())
-        .await
-        .unwrap();
+    let progressed = run_projection(
+        (&events).into(),
+        &models,
+        &mut ledger,
+        &Json,
+        chunk_of_three(),
+    )
+    .await
+    .unwrap();
 
     assert_eq!(
         (progressed.applied, progressed.skipped, progressed.through),
@@ -1016,9 +1053,15 @@ async fn a_server_side_failure_leaves_nothing_for_on_error_to_write_into() {
     let models = fixture.connect().await;
     let mut ledger = GuardedLedger::new(Guard::Bare);
 
-    let refused = run_projection(&events, &models, &mut ledger, &Json, chunk_of_three())
-        .await
-        .expect_err("on_error's record is refused by the aborted transaction");
+    let refused = run_projection(
+        (&events).into(),
+        &models,
+        &mut ledger,
+        &Json,
+        chunk_of_three(),
+    )
+    .await
+    .expect_err("on_error's record is refused by the aborted transaction");
 
     assert!(
         matches!(
@@ -1093,9 +1136,15 @@ async fn a_truncate_resets_a_runner_view_and_the_runner_replays_it() {
     let models = fixture.connect().await;
     let mut ledger = Ledger::new(None);
     let key = checkpoint_id(&ledger).unwrap();
-    let built = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
-        .await
-        .unwrap();
+    let built = run_projection(
+        (&events).into(),
+        &models,
+        &mut ledger,
+        &Json,
+        chunk_of_two(),
+    )
+    .await
+    .unwrap();
     assert_eq!(built.applied, 3);
     assert_eq!(ledger_rows(&fixture).await.unwrap(), truncate_ledger());
 
@@ -1114,9 +1163,15 @@ async fn a_truncate_resets_a_runner_view_and_the_runner_replays_it() {
         "and the checkpoint went with the rows"
     );
 
-    let replayed = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
-        .await
-        .unwrap();
+    let replayed = run_projection(
+        (&events).into(),
+        &models,
+        &mut ledger,
+        &Json,
+        chunk_of_two(),
+    )
+    .await
+    .unwrap();
     assert_eq!(
         replayed.applied, 3,
         "the replay starts from the first deposit"
@@ -1151,9 +1206,15 @@ async fn a_failed_reset_takes_its_truncate_back() {
     let models = fixture.connect().await;
     let mut ledger = Ledger::new(None);
     let key = checkpoint_id(&ledger).unwrap();
-    let built = run_projection(&events, &models, &mut ledger, &Json, chunk_of_two())
-        .await
-        .unwrap();
+    let built = run_projection(
+        (&events).into(),
+        &models,
+        &mut ledger,
+        &Json,
+        chunk_of_two(),
+    )
+    .await
+    .unwrap();
     assert_eq!(built.applied, 3);
 
     let mut clear = models.begin().await.unwrap();

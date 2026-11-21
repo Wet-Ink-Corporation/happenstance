@@ -74,6 +74,35 @@ pub const NO_TAGS_PER_BATCH_LIMIT_REASON: &str = "this fixture declares no tags-
 /// exercised; one call at this cap is about half a million owned tags.
 pub const MAX_PROVOKED_TAGS_PER_BATCH: usize = 524_288;
 
+/// The reason VT-36's ingest rule reports, under [`NO_TAGS_PER_BATCH_LIMIT`],
+/// when the fixture's tags-per-batch ceiling is reachable under its
+/// events-per-call ceiling and the rule's own calls are not.
+///
+/// The rule spreads tags one under a declared per-event ceiling and adds two
+/// compensation events, so its over-ceiling call can be a few events longer
+/// than the shortest one that crosses the ceiling. A store declared that close
+/// to its two other ceilings is coherent, and is not failed for the rule's
+/// margin.
+pub const TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON: &str = "this fixture's tags-per-batch \
+     ceiling is reachable under its events-per-call ceiling, but the rule's calls, one tag under \
+     the per-event ceiling to an event and two compensation events, would be refused as too long \
+     first, so the store's tags-per-batch refusal could not be told from its length refusal; the \
+     rule is unverified for this store";
+
+/// The `capability` VT-24's ingest rule reports when the fixture declares no
+/// events-per-call ceiling it can exercise: the
+/// [`IngestFixture`](crate::IngestFixture) constant it reads.
+pub const NO_EVENTS_PER_BATCH_LIMIT: &str = "MAX_EVENTS_PER_BATCH";
+
+/// The reason VT-24's ingest rule reports when it exercised no ceiling.
+///
+/// Written by this crate rather than by the fixture, because it is the same
+/// sentence for every store that earns it.
+pub const NO_EVENTS_PER_BATCH_LIMIT_REASON: &str = "this fixture declares no events-per-call \
+     ceiling the rule can exercise, none at all or one at or above the length this crate will \
+     allocate, so a store that counts each group, or only the foreign events, could not be told \
+     from one that counts the whole call; the rule is unverified for this store";
+
 /// The ingest rules. See the [crate documentation](crate) for what each covers.
 ///
 /// Each rule is an async function taking `impl AsyncFn() -> F`, how to make a
@@ -115,18 +144,21 @@ pub mod ingest_rules {
     use happenstance_testkit::RuleOutcome;
 
     use super::{
-        MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON,
+        MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_EVENTS_PER_BATCH_LIMIT,
+        NO_EVENTS_PER_BATCH_LIMIT_REASON, NO_HIDDEN_CLAIM, NO_HIDDEN_CLAIM_REASON,
         NO_PER_EVENT_LIMITS, NO_PER_EVENT_LIMITS_REASON, NO_TAGS_PER_BATCH_LIMIT,
-        NO_TAGS_PER_BATCH_LIMIT_REASON,
+        NO_TAGS_PER_BATCH_LIMIT_REASON, TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON,
     };
 
     use crate::violation::{Violation, ensure};
-    use crate::{IngestFixture, MAX_PROVOKED_BATCH_BYTES};
+    use crate::{IngestFixture, MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS};
 
     // VT-36's arrangements, a file of their own because this one is long
     // enough. A child module, so it reaches the helpers below through `super`
     // without widening any of them.
     mod batch_scope;
+    // VT-24's, the same three calls counted in events rather than tags.
+    mod batch_length;
     // SY-7's arrangement and the runner the rule plays, beside VT-36's for the
     // same reason.
     mod adjudication;
@@ -136,6 +168,10 @@ pub mod ingest_rules {
     mod seat_rule;
     // SY-14's call at VT-24's floor, and the first delivery scattered over it.
     mod bulk;
+    // SY-40's removed events, foreign and own, offered again.
+    mod removal;
+    // SY-2's conflict, adjudicated, and the reader watching it land.
+    mod resolution;
 
     const SHIPPED: EventType = EventType::from_static("Shipped");
     const LOCAL: EventType = EventType::from_static("Local");
@@ -1228,14 +1264,19 @@ pub mod ingest_rules {
     /// no ceiling, or only one that large, is reported
     /// [`Skipped`](RuleOutcome::Skipped) with [`NO_TAGS_PER_BATCH_LIMIT`].
     ///
-    /// # Not checked: the call's length
+    /// # The call's length
     ///
-    /// `IngestFixture` declares no events-per-call ceiling, so the rule cannot
-    /// check before it writes that the over-ceiling call fits under one, the
-    /// "reachable" half of VT-36 that the event-store family checks against
-    /// `MAX_EVENTS_PER_BATCH`. A store whose call-length ceiling is too small
-    /// for `ceiling + 1` tags at the rule's spread fails the second
-    /// arrangement naming the limit it refused under instead.
+    /// When the fixture also declares
+    /// [`MAX_EVENTS_PER_BATCH`](IngestFixture::MAX_EVENTS_PER_BATCH), the rule
+    /// checks VT-36's "reachable" half before it writes, as the event-store
+    /// family checks it against that family's `MAX_EVENTS_PER_BATCH`:
+    /// `ceiling + 1` tags must fit in that many events of at most
+    /// `MAX_TAGS_PER_EVENT` tags, or the declaration is a violation. A
+    /// reachable declaration whose over-ceiling call at the rule's spread is
+    /// longer than the events ceiling is reported
+    /// [`Skipped`](RuleOutcome::Skipped) with
+    /// [`TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON`] rather than failed for
+    /// the rule's margin.
     ///
     /// # Rejects
     ///
@@ -1249,8 +1290,9 @@ pub mod ingest_rules {
     ///
     /// # Errors
     ///
-    /// A [`Violation`] of VT-36 if the declared ceiling is incoherent, if the
-    /// control is refused or miscounted, or if an over-ceiling call is
+    /// A [`Violation`] of VT-36 if the declared ceiling is incoherent or
+    /// unreachable under the declared call length, if the control is refused
+    /// or miscounted, or if an over-ceiling call is
     /// accepted, refused as anything but that limit and total or with a class
     /// other than `Split`, or leaves anything behind. The wrong-arm message
     /// cites VT-25.
@@ -1267,11 +1309,152 @@ pub mod ingest_rules {
         // Coherence first, which allocates nothing, so a ceiling too large to
         // exercise is still held to its declaration.
         let per_event = batch_scope::per_event::<F>(ceiling)?;
+        batch_scope::ensure_reachable::<F>(ceiling)?;
         // Below the cap, so one over the ceiling is still inside it (H-13).
         if ceiling >= MAX_PROVOKED_TAGS_PER_BATCH {
             return Ok(skipped);
         }
+        if !batch_scope::fits_the_call::<F>(ceiling, per_event) {
+            return Ok(RuleOutcome::Skipped {
+                capability: NO_TAGS_PER_BATCH_LIMIT,
+                reason: TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON,
+            });
+        }
         batch_scope::the_call_is_held_to(&open().await, ceiling, per_event).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
+    /// VT-24 on the ingest path: a store that declares an events-per-call
+    /// ceiling holds the **whole call** to it, every foreign event and every
+    /// compensation event of every group counted together, and refuses a call
+    /// one event over as [`IngestError::ExceedsStoreLimit`] naming
+    /// [`StoreLimit::EventsPerBatch`] and the call's length, with nothing
+    /// written. `happenstance-sync` classifies that refusal
+    /// [`FailureClass::Split`], so a runner halves the call.
+    ///
+    /// The ingest twin of `append_reports_exceeded_store_limits`'s batch
+    /// branch, which holds the event-store fixture's `MAX_EVENTS_PER_BATCH`
+    /// to one append. The rule reads the ceiling from the fixture's
+    /// [`MAX_EVENTS_PER_BATCH`](IngestFixture::MAX_EVENTS_PER_BATCH) and then,
+    /// on one fresh fixture, after one local event:
+    ///
+    /// 1. **The control.** Two groups whose events, the second group's two
+    ///    compensation events included, number exactly the ceiling, land:
+    ///    every foreign event appended and both compensation events written.
+    /// 2. **Over, spread across groups.** Two groups, each at or under the
+    ///    ceiling on its own, one event over it together: refused, the log,
+    ///    head and watermark as they were, and no event of either held.
+    /// 3. **Over, in the compensation alone.** One group whose foreign events
+    ///    are under the ceiling and whose compensation takes the call one
+    ///    event over: refused in the same way.
+    ///
+    /// No event is tagged and each carries a few bytes, so no other ceiling
+    /// is approached. A ceiling at or above [`MAX_PROVOKED_BATCH_EVENTS`] is
+    /// not exercised, because the over-ceiling call is allocated whole
+    /// (H-13). A fixture that declares no ceiling, or only one that large, is
+    /// reported [`Skipped`](RuleOutcome::Skipped) with
+    /// [`NO_EVENTS_PER_BATCH_LIMIT`].
+    ///
+    /// # Not checked: the floor
+    ///
+    /// VT-24's floor of 128 is
+    /// [`bulk_ingest_is_idempotent_in_bounded_round_trips`]'s, as on the append
+    /// path it is `store_accepts_the_guaranteed_minimum_batch_size`'s and not
+    /// the batch branch's. A ceiling declared under the floor is held to its
+    /// declaration here and fails that rule. Only a ceiling under four, too
+    /// short for the control's shape, is a violation of this one.
+    ///
+    /// # Rejects
+    ///
+    /// A store that holds each group to the ceiling apart; one that counts
+    /// the foreign events and never the compensation it writes itself; one
+    /// that refuses a call exactly at the ceiling, which only the control
+    /// sees; and one that writes the call and then refuses it.
+    /// `tests/wrong_ingest_stores.rs` carries all four.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of VT-24 if the declared ceiling is under four, if the
+    /// control is refused or miscounted, or if an over-ceiling call is
+    /// accepted, refused as anything but that limit and length, or leaves
+    /// anything behind. The wrong-arm message cites VT-25.
+    pub async fn ingest_holds_the_call_to_its_events_per_batch_ceiling<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        // Below the cap, so one over the ceiling is still inside it (H-13).
+        let Some(ceiling) =
+            F::MAX_EVENTS_PER_BATCH.filter(|ceiling| *ceiling < MAX_PROVOKED_BATCH_EVENTS)
+        else {
+            return Ok(RuleOutcome::Skipped {
+                capability: NO_EVENTS_PER_BATCH_LIMIT,
+                reason: NO_EVENTS_PER_BATCH_LIMIT_REASON,
+            });
+        };
+        batch_length::ensure_locatable(ceiling)?;
+        batch_length::the_call_is_held_to(&open().await, ceiling).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
+    /// SY-2: a reader never observes the losing event of an adjudicated
+    /// conflict held without the compensation that resolves it, even while
+    /// the ingest that lands the two is in flight.
+    ///
+    /// One store takes a claim on a seat from one foreign origin, then a
+    /// conflicting claim from another. The rule plays the runner above it,
+    /// mounting the seat family's merge rule through the shipped
+    /// `runner::Adjudicate` hook, which reads the store through a second
+    /// handle and answers the second claim with a reversal. The claim and its
+    /// reversal are handed to the store as the runner hands them: one
+    /// [`IngestGroup`]. While that ingest is pending, the rule reads the log
+    /// through the second handle, in the same task, each time the ingest
+    /// yields. No read may show the losing claim without its reversal. The
+    /// ingest must count one appended and one compensation, and a read after
+    /// it must show both. Both are found by type and bytes, never decoded
+    /// (SY-35), and each observation is one read of the log, so a faithful
+    /// store that commits both between two reads is not mistaken for one that
+    /// showed only one of them.
+    ///
+    /// The runner's half is structural. The hook decides and never writes, and
+    /// the runner lands each group with its compensation in one
+    /// `IngestGroup`, so the runner cannot write a compensation apart from its
+    /// claim (`happenstance-sync`'s `runner::adjudicate`). What remains is the
+    /// store's half: given the two in one group, it must not let a reader in
+    /// between them.
+    ///
+    /// # Rejects
+    ///
+    /// Compensate-after-commit, the shape SY-2's `Rejects` names, in a store:
+    /// it commits the losing event, awaits, and only then commits the
+    /// compensation, as an adapter does that writes a group's foreign rows
+    /// and its compensation as two statements outside one transaction.
+    /// Nothing fails and the log is right once the call returns, so only a
+    /// reader inside the gap sees it, and SY-30's rule reaches it only when
+    /// the fixture can arm a fault there. `tests/wrong_ingest_stores.rs`
+    /// carries it, and asserts that every other rule passes it.
+    ///
+    /// A store that holds the compensation back for a later write is read
+    /// unresolved after the ingest too, but it is not this rule's alone: every
+    /// rule that reads back after an ingest sees it, so it proves nothing
+    /// about this one and has no mutant here.
+    ///
+    /// # Does not reject
+    ///
+    /// A store that commits the two apart **without yielding** between the
+    /// writes. A reader in the same task cannot be scheduled into a gap the
+    /// store never opens, and a reader on another thread is not something
+    /// every emitter has. SY-30's rule owns that shape, through the fault its
+    /// fixture arms.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-2 if the store cannot say who it is, refuses or
+    /// miscounts an ingest, does not show a second handle the claim it just
+    /// took, or is read holding the losing claim without its reversal, during
+    /// the ingest or after it.
+    pub async fn the_losing_event_is_never_read_unresolved<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        resolution::a_reader_never_sees_the_loser_alone(&open).await?;
         Ok(RuleOutcome::Ran)
     }
 
@@ -1457,6 +1640,65 @@ pub mod ingest_rules {
     ) -> Result<RuleOutcome, Violation> {
         let fixture = open().await;
         bulk::the_floor_lands_once(&fixture.connect().await).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
+    /// SY-40: an event removed from the store outside the port, offered
+    /// again, is skipped as held: never appended a second time, and never
+    /// refused as an unheld own identity. A claim on an identity the store
+    /// never held is still refused (SY-38).
+    ///
+    /// Nothing in the port removes an event, so the removal is the fixture's:
+    /// [`IngestFixture::REMOVAL`]. A fixture that declines it is reported
+    /// [`Skipped`](RuleOutcome::Skipped) with its stated reason. Four
+    /// arrangements, three fixtures, every removed position one the store
+    /// assigned and every event found by its bytes:
+    ///
+    /// 1. **A removed foreign event.** Three foreign events land, one group
+    ///    each, and the middle one is removed. The same three groups again,
+    ///    through the handle connected before the removal and then through one
+    ///    connected after it, are each three skips that change neither the log,
+    ///    the head nor the watermark, and the removed event stays unheld.
+    /// 2. **A removed own event.** Two local appends, and the first is removed.
+    ///    Its echo, in one group beside a new foreign event, is accepted: the
+    ///    foreign event lands, the echo is skipped, and it stays unheld.
+    /// 3. **SY-38 still fires.** On the same store, a claim three positions
+    ///    past the head, which the store never minted, heading a call with a
+    ///    foreign event behind it, refuses the whole call as
+    ///    [`IngestError::UnheldOwnIdentity`] naming it, and writes nothing.
+    /// 4. **No compensation for nothing.** Two foreign events land, one group
+    ///    each, and the first is removed. One group re-delivering both,
+    ///    carrying a compensation, is two skips and writes nothing (SY-11).
+    ///
+    /// # Rejects
+    ///
+    /// A store that dedupes only against what it holds, which re-admits a
+    /// removed foreign event at the tail, the shape every adapter shipped in
+    /// `0.7.0` (#483); one that refuses a removed own event as an unheld claim
+    /// and wedges its edge (#484); one that skips every unheld own claim, so a
+    /// restored store is no longer caught; one that keeps its record per
+    /// handle, so a handle connected later re-admits what was removed; and one
+    /// that writes a group's compensation because one of its events is not
+    /// held. `tests/wrong_ingest_stores.rs` carries all five.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-40 if the fixture removes nothing or the wrong
+    /// events, if a re-delivery appends, compensates or changes the store, if
+    /// the echo is refused or miscounted, or if the claim never held is not
+    /// refused whole.
+    pub async fn a_removed_event_is_not_readmitted<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        if let Some(reason) = F::REMOVAL.reason() {
+            return Ok(RuleOutcome::Skipped {
+                capability: "REMOVAL",
+                reason,
+            });
+        }
+        removal::a_removed_foreign_event(&open().await).await?;
+        removal::a_removed_own_event(&open().await).await?;
+        removal::a_removed_group_writes_no_compensation(&open().await).await?;
         Ok(RuleOutcome::Ran)
     }
 
@@ -1758,6 +2000,12 @@ macro_rules! for_each_ingest_store_rule {
             // --- A call is held to its tags-per-batch ceiling (VT-36, SY-18) -
             ingest_holds_the_call_to_its_tags_per_batch_ceiling,
 
+            // --- A call is held to its events-per-call ceiling (VT-24) ------
+            ingest_holds_the_call_to_its_events_per_batch_ceiling,
+
+            // --- A reader never sees the loser unresolved (SY-2) -------------
+            the_losing_event_is_never_read_unresolved,
+
             // --- Only the assigned adjudicator compensates (SY-7) ------------
             only_the_adjudicator_compensates,
 
@@ -1766,6 +2014,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- A pulled batch at VT-24's floor lands in one call (SY-14) --
             bulk_ingest_is_idempotent_in_bounded_round_trips,
+
+            // --- A removed event is not taken back (SY-40) -----------------
+            a_removed_event_is_not_readmitted,
         }
     };
 }
@@ -1898,14 +2149,17 @@ fn no_orphan_ingest_rules() {
 mod tests {
     use core::future::Future;
 
-    use happenstance_testkit::{RuleOutcome, block_on};
+    use happenstance_testkit::{Capability, RuleOutcome, block_on};
 
     use super::{
-        MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_PER_EVENT_LIMITS,
-        NO_PER_EVENT_LIMITS_REASON, NO_TAGS_PER_BATCH_LIMIT, NO_TAGS_PER_BATCH_LIMIT_REASON,
-        ingest_rules,
+        MAX_PROVOKED_TAGS, MAX_PROVOKED_TAGS_PER_BATCH, NO_EVENTS_PER_BATCH_LIMIT,
+        NO_EVENTS_PER_BATCH_LIMIT_REASON, NO_PER_EVENT_LIMITS, NO_PER_EVENT_LIMITS_REASON,
+        NO_TAGS_PER_BATCH_LIMIT, NO_TAGS_PER_BATCH_LIMIT_REASON,
+        TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON, ingest_rules,
     };
-    use crate::{IngestFixture, MemoryIngestFixture, MemoryIngestHandle};
+    use crate::{
+        IngestFixture, MAX_PROVOKED_BATCH_EVENTS, MemoryIngestFixture, MemoryIngestHandle,
+    };
 
     /// The oracle, declaring a tag ceiling at the rule's cap and nothing else.
     struct TagsAtTheCap(MemoryIngestFixture);
@@ -2021,6 +2275,52 @@ mod tests {
         );
     }
 
+    /// The oracle with removal declined in its own words.
+    struct DeclinesRemoval(MemoryIngestFixture);
+
+    /// What [`DeclinesRemoval`] says.
+    const REMOVAL_DECLINED: &str = "a test fixture over the oracle that withholds its removal seam";
+
+    impl IngestFixture for DeclinesRemoval {
+        type Store = MemoryIngestHandle;
+        const REMOVAL: Capability = Capability::declined(REMOVAL_DECLINED);
+
+        fn connect(&self) -> impl Future<Output = Self::Store> {
+            self.0.connect()
+        }
+    }
+
+    /// A fixture that declines removal has SY-40's rule reported as a skip
+    /// carrying its reason, not a pass and not a vanished test. The oracle's
+    /// store could remove, so a rule that ran would pass here instead.
+    #[test]
+    fn a_fixture_declining_removal_is_a_skip_with_its_reason() {
+        let outcome = block_on(ingest_rules::a_removed_event_is_not_readmitted(
+            async || DeclinesRemoval(MemoryIngestFixture::new()),
+        ));
+
+        assert_eq!(
+            outcome.map_err(|violation| violation.clause()),
+            Ok(RuleOutcome::Skipped {
+                capability: "REMOVAL",
+                reason: REMOVAL_DECLINED,
+            })
+        );
+    }
+
+    /// The oracle granting removal runs SY-40's rule rather than skipping it.
+    #[test]
+    fn the_oracle_runs_the_removal_rule() {
+        let outcome = block_on(ingest_rules::a_removed_event_is_not_readmitted(
+            async || MemoryIngestFixture::new(),
+        ));
+
+        assert_eq!(
+            outcome.map_err(|violation| violation.clause()),
+            Ok(RuleOutcome::Ran)
+        );
+    }
+
     /// `usize::MAX` has no total past it, and is held to its declaration
     /// although it is far past the cap.
     #[test]
@@ -2034,5 +2334,143 @@ mod tests {
         let violation = outcome.expect_err("usize::MAX is not a ceiling");
         assert_eq!(violation.clause(), "VT-36");
         assert!(violation.message().contains("usize::MAX"), "{violation}");
+    }
+
+    /// The events-per-call skip, as the rule reports it.
+    const LENGTH_SKIP: RuleOutcome = RuleOutcome::Skipped {
+        capability: NO_EVENTS_PER_BATCH_LIMIT,
+        reason: NO_EVENTS_PER_BATCH_LIMIT_REASON,
+    };
+
+    /// The oracle, declaring an events-per-call ceiling of `EVENTS` and
+    /// nothing else. The oracle enforces none, so an exercised ceiling fails.
+    struct Length<const EVENTS: usize>(MemoryIngestFixture);
+
+    impl<const EVENTS: usize> IngestFixture for Length<EVENTS> {
+        type Store = MemoryIngestHandle;
+        const MAX_EVENTS_PER_BATCH: Option<usize> = Some(EVENTS);
+
+        fn connect(&self) -> impl Future<Output = Self::Store> {
+            self.0.connect()
+        }
+    }
+
+    /// A fixture that declares no events-per-call ceiling is a skip, not a
+    /// pass: the oracle enforces none, so a rule that ran would fail here.
+    #[test]
+    fn a_fixture_declaring_no_events_per_batch_ceiling_is_a_skip() {
+        let outcome = block_on(
+            ingest_rules::ingest_holds_the_call_to_its_events_per_batch_ceiling(async || {
+                MemoryIngestFixture::new()
+            }),
+        );
+
+        assert_eq!(
+            outcome.map_err(|violation| violation.clause()),
+            Ok(LENGTH_SKIP)
+        );
+    }
+
+    /// A ceiling the rule would have to allocate past its cap to exceed is
+    /// not exercised (H-13), and is reported as a skip.
+    #[test]
+    fn an_events_per_batch_ceiling_at_the_cap_is_not_exercised() {
+        let outcome = block_on(
+            ingest_rules::ingest_holds_the_call_to_its_events_per_batch_ceiling(async || {
+                Length::<MAX_PROVOKED_BATCH_EVENTS>(MemoryIngestFixture::new())
+            }),
+        );
+
+        assert_eq!(
+            outcome.map_err(|violation| violation.clause()),
+            Ok(LENGTH_SKIP)
+        );
+    }
+
+    /// An exercised ceiling the store does not enforce fails under VT-24:
+    /// the oracle lands the over-ceiling call.
+    #[test]
+    fn an_unenforced_events_per_batch_ceiling_is_a_violation() {
+        let outcome = block_on(
+            ingest_rules::ingest_holds_the_call_to_its_events_per_batch_ceiling(async || {
+                Length::<128>(MemoryIngestFixture::new())
+            }),
+        );
+
+        let violation = outcome.expect_err("the oracle enforces no events-per-call ceiling");
+        assert_eq!(violation.clause(), "VT-24");
+        assert!(violation.message().contains("accepted"), "{violation}");
+    }
+
+    /// A ceiling too small to hold the control's two groups and its two
+    /// compensation events is a violation before anything is written: it is
+    /// far under VT-24's floor, and the rule cannot locate it.
+    #[test]
+    fn an_events_per_batch_ceiling_under_four_is_a_violation() {
+        let outcome = block_on(
+            ingest_rules::ingest_holds_the_call_to_its_events_per_batch_ceiling(async || {
+                Length::<3>(MemoryIngestFixture::new())
+            }),
+        );
+
+        let violation = outcome.expect_err("a ceiling of 3 events cannot be located");
+        assert_eq!(violation.clause(), "VT-24");
+        assert!(violation.message().contains("of 3 events"), "{violation}");
+    }
+
+    /// The oracle, declaring 64 tags per call, 8 per event and `EVENTS`
+    /// events per call.
+    struct TagsUnderLength<const EVENTS: usize>(MemoryIngestFixture);
+
+    impl<const EVENTS: usize> IngestFixture for TagsUnderLength<EVENTS> {
+        type Store = MemoryIngestHandle;
+        const MAX_TAGS_PER_EVENT: Option<usize> = Some(8);
+        const MAX_TAGS_PER_BATCH: Option<usize> = Some(64);
+        const MAX_EVENTS_PER_BATCH: Option<usize> = Some(EVENTS);
+
+        fn connect(&self) -> impl Future<Output = Self::Store> {
+            self.0.connect()
+        }
+    }
+
+    /// VT-36's reachable half: 65 tags at most 8 to an event need 9 events,
+    /// past a ceiling of 7, so the tags ceiling cannot be crossed on its own.
+    /// A violation before anything is written; the oracle would otherwise
+    /// land the over call and fail the rule for a different reason.
+    #[test]
+    fn an_unreachable_tags_per_batch_ceiling_is_a_violation() {
+        let outcome = block_on(
+            ingest_rules::ingest_holds_the_call_to_its_tags_per_batch_ceiling(async || {
+                TagsUnderLength::<7>(MemoryIngestFixture::new())
+            }),
+        );
+
+        let violation = outcome.expect_err("65 tags do not fit in 7 events of 8");
+        assert_eq!(violation.clause(), "VT-36");
+        assert!(
+            violation.message().contains("ceiling of 7 events"),
+            "{violation}"
+        );
+    }
+
+    /// Reachable, since 65 tags fit in 9 events of 8, but the rule's calls,
+    /// one tag under the per-event ceiling and two compensation events, need
+    /// more than 9: a skip with its own reason, not a violation of a coherent
+    /// store and not a refusal under the wrong limit.
+    #[test]
+    fn a_reachable_tags_ceiling_the_rule_cannot_spread_under_is_a_skip() {
+        let outcome = block_on(
+            ingest_rules::ingest_holds_the_call_to_its_tags_per_batch_ceiling(async || {
+                TagsUnderLength::<9>(MemoryIngestFixture::new())
+            }),
+        );
+
+        assert_eq!(
+            outcome.map_err(|violation| violation.clause()),
+            Ok(RuleOutcome::Skipped {
+                capability: NO_TAGS_PER_BATCH_LIMIT,
+                reason: TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON,
+            })
+        );
     }
 }

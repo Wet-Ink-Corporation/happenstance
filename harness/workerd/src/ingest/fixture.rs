@@ -16,8 +16,9 @@ use happenstance_cloudflare::{
     CloudflareEventStore, CloudflareEventStoreError, CloudflareIngestStore, SqlStorage, SqlValue,
     TableNamespace,
 };
+use happenstance_core::SequencePosition;
 use happenstance_sync_testkit::{IngestFixture, Violation};
-use happenstance_testkit::{Capability, Fixture};
+use happenstance_testkit::{Capability, Fixture, Removed};
 
 use crate::fixture::WorkerdFixture;
 
@@ -89,6 +90,21 @@ impl WorkerdIngestFixture {
         }
         Ok(())
     }
+
+    /// [`IngestFixture::remove_outside_port`]'s body, as a `Result`: every
+    /// [`removal_statements`] statement run in order, stopping at the first
+    /// refusal, whose text names the statement and the storage's error.
+    fn remove(&self, positions: &[SequencePosition]) -> Result<(), String> {
+        let what = "removing outside the port";
+        let statements = removal_statements(&self.namespace, positions)
+            .ok_or_else(|| format!("{what}: a position does not fit SQLite's i64"))?;
+        for (statement, bindings) in &statements {
+            self.sql
+                .exec(statement, bindings)
+                .map_err(|error| format!("{what}: {statement}: {error}"))?;
+        }
+        Ok(())
+    }
 }
 
 /// Why [`WorkerdIngestFixture::open`] could not build a fixture.
@@ -149,6 +165,14 @@ impl IngestFixture for WorkerdIngestFixture {
     // through `ingest` on the real object: ADR-0100's falsifier on this path.
     const MAX_TAGS_PER_BATCH: Option<usize> =
         <WorkerdFixture<'static> as Fixture>::MAX_TAGS_PER_BATCH;
+    // The per-call length, so VT-24's ingest rule runs through `ingest` on the
+    // real object, and VT-36's checks its ceiling is reachable under it.
+    const MAX_EVENTS_PER_BATCH: Option<usize> =
+        <WorkerdFixture<'static> as Fixture>::MAX_EVENTS_PER_BATCH;
+    // The event-store fixture's answer, for its reason: here the removal
+    // reaches a real object's SQLite, so SY-40's rule runs against the record's
+    // trigger firing inside `workerd` rather than inside the shim's model.
+    const REMOVAL: Capability = Capability::SUPPORTED;
 
     /// A handle onto the one store `open` built: `Clone` is two `Rc` bumps.
     fn connect(&self) -> impl Future<Output = Self::Store> {
@@ -164,6 +188,67 @@ impl IngestFixture for WorkerdIngestFixture {
     fn arm_mid_group_fault(&self, after: usize) -> impl Future<Output = Result<(), Violation>> {
         core::future::ready(self.arm(after))
     }
+
+    /// Runs [`removal_statements`] through the object's own SQL, outside every
+    /// port: a retention job's `DELETE`, which the record's trigger hears.
+    ///
+    /// `Deleted` only if every statement ran. Otherwise `Nothing`, which SY-40's
+    /// rule fails on before it reads anything back; this crate may not panic,
+    /// so nothing here does.
+    ///
+    /// `Removed` carries no reason, so the refusal is logged to the object's
+    /// console, naming the statement and the `SqlError`, before `Nothing` is
+    /// answered: the rule's failure then has its cause beside it in the log.
+    fn remove_outside_port(&self, positions: &[SequencePosition]) -> impl Future<Output = Removed> {
+        core::future::ready(match self.remove(positions) {
+            Ok(()) => Removed::Deleted,
+            Err(fault) => {
+                worker::console_error!("{fault}");
+                Removed::Nothing
+            }
+        })
+    }
+}
+
+/// The statements that delete the events at `positions` from `namespace`'s
+/// log: per distinct position, its tag rows and then its event row, because
+/// `event_tag.position REFERENCES event(position)`. The shape
+/// [`WorkerdFixture`]'s own `remove_outside_port` issues.
+///
+/// `store_meta` and `sqlite_sequence` are not touched, so this is a removal
+/// from the same store (ES-38), not `delete_all()`'s new one (VT-6).
+///
+/// `None` if a position does not fit the `i64` SQLite binds, which no
+/// position the store assigned can be.
+#[must_use]
+pub fn removal_statements(
+    namespace: &TableNamespace,
+    positions: &[SequencePosition],
+) -> Option<Vec<(String, Vec<SqlValue>)>> {
+    let mut distinct = positions
+        .iter()
+        .map(|position| i64::try_from(position.get()).ok())
+        .collect::<Option<Vec<_>>>()?;
+    distinct.sort_unstable();
+    distinct.dedup();
+    let ns = namespace.as_str();
+    Some(
+        distinct
+            .into_iter()
+            .flat_map(|position| {
+                [
+                    (
+                        format!("DELETE FROM {ns}_event_tag WHERE position = ?"),
+                        vec![SqlValue::Integer(position)],
+                    ),
+                    (
+                        format!("DELETE FROM {ns}_event WHERE position = ?"),
+                        vec![SqlValue::Integer(position)],
+                    ),
+                ]
+            })
+            .collect(),
+    )
 }
 
 /// The four statements that arm the mid-group fault on `namespace`'s own event

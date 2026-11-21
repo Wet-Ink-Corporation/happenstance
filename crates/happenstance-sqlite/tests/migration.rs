@@ -180,6 +180,10 @@ fn query_plan(connection: &Connection, sql: &str, params: &[&dyn rusqlite::ToSql
 
 /// AC-001 — migration 1 creates the schema ADR-0022 amended, and the amendment
 /// is visible in the *plan* rather than only in the DDL text.
+///
+/// The public open path now goes on to migration 3, which adds two objects.
+/// The five-object set at version 2 is asserted by
+/// `src/event_store/write_group/tests/version_2.rs::version_2_creates_the_amended_schema`.
 #[test]
 fn migration_creates_the_amended_schema() {
     let db = TempDb::new("amended-schema");
@@ -192,14 +196,16 @@ fn migration_creates_the_amended_schema() {
     let expected: BTreeSet<(String, String)> = [
         ("index", "event_type_idx"),
         ("table", "event"),
+        ("table", "event_removed"),
         ("table", "event_tag"),
         ("table", "store_meta"),
         ("table", "tag_cardinality"),
+        ("trigger", "event_record_removal"),
     ]
     .into_iter()
     .map(|(kind, name)| (kind.to_owned(), name.to_owned()))
     .collect();
-    assert_eq!(objects, expected, "sqlite_master after migration 1");
+    assert_eq!(objects, expected, "sqlite_master after migration 3");
 
     assert_event_table(&connection);
     assert_origin_pair_is_one_unique(&connection);
@@ -376,6 +382,10 @@ fn second_open_of_a_migrated_file_changes_nothing() {
 /// that never actually overlap prove nothing. The assertion is a *set* property
 /// — one distinct `StoreId` — which holds at any N above one and does not pin a
 /// literal that would collide with the live 8-versus-64 contender question.
+///
+/// The object count is version 3's, seven. Version 2's five, under the same
+/// eight-way race, is asserted by
+/// `src/event_store/write_group/tests/version_2.rs::concurrent_version_2_migrations_agree_on_one_store_id`.
 #[test]
 fn concurrent_opens_of_a_fresh_file_agree_on_one_store_id() {
     let db = TempDb::new("concurrent-open");
@@ -415,7 +425,7 @@ fn concurrent_opens_of_a_fresh_file_agree_on_one_store_id() {
         )
         .unwrap();
     assert_eq!(identity_rows, 1);
-    assert_eq!(schema_objects(&connection).len(), 5);
+    assert_eq!(schema_objects(&connection).len(), 7);
 }
 
 /// AC-004 — the incarnation is persisted, not re-minted, and is stored in a form
@@ -744,7 +754,11 @@ fn documented_objects(source: &str) -> BTreeSet<(String, String)> {
 
     let mut out = BTreeSet::new();
     let upper = block.to_uppercase();
-    for (keyword, kind) in [("CREATE TABLE ", "table"), ("CREATE INDEX ", "index")] {
+    for (keyword, kind) in [
+        ("CREATE TABLE ", "table"),
+        ("CREATE INDEX ", "index"),
+        ("CREATE TRIGGER ", "trigger"),
+    ] {
         let mut cursor = 0;
         while let Some(offset) = upper[cursor..].find(keyword) {
             let start = cursor + offset + keyword.len();
@@ -834,6 +848,11 @@ fn marker(path: &Path) -> i64 {
 /// A second open is the half that fails if the `ALTER` is not gated on the
 /// marker: `ADD COLUMN` has no `IF NOT EXISTS`, so running it again refuses
 /// with a duplicate column.
+///
+/// The public open goes on to migration 3, so the marker it leaves is 3. The
+/// marker at 2 and `WRITE_GROUP_SCHEMA_VERSION == 2`, with the columns and the
+/// legacy row, are asserted against a real version-2 file by
+/// `src/event_store/write_group/tests/version_2.rs::migration_2_adds_write_groups_to_a_version_1_file`.
 #[test]
 fn migration_2_adds_write_groups_to_a_version_1_file() {
     let db = TempDb::new("migration-2");
@@ -858,8 +877,8 @@ fn migration_2_adds_write_groups_to_a_version_1_file() {
             && names.iter().any(|name| name == "group_guard"),
         "migration 2 did not add the write-group columns; got {names:?}"
     );
-    assert_eq!(marker(db.path()), 2, "the marker was not raised to 2");
-    assert_eq!(SCHEMA_VERSION, 2);
+    assert_eq!(marker(db.path()), 3, "the marker was not raised to 3");
+    assert_eq!(SCHEMA_VERSION, 3);
     let legacy: (i64, Option<i64>) = raw(db.path())
         .query_row(
             "SELECT count(*), max(write_group) FROM event WHERE event_type = 'Legacy'",
@@ -881,6 +900,12 @@ fn migration_2_adds_write_groups_to_a_version_1_file() {
 ///
 /// The wrong implementation it rejects is the check `new` had: only
 /// `version > SCHEMA_VERSION`, which accepts every older file.
+///
+/// `open_on` now migrates to 3. The marker at 2 after migrating the version-1
+/// file is asserted by
+/// `src/event_store/write_group/tests/version_2.rs::migrating_a_version_1_file_leaves_it_at_2`;
+/// `new` accepting the migrated file stays here, at 3, because this build's
+/// `new` accepts no version-2 file.
 #[test]
 fn new_refuses_a_version_1_file_until_it_is_migrated() {
     let db = TempDb::new("new-v1");
@@ -904,18 +929,22 @@ fn new_refuses_a_version_1_file_until_it_is_migrated() {
     let migrated = SqliteEventStore::open_on(raw(db.path()))
         .expect("`open_on` migrates the file `new` refused");
     drop(migrated);
-    assert_eq!(marker(db.path()), 2);
+    assert_eq!(marker(db.path()), 3);
     SqliteEventStore::new(raw(db.path())).expect("`new` accepts the migrated file");
 }
 
-/// #420 — a fresh file takes the same path as an old one and lands at 2.
+/// #420 — a fresh file takes the same path as an old one and lands at the
+/// current version, 3, with the write-group column. Named
+/// `a_fresh_file_is_created_at_version_2_with_write_groups` until migration 3;
+/// that version-2 assertion is now
+/// `src/event_store/write_group/tests/version_2.rs::a_fresh_file_is_created_at_version_2_with_write_groups`.
 #[test]
-fn a_fresh_file_is_created_at_version_2_with_write_groups() {
+fn a_fresh_file_is_created_at_version_3_with_write_groups() {
     let db = TempDb::new("fresh-v2");
     let store = SqliteEventStore::open(db.path()).unwrap();
     drop(store);
 
-    assert_eq!(marker(db.path()), 2);
+    assert_eq!(marker(db.path()), 3);
     let names: Vec<String> = columns(&raw(db.path()), "event")
         .into_iter()
         .map(|(name, _)| name)
@@ -1031,4 +1060,151 @@ fn a_rowid_table_without_autoincrement_hands_out_the_deleted_tails_position() {
             );
         }
     }
+}
+
+/// A file as a version-2 build left it: [`version_1_file`] with migration 2
+/// applied by hand and the marker at 2, the legacy row still in it.
+///
+/// Written out for [`version_1_file`]'s reason: no build of the crate under
+/// test leaves a file at 2 any more, and migration 2 as published at `0.7.0`
+/// is frozen.
+fn version_2_file(path: &Path) {
+    version_1_file(path);
+    raw(path)
+        .execute_batch(
+            "ALTER TABLE event ADD COLUMN write_group INTEGER;
+             ALTER TABLE event ADD COLUMN group_guard BLOB;
+             UPDATE store_meta SET v = 2 WHERE k = 'schema_version';",
+        )
+        .unwrap();
+}
+
+/// Whether `sqlite_master` holds an object of `kind` called `name`.
+fn has_object(path: &Path, kind: &str, name: &str) -> bool {
+    schema_objects(&raw(path)).contains(&(kind.to_owned(), name.to_owned()))
+}
+
+/// The removal record's rows, `(origin_store, origin_position)`, in key order.
+fn removal_record(path: &Path) -> Vec<(Vec<u8>, i64)> {
+    let connection = raw(path);
+    let mut statement = connection
+        .prepare(
+            "SELECT origin_store, origin_position FROM event_removed \
+             ORDER BY origin_store, origin_position",
+        )
+        .unwrap();
+    let rows = statement
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap();
+    rows.map(Result::unwrap).collect()
+}
+
+/// #483, #484 — a fresh file lands at 3, with the removal record and the
+/// trigger that writes it (SY-40, ADR-0110).
+#[test]
+fn a_fresh_file_is_at_schema_version_three() {
+    let db = TempDb::new("fresh-v3");
+    let store = SqliteEventStore::open(db.path()).unwrap();
+    drop(store);
+
+    assert_eq!(SCHEMA_VERSION, 3);
+    assert_eq!(marker(db.path()), 3, "a fresh file is not at version 3");
+    assert!(
+        has_object(db.path(), "table", "event_removed"),
+        "no removal record"
+    );
+    assert!(
+        has_object(db.path(), "trigger", "event_record_removal"),
+        "no trigger writes the removal record"
+    );
+}
+
+/// #483, #484 — migration 3 adds the removal record to a version-2 file on
+/// open, raises the marker to 3 in the same transaction, and keeps every row.
+/// A second open changes nothing, and `new`, which never migrates, refuses
+/// the file until it is opened.
+///
+/// A row deleted before the migration is not recorded, because nothing was
+/// listening; a row deleted after it is, which the last assertion checks
+/// through a raw connection, as an operator's `DELETE` would arrive.
+#[test]
+fn a_version_two_file_migrates_to_three_on_open_and_keeps_its_rows() {
+    let db = TempDb::new("migration-3");
+    version_2_file(db.path());
+
+    let refused = SqliteEventStore::new(raw(db.path()))
+        .expect_err("`new` must refuse a file migration 3 has not reached");
+    assert!(
+        matches!(
+            refused,
+            SqliteEventStoreError::SchemaNeedsMigration {
+                found: 2,
+                required: SCHEMA_VERSION,
+                ..
+            }
+        ),
+        "expected SchemaNeedsMigration {{ found: 2, .. }}, got {refused:?}"
+    );
+
+    let store = SqliteEventStore::open(db.path()).unwrap();
+    drop(store);
+    let reopened =
+        SqliteEventStore::open(db.path()).expect("a second open of the migrated file must succeed");
+    assert_eq!(
+        reopened.store_id().to_bytes()[0],
+        0x01,
+        "the identity survives"
+    );
+    drop(reopened);
+
+    assert_eq!(marker(db.path()), 3, "the marker was not raised to 3");
+    assert_eq!(rows(db.path()), 1, "the legacy row did not survive");
+    assert!(has_object(db.path(), "table", "event_removed"));
+    assert!(has_object(db.path(), "trigger", "event_record_removal"));
+    assert_eq!(removal_record(db.path()), Vec::new(), "nothing was removed");
+
+    raw(db.path())
+        .execute("DELETE FROM event WHERE event_type = 'Legacy'", [])
+        .unwrap();
+    assert_eq!(
+        removal_record(db.path()),
+        vec![(
+            vec![
+                0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x01, 0x23, 0x45, 0x67, 0x89, 0xAB,
+                0xCD, 0xEF
+            ],
+            1
+        )],
+        "the migrated file's trigger did not record the legacy row's identity"
+    );
+}
+
+/// D-3 — a build refuses a file a newer build has opened, which is what keeps
+/// a build that predates the removal record off a version-3 file: it would
+/// delete without recording and ingest without consulting the record.
+///
+/// Green from the start, as the mechanism predates migration 3; it pins the
+/// direction of the comparison, because the refusal is the whole upgrade
+/// story the CHANGELOG tells.
+#[test]
+fn a_file_a_newer_build_opened_is_refused() {
+    let db = TempDb::new("newer-build");
+    drop(SqliteEventStore::open(db.path()).unwrap());
+    raw(db.path())
+        .execute(
+            "UPDATE store_meta SET v = ? WHERE k = 'schema_version'",
+            [SCHEMA_VERSION + 1],
+        )
+        .unwrap();
+
+    let refused =
+        SqliteEventStore::open(db.path()).expect_err("a file from a newer build must be refused");
+    assert!(
+        matches!(
+            refused,
+            SqliteEventStoreError::UnsupportedSchemaVersion { found, supported }
+                if found == SCHEMA_VERSION + 1 && supported == SCHEMA_VERSION
+        ),
+        "got {refused:?}"
+    );
 }

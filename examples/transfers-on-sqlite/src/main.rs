@@ -66,7 +66,7 @@ use happenstance::bytes::Bytes;
 use happenstance::{
     Boundary, Chunk, Codec, CodecError, CommandError, DecisionModel, Delivered, DomainEvent,
     EventStore, EventType, InvalidTag, Json, Projection, ProjectionId, Query, ReadOptions, Retry,
-    Tag, Tags, collect, commit, read_decision_model, run_projection,
+    Source, Tag, Tags, collect, commit, read_decision_model, run_projection,
 };
 use happenstance_sqlite::connection::open_configured;
 use happenstance_sqlite::event_store::{SqliteEventStore, SqliteEventStoreError};
@@ -152,7 +152,14 @@ async fn before_the_reopen(path: &Path) -> Result<()> {
     println!("\n== projecting balances into the same file ==");
     let mut balances = Balances::new();
     let chunk = Chunk::of(CHUNK.try_into()?);
-    let done = run_projection(&events, &models, &mut balances, &Json, chunk).await?;
+    let done = run_projection(
+        Source::new(&events, events.store_id()),
+        &models,
+        &mut balances,
+        &Json,
+        chunk,
+    )
+    .await?;
     println!("   applied {} event(s)", done.applied);
     print_read_model(&app)?;
 
@@ -181,7 +188,14 @@ async fn after_the_reopen(path: &Path) -> Result<()> {
     println!("\n== the checkpoint survived too ==");
     let mut balances = Balances::new();
     let chunk = Chunk::of(CHUNK.try_into()?);
-    let done = run_projection(&events, &models, &mut balances, &Json, chunk).await?;
+    let done = run_projection(
+        Source::new(&events, events.store_id()),
+        &models,
+        &mut balances,
+        &Json,
+        chunk,
+    )
+    .await?;
     println!(
         "   re-running the projection applied {} event(s) — the log is not replayed",
         done.applied
@@ -189,7 +203,14 @@ async fn after_the_reopen(path: &Path) -> Result<()> {
 
     println!("\n== the reopened store is live, not merely readable ==");
     transfer(&events, "a2", "a1", 15).await?;
-    let done = run_projection(&events, &models, &mut balances, &Json, chunk).await?;
+    let done = run_projection(
+        Source::new(&events, events.store_id()),
+        &models,
+        &mut balances,
+        &Json,
+        chunk,
+    )
+    .await?;
     println!(
         "   transferred 15 back, and the projection applied {} event(s)",
         done.applied

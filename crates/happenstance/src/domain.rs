@@ -102,7 +102,7 @@ pub trait DomainEvent: Sized {
     /// still welcome — and `.collect()` through the infallible
     /// `FromIterator<Tag> for Tags`. Both worked examples in the repository
     /// do exactly that, and
-    /// [carry your invariant](https://github.com/Wet-Ink-Corporation/happenstance/blob/main/docs/carry-your-invariant.md) walks it.
+    /// [carry your invariant](https://wet-ink-corporation.github.io/happenstance/guide/carry-your-invariant/) walks it.
     ///
     /// Whether this signature should itself be fallible is open and is not
     /// this page's to answer.

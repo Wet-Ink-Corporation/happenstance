@@ -34,6 +34,7 @@ stopped working would fail the build before it reached a reader.
 | Moving your code from 0.3 to 0.4 | [`upgrading-to-0-4.md`](upgrading-to-0-4.md) |
 | Moving your code from 0.4 to 0.5 | [`upgrading-to-0-5.md`](upgrading-to-0-5.md) |
 | Moving your code from 0.5 to 0.6 | [`upgrading-to-0-6.md`](upgrading-to-0-6.md) |
+| Moving your code from 0.7 to 0.8 | [`upgrading-to-0-8.md`](upgrading-to-0-8.md) |
 | Fences the compiler never sees (a fixture for the build, not a guide page) | [`text-fences.md`](text-fences.md) |
 
 ## For contributors

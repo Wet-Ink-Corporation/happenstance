@@ -80,6 +80,22 @@ changes, so does the id, and the next run starts from the beginning. A
 projection that starts reading a new event type therefore sees every older
 event of that type.
 
+The same holds for a projection that follows several tag sets through
+`Projection::scopes`, such as every case one owner holds
+([PS-41](../spec/SPECIFICATION.md#47-checkpoint-semantics)). Adding or
+dropping a scope is a query change, so the view replays from the beginning,
+and the new scope's history is applied. Reordering the scopes, or naming one
+twice, is not. If the set changes often, one projection per scope replays
+less.
+
+The replay does not clear the view. Every scope still followed is applied
+again, onto the rows already built under the old id, and a dropped scope's
+rows stay where they are. So before the first run under the new set, do one
+of three things. You can clear the view's rows in the same batch that resets
+the new checkpoint id, as `source_checkpoint_id`'s example does. You can build
+the view under a new name. Or you can write an `apply` that gives the same
+result when it sees an event twice.
+
 Nothing notices when what a projection *does* with its events has changed,
 though. A changed fold over an unchanged query resumes from its old checkpoint,
 so choosing a new name, or resetting the view, is up to you.
@@ -117,6 +133,23 @@ view the runner maintains is protected only under `checkpoint_id(&projection)`.
 Protecting `projection.id()` marks a name the runner never writes, and the
 reset you meant to refuse goes through
 ([PS-18](../spec/SPECIFICATION.md#46-reset)).
+
+### Re-pointing a view at another store
+
+A view's checkpoint is pinned to the event store it was built from. The first
+run records that store's identity under a second id,
+`source_checkpoint_id(&projection)`, and a later run handed a different store
+stops with `ProjectionError::SourceChanged` before it reads or applies anything
+([PS-40](../spec/SPECIFICATION.md#47-checkpoint-semantics)). Positions belong to
+one store, so resuming another store's log from this checkpoint would skip some
+of its events and apply others twice.
+
+A reset of the main id alone, against the same store, needs nothing more. To
+point a view at a different store, reset both ids: the main one with the view's
+deletes, so it rebuilds, and the pin, so the next run records the new store. If
+the event store and the projection store were restored together and only the
+store's identity was re-minted, the rows are still right for that log, and
+resetting the pin alone is enough: the next run adopts the store it reads.
 
 ### Reset, not a commit at the first position
 
@@ -206,7 +239,7 @@ async fn main() -> Result<(), Failure> {
 
     // A view that has caught up with the log.
     let views = MemoryProjectionStore::new();
-    run_projection(&log, &views, &mut orders, &Json, chunk).await?;
+    run_projection((&log).into(), &views, &mut orders, &Json, chunk).await?;
     assert_eq!(views.len(), 3);
 
     // The reset: your deletes and the checkpoint, as one unit.
@@ -217,7 +250,7 @@ async fn main() -> Result<(), Failure> {
     assert_eq!(views.checkpoint(&key).await?, Checkpoint::NeverRun);
 
     // The replay applies every event again, the first one included.
-    let replayed = run_projection(&log, &views, &mut orders, &Json, chunk).await?;
+    let replayed = run_projection((&log).into(), &views, &mut orders, &Json, chunk).await?;
     assert_eq!(replayed.applied, 3);
     assert_eq!(views.get("o-1"), Some(1));
 
@@ -232,7 +265,7 @@ async fn main() -> Result<(), Failure> {
     // The count below assumes the log starts at the first position.
     let start = log.snapshot().first().ok_or("the log is empty")?.position;
     assert_eq!(start, first);
-    let resumed = run_projection(&log, &shortcut, &mut orders, &Json, chunk).await?;
+    let resumed = run_projection((&log).into(), &shortcut, &mut orders, &Json, chunk).await?;
     assert_eq!(resumed.applied, 2);
     assert_eq!(shortcut.get("o-1"), None, "the first event is lost");
     Ok(())

@@ -11,7 +11,7 @@ with programs you can run.
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant, and in the `0.7.0` release set.** This is the first
+> **Status: conformant, and in the `0.8.0` release set.** This is the first
 > happenstance adapter to pass
 > [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit)'s
 > conformance suite against a real file on disk — the event store family, the
@@ -35,9 +35,9 @@ with programs you can run.
 ## Features, and the one that costs you a promise
 
 ```toml
-happenstance-sqlite = "0.7"                                # the event store
-happenstance-sqlite = { version = "0.7", features = ["projection-store"] }
-happenstance-sqlite = { version = "0.7", features = ["sync"] }   # + the ingest port
+happenstance-sqlite = "0.8"                                # the event store
+happenstance-sqlite = { version = "0.8", features = ["projection-store"] }
+happenstance-sqlite = { version = "0.8", features = ["sync"] }   # + the ingest port
 
 rusqlite = "0.41"                                          # only for tables of your own
 ```
@@ -106,6 +106,23 @@ once through `open_on` first. A build older than this one refuses a file this
 one has opened, so upgrade every process that opens a store before any of them
 opens it. Rows written before the migration read back as groups of one.
 
+**Schema version 3.** The same three constructors apply migration 3 on open:
+a table, `event_removed`, and an `AFTER DELETE` trigger on `event` that
+records the origin identity of every row deleted from the file, by this crate
+or by any other client (`sqlite3`, a retention script). Ingest skips an event
+whose identity is recorded there and counts it in `Ingested::skipped`, so a
+pruned replica that re-pulls, or is re-pushed, what it pruned neither takes the
+events back nor refuses its own as `UnheldOwnIdentity` (SY-40, #483, #484).
+`new` refuses a file still at 2 with `SchemaNeedsMigration`, and a build older
+than this one refuses a file at 3, so upgrade every process that opens a store
+before any of them opens it. Rows deleted before the migration are not
+recorded; to record one by hand, run `INSERT INTO event_removed (origin_store,
+origin_position) VALUES (X'<origin store id, 16 bytes>', <origin position>)`.
+The record grows by one small row per removed event and is kept for ever:
+deleting a row of it lets that identity be ingested again, so do that only once
+no peer can offer the event. A restore from a copy of the file rolls the record
+back with the log.
+
 ## The shape it represents
 
 **Serialising, `Send`, native.** One `rusqlite::Connection` behind one `Mutex`,
@@ -156,6 +173,23 @@ A caller that must keep its own settings, for example a file kept in
 connection itself and hands it to `SqliteEventStore::open_on`, and re-mints with
 `SqliteEventStore::remint_identity_on`. Neither sets a pragma, so this table then
 describes nothing: the durability and contention trade-offs are the caller's.
+
+## What its conformance fixtures decline
+
+A rule whose capability a fixture declines still runs, and reports the fixture's stated
+reason as a `SKIP` line rather than vanishing from the binary (CF-18). A default
+`cargo test` does not show that line; `--show-output` does. So the declines are listed
+here, where a reader choosing this adapter will see them. Every capability the table does
+not name is supported.
+
+| Fixture | Capability | Why it is declined |
+| --- | --- | --- |
+| `SqliteFixture` | `MID_BATCH_FAULT` | By scope, not by incapacity. The injection exists, an `AFTER INSERT` trigger exercised by `tests/append.rs`, and is not armed from the fixture, so that ES-35's fault falsifier is not retired as a side effect. Atomicity under a fault is still checked by that test |
+| `SqliteFixture` | `READ_FAULT` | By incapacity. A read is one `rusqlite` statement held open over a local file, so there is no fetch between two pages to fail |
+| `SqliteFixture` | `HELD_ABOVE_FRONTIER` | By the testkit's default, which is true here: a row is visible from the moment it commits, so nothing is ever held above a frontier |
+
+The projection fixture, `SqliteProjectionFixture`, declines nothing. The reasons in full are
+on the constants in `tests/support/mod.rs`.
 
 ## Limits this store enforces
 

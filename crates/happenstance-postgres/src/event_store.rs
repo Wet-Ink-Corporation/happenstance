@@ -1486,6 +1486,11 @@ mod ingest;
 #[cfg(feature = "sync")]
 mod write_group;
 
+// The identity read with no feature (#485): what a typed view's `Source` is
+// built from. A child for `ingest`'s reason, and declared down here for the
+// line numbers above.
+mod identity;
+
 /// Binds per row in [`insert_statement`]: eight columns before migration 3,
 /// and `write_group`. Declared down here, after the tests, so the lines above
 /// keep the numbers the decision records cite them by. Read only by `ingest`'s

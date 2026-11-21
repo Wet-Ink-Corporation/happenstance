@@ -66,7 +66,7 @@ this decision addresses, is the surface consumers actually copy: all seven
 rendered doctests and all five `examples/` impls index by position, and eight
 copy-pasteable `decode` sites discard the type parameter. The tree already
 contains proven, compiling remedies for both — the named-const pattern above, and
-the membership-guarded `decode` at `crates/happenstance/tests/projection_runner.rs:75-86`.
+the membership-guarded `decode` at `crates/happenstance/tests/projection_runner.rs:76-87`.
 
 ## Decision
 

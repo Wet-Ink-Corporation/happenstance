@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 212 clause IDs, of which 205 are normative:
-**194 `[FROZEN]`**, **9 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
+As assembled, this document carries 215 clause IDs, of which 208 are normative:
+**195 `[FROZEN]`**, **11 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -872,7 +872,7 @@ facts are silently dropped** — the one failure mode in the replication design
 with no error path and no observable symptom.
 
 The distinction between a device and an incarnation is what E2E-CASES flags as
-unsettled (`E2E-CASES.md:1581-1586`) and it has a consequence the ledger row does
+unsettled (`E2E-CASES.md:1608-1613`) and it has a consequence the ledger row does
 not carry: the peer's stable, human-meaningful identity — "the Yorkshire hub",
 "tablet 88" — cannot be the `StoreId`, because that name must survive a restore
 and the `StoreId` must not. Peer naming therefore belongs to `happenstance-sync`
@@ -1038,7 +1038,7 @@ adapter is the instrument* — was run on that instrument and did not fire.
 `sync` feature since #108 part E) goes through the same private `write_batch` that
 `append` calls — one `INSERT` statement for a local row and a foreign one — and
 what is ingest-only is a transaction frame, a watermark query and the values a
-foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1593`). Neon,
+foreign row binds (`crates/happenstance-sqlite/src/event_store.rs:1615`). Neon,
 at the far end of the transport axis, builds a whole ingest batch as one
 statement from the builders its `append` uses; that half is structural and was
 not executed. So **the write path is the adapter's**, and `happenstance-core`
@@ -1645,7 +1645,7 @@ against **this clause's number rather than against a constant**, because
 `MIN_SUPPORTED_EVENT_DATA_LEN` does not exist until phase 4 introduces it;
 `append_reports_exceeded_store_limits`, which VT-25's variant and CF-40's fixture
 ceilings made writable at phase 4
-`Cases:` E2E-42; and Turnstile's peer D
+`Cases:` E2E-61, repointed under #100 from a mesh case these single-store rules never ran; and Turnstile's peer D
 (`references/scenarios/README.md:1549-1554`), which has no case number
 `Rejects:` a ceiling. A single `MAX_EVENT_DATA_LEN` is either a straitjacket on
 Postgres — which will happily hold Turnstile's 340 KB seat map — or a lie on the
@@ -1713,11 +1713,11 @@ and MUST refuse beyond it with `AppendError::ExceedsStoreLimit`. On the ingest p
 `[FROZEN]` — by [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md) at phase 13. Rule: `store_accepts_the_guaranteed_minimum_batch_size`, failing `BatchParameterCeilingStore` and `ChunkLosingBatchStore`, and `append_reports_exceeded_store_limits` for the refusal beyond a documented ceiling; on the ingest
 path, where the call is the batch, `bulk_ingest_is_idempotent_in_bounded_round_trips` (#139), whose `CapsTheCallBelowTheFloor` fails under this clause and no other. Sync ingest is the first consumer that batches by the floor: `PeerLimits::minimum` declares 128 events a push, `happenstance-neon`'s ingest ceiling is
 exactly 128 a call, and Rotor's 1,840 events are 46 groups of 40; no group above 128 surfaced. The refusal beyond a declared ingest ceiling is #379's, additive. Reopened by a domain whose smallest indivisible unit of work exceeds 128 events; Kestrel Cold Chain's largest single conditioned group is under forty.
-`Rule:` `store_accepts_the_guaranteed_minimum_batch_size`; and on the ingest path, where the call is the batch as VT-36 says of tags, `bulk_ingest_is_idempotent_in_bounded_round_trips` (`happenstance-sync-testkit`, #139), whose one call of 128 foreign events a store refusing it as over a capacity limit fails under this clause (`CapsTheCallBelowTheFloor`)
+`Rule:` `store_accepts_the_guaranteed_minimum_batch_size`; and on the ingest path, where the call is the batch as VT-36 says of tags, `bulk_ingest_is_idempotent_in_bounded_round_trips` (`happenstance-sync-testkit`, #139), whose one call of 128 foreign events a store refusing it as over a capacity limit fails under this clause (`CapsTheCallBelowTheFloor`); and `ingest_holds_the_call_to_its_events_per_batch_ceiling` (`happenstance-sync-testkit`, #379), which holds a declared `IngestFixture::MAX_EVENTS_PER_BATCH` to the whole call: exactly at it lands, and one over, across groups or in the compensation alone, is refused as `EventsPerBatch` with the call's length, nothing written
 `Cases:` E2E-35, E2E-36, E2E-39
 `Rejects:` an adapter that builds a multi-row `INSERT` with one parameter set per
 event and per tag and discovers `SQLITE_MAX_VARIABLE_NUMBER` at write time — that
-is, after the caller has already made its decision and taken its side effects.
+is, after the caller has already made its decision and taken its side effects. On the ingest path: a store that holds each group to its declared ceiling apart (`CountsEachGroupsLengthApart`), one that leaves the compensation out of the length (`LeavesCompensationOutOfTheLength`), one that refuses a call exactly at it (`RefusesAtTheLengthLimit`), and one that writes the call and then refuses it (`RefusesTheLengthAfterWriting`), all in `crates/happenstance-sync-testkit/tests/wrong_ingest_stores.rs`.
 Also rejects the `EventBatch` newtype as the enforcement point: it puts a
 constructor in front of every `append` call site in every application in order to
 enforce a bound that is adapter-specific, so the type would either carry the
@@ -1733,9 +1733,9 @@ its actual limit; until phase 8 no store in this workspace had one to document,
 and a MUST nothing can fail is a MUST nothing has met. `happenstance-sqlite`
 states all three as public constants — `MAX_EVENT_DATA_LEN` = 1,048,576 bytes,
 `MAX_TAGS_PER_EVENT` = 128 and `MAX_EVENTS_PER_BATCH` = 256
-(`crates/happenstance-sqlite/src/event_store.rs:342`, `:349`, `:358`) — enforces
-them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:767`,
-`:773`, `:760`), and mirrors them onto its fixture so
+(`crates/happenstance-sqlite/src/event_store.rs:365`, `:372`, `:381`) — enforces
+them as `AppendError::ExceedsStoreLimit` rather than by truncating (`:790`,
+`:796`, `:783`), and mirrors them onto its fixture so
 `append_reports_exceeded_store_limits` reads them rather than a literal. All
 three clear their floors with room, VT-23's 128-item floor is evaluated by the
 same adapter through chunked statements rather than refused, and each number is
@@ -1762,7 +1762,7 @@ ingest that splits on `TagsPerBatch`: `the_runner_splits_a_push_on_tags_per_batc
 Both green on the deployed leg of runs 43721323137 and 43746838635. Reopened by a store whose per-call wall is not a function of the tag count, so that no count says where it is;
 the instrument is happenstance-cloudflare, whose deployed wall moved between 524,288 and 1,040,384 tag rows in one call.
 `Rule:` `store_accepts_the_guaranteed_minimum_tags_per_batch`; unit tests `every_limit_names_its_floor` and
-`the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared ceiling to the whole ingest call: exactly at it lands, and one over, across groups or in the compensation alone, is refused as `TagsPerBatch`, `Split`, with nothing written
+`the_tags_per_batch_floor_is_two_floors`; `append_reports_exceeded_store_limits`; and `ingest_holds_the_call_to_its_tags_per_batch_ceiling` (`happenstance-sync-testkit`, #370), which holds a declared ceiling to the whole ingest call: exactly at it lands, and one over, across groups or in the compensation alone, is refused as `TagsPerBatch`, `Split`, with nothing written, and which, when the fixture also declares `MAX_EVENTS_PER_BATCH`, refuses an unreachable ceiling before writing (#379)
 `Cases:` E2E-35, E2E-42
 `Rejects:` a floor of 0, which would let a store refuse 128 events of 64 tags
 while claiming VT-22 and VT-24; and a ceiling below the per-event one, under
@@ -2425,7 +2425,7 @@ sync runner.
 `[FROZEN]`
 `Rule:` `wire::decode_accepts_an_over_capacity_value`;
 `append_reports_exceeded_store_limits`
-`Cases:` E2E-42
+`Cases:` E2E-61, repointed under #100 from the mesh case, as VT-21's
 `Rejects:` the assumption in PRESSURE-TEST §5.4 that each new bound is "a
 wire-compatibility break with no quarantine path". It is a break only if the
 bound is enforced in `Deserialize`, which VT-19 forbids for exactly this reason.
@@ -2748,7 +2748,7 @@ never call the method.
   with `error[E0277]: cannot be shared between threads safely`. That leg carries
   the clause on its own, which is as well, because the second leg this bullet used
   to offer is false: it said `memory.rs:154` and
-  `crates/happenstance-sqlite/src/event_store.rs:1177` "both write `+ Send` and
+  `crates/happenstance-sqlite/src/event_store.rs:1199` "both write `+ Send` and
   would both need `+ Send + Sync`", and they would not. Flipping the attribute and
   running `cargo check --workspace --all-features` produced *zero* errors and
   touched neither impl — an RPITIT impl need not restate the trait's auto-trait
@@ -2839,7 +2839,7 @@ could: `MemoryStoreError` is uninhabited (`memory.rs:284-291`) and
 that can, and phase 8 built the rest of them: `SqliteEventStoreError` is now
 fourteen real variants over `rusqlite::Error`, `JoinError`, `TryCurrentError` and
 the crate's own decode and identity failures
-(`crates/happenstance-sqlite/src/event_store.rs:1863-2055`), and
+(`crates/happenstance-sqlite/src/event_store.rs:1885-2077`), and
 `CloudflareEventStoreError` is `!Send` and `!Sync` transitively because
 `SqlError::Thrown` carries a `JsThrow`, whose payload is an `Rc<worker::Error>`
 (`crates/happenstance-cloudflare/src/js.rs:168-173`).
@@ -2882,7 +2882,7 @@ payloads in scope, by crate:
 
 - **`happenstance-sqlite`** — `Sqlite(rusqlite::Error)` on both
   `SqliteEventStoreError` and `SqliteProjectionStoreError`
-  (`crates/happenstance-sqlite/src/event_store.rs:1872`,
+  (`crates/happenstance-sqlite/src/event_store.rs:1894`,
   `crates/happenstance-sqlite/src/projection_store.rs:617`), with
   `pub use rusqlite` (`crates/happenstance-sqlite/src/lib.rs:148`).
 - **`happenstance-postgres`** — `Driver(sqlx::Error)` on both
@@ -2913,10 +2913,10 @@ One more consequence follows mechanically from the same reasoning, and it is
 stated as that rather than as a separate promise. A payload from a crate this
 workspace does **not** re-export is in the public signature just the same:
 `tokio::task::JoinError` (`crates/happenstance-postgres/src/error.rs:106`,
-`crates/happenstance-sqlite/src/event_store.rs:1886`,
+`crates/happenstance-sqlite/src/event_store.rs:1908`,
 `crates/happenstance-sqlite/src/projection_store.rs:629`) and
 `tokio::runtime::TryCurrentError`
-(`crates/happenstance-sqlite/src/event_store.rs:1894`,
+(`crates/happenstance-sqlite/src/event_store.rs:1916`,
 `crates/happenstance-sqlite/src/projection_store.rs:633`) sit in public variants,
 so a `tokio` release that changed either would force an adapter major too.
 `tokio` is `1.x`, so that happens only at its own major.
@@ -2955,8 +2955,8 @@ impls now do, and one of them is the proof rather than the breadth: `LocalMemory
 (`crates/happenstance-testkit/tests/local_conformance.rs:198`) is a direct `impl
 EventStore for` in a genuinely downstream crate, beside the blanket impl without
 `error[E0119]`, passing every rule natively and on `wasm32`. `CloudflareEventStore`
-(`crates/happenstance-cloudflare/src/event_store.rs:1324`) and `happenstance-neon`'s two
-(`crates/happenstance-neon/src/event_store.rs:884`, `:1593`) widen the evidence without
+(`crates/happenstance-cloudflare/src/event_store.rs:1334`) and `happenstance-neon`'s two
+(`crates/happenstance-neon/src/event_store.rs:904`, `:1613`) widen the evidence without
 adding to it. ADR-0001's marker was lifted on that basis at phase 1 (`references/adr/0001-async-port-flavours.md:5-6`).
 
 - **Rule:** not a new rule but a new *invocation* of the existing suite — the
@@ -3200,7 +3200,7 @@ orders and truncates under the read lock at call time) and `happenstance-sqlite`
 (which does not: `read` is not `async` and may legally be called with no runtime
 in scope, where `spawn_blocking` panics, so its work moves into `poll_next` and
 its ceiling is sampled there — `Ceiling::Unsampled` at
-`crates/happenstance-sqlite/src/event_store.rs:2292` is the state the first poll
+`crates/happenstance-sqlite/src/event_store.rs:2314` is the state the first poll
 resolves) both conformant. ADR-0022 §9 settled that seam rather than leaving it
 to the call site, and ADR-0081 (proposed) reorders it: `Handle::try_current` first, then
 a `tokio::runtime::Handle` captured at construction, so the lazy spawn prefers
@@ -4493,10 +4493,10 @@ is a method the port does not have. The cost of "required" is seven impls
 today, four of them skeletons — `happenstance-sqlite` was the fifth until phase
 8 gave it real bodies and a green suite: `memory.rs:293`,
 `crates/happenstance-testkit/tests/local_conformance.rs:198`,
-`crates/happenstance-sqlite/src/event_store.rs:2057`,
+`crates/happenstance-sqlite/src/event_store.rs:2079`,
 `crates/happenstance-postgres/src/event_store.rs:513`,
-`crates/happenstance-cloudflare/src/event_store.rs:1324` and
-`crates/happenstance-neon/src/event_store.rs:884`, `:1593`. The blanket impl
+`crates/happenstance-cloudflare/src/event_store.rs:1334` and
+`crates/happenstance-neon/src/event_store.rs:904`, `:1613`. The blanket impl
 forwards it for free (`variant.rs:194-237`), so generic code pays nothing and
 only implementers do — two when this clause was written, seven now, and seven
 is the figure a required method has to be re-costed against. The count is of
@@ -4897,6 +4897,9 @@ required, did not fire, and no provided method is added. Reopened by a reader me
 only C3, because "unknown" cannot be its default, is ADR-0028's falsifier and goes to the owner. The floor stays
 rejected on this clause's grounds, below, and a third outcome on condition evaluation stays rejected with ES-40's
 MAY. A set of retained ranges is no longer a candidate shape: no report is added for it to describe.
+#483 and #484 are resolved inside ingest by [ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)
+and SY-40: a store records the identities removed from it and skips them, and the record reaches a caller only as
+`Ingested::skipped`, so this refusal stands.
 
 No port surface in 1.x reports held or unheld history, and none is owed in
 `0.4.0` (ADR-0028). If one arrives, its default MUST answer "unknown" and MUST
@@ -4968,7 +4971,7 @@ had two halves.
   anything else — `happenstance-cloudflare` at phase 9 and `happenstance-neon` at
   phase 10, whichever lands first.* **`happenstance-neon` meets that wording's
   letter.** Its probe is one read-only round trip of its own
-  (`crates/happenstance-neon/src/event_store.rs:1029`), over the
+  (`crates/happenstance-neon/src/event_store.rs:1049`), over the
   `(origin_store, origin_position)` pair VT-8 already indexes, and
   `contains_event_id_reports_membership` passes against a live endpoint. The
   freeze does not reword that away. It accepts the round trip, because no required
@@ -6382,6 +6385,97 @@ hash of the id is lossy and forbidden too, but no fixed set of ids can show it,
 because showing it needs two ids that collide; the mutant registry names it
 rather than registering it.
 
+**PS-40 — A runner MUST NOT resume a checkpoint against an event store other
+than the one its positions came from. It MUST record the source store's
+identity with the checkpoint, before the first commit under it, and MUST refuse
+a run whose source differs, applying nothing.**
+`[PROVISIONAL — falsified by callers handing the runner a store's identity that
+is not the store's: the identity is the caller's to supply, and a wrong one
+passes the check and resumes]` — minted by [ADR-0109](../.kb/decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md)
+at `0.8.0` (#485), and frozen in the 1.0 freeze pass with the other rows that pass
+holds. If the falsifier is met, the cure is a `store_id` on `EventStore` itself,
+so that the runner asks the store it reads, which this clause does not take
+(ADR-0109 decision 1).
+Positions are store-local (ES-29, SY-19), so a checkpoint is a statement about
+one store's log; resumed against another, it skips that store's events at or
+below it and applies the rest as though they followed, which
+`experiments/retention-reader` measured as R1-4. The record is a second id the
+runner derives beside PS-25's, `name#digest`, with `#` in place of `@`, whose
+position is a 63-bit mark of the `StoreId` (FNV-1a over its sixteen bytes,
+shifted right by one, so every SQL adapter in this workspace stores it exactly).
+The port is unchanged (ADR-0063), PS-25's id and goldens are unchanged, and the
+record is written with an empty commit (PS-21) before the run reads anything. A
+checkpoint written without a record, by a runner before `0.8.0`, is adopted for
+the store its first run reads. Two stores share a mark with odds of about one in
+2^63, the argument PS-25 makes for its digest.
+**Rule:** `a_checkpoint_is_not_resumed_against_another_store` — a view built on
+store A, then run on store B holding four events of its own and five like A's:
+the run returns `SourceChanged` naming the pin, A's mark and B, applies nothing,
+and leaves the main checkpoint, the pin and the rows as they were. A typed-layer
+rule, in `crates/happenstance/tests/projection_runner.rs`, beside PS-25's, held
+against the wrong runners below. W4 is rejected deterministically, and the mark's
+goldens bound, by `source_mark_fits_a_signed_sixty_four_bit_column` and its neighbours in
+`crates/happenstance/src/checkpoint/tests.rs`; `a_view_refuses_another_sqlite_file` in
+`examples/rebuilding-read-models/tests/rebuild_through_reset.rs` shows only the round trip
+through a real `INTEGER` column. No adapter can fail the rule, so it is not a conformance rule.
+**Cases:** E2E-59.
+**Rejects:** W1, a runner with no record, which is every runner before `0.8.0`;
+W2, a runner that records the store and never compares it; W3, the store's
+identity folded into PS-25's id, which reads `NeverRun` on a switch and replays
+the new store into rows nobody reset, silently, and breaks PS-25's goldens; W4, a
+mark that keeps FNV-1a's top bit, which SQLite and Neon saturate to `i64::MAX`
+and Postgres refuses; and W5, a record written after the first chunk commits,
+which a crash between the two leaves unrecorded and the next run adopts for
+whatever store it was handed.
+
+**PS-41 — A typed projection MAY follow several scopes. The runner MUST read
+their union: one item per scope, each over every event type the projection
+declares, so an event matching any scope is delivered once, in log order, and
+an event of an undeclared type never is. The checkpoint ids MUST be derived
+from that query, and an empty set of scopes MUST be refused before anything is
+read.**
+`[PROVISIONAL — falsified by a projection that needs different event types under
+different scopes, which a set of tag sets cannot express and the typed layer would
+then have to answer with items of its own]` — minted at `0.8.0` on the owner's
+call D3 = A (2026-11-16): an additive provided method, `Projection::scopes`, whose
+default is `scope()` alone, and frozen in the 1.0 freeze pass with the other rows
+that pass holds.
+A single scope is one conjunction of tags, so "every case one owner holds" took one
+projection and one checkpoint per case, or an owner tag that goes stale when a case
+changes hands. `Query` already ORs its items (VT-31), so nothing below the typed layer
+changes: the runners derive one `QueryItem` per scope where they derived one, and a
+projection that does not override `scopes` derives the same `Query`, so PS-25's id and
+goldens and PS-40's pin are unchanged for it. The digest already sorts and dedups item
+encodings (PS-25), so the order of the scopes and a repeated scope move no id; adding
+or dropping a scope moves both ids, and the view replays from the start, which is what
+a newly followed scope's history needs. The types go under every item rather than once
+around them because `Query` has no outer filter. An empty set is
+`InvalidQuery::NoItems`, reported as `ProjectionError::Boundary`: no `Query` nominates
+nothing, and reading everything would invert the request. The scopes are tag sets,
+never a `Query` of the projection's own, for the reason the derivation exists: the
+event types stay nameable in one place.
+**Rule:** `several_scopes_are_one_query` — a projection naming `case:c1` and `case:c2`
+over a log of a `c1` filing, a `c3` filing, an event of an undeclared type tagged `c1`,
+a `c2` filing and a filing tagged both: the run applies the three owned filings once
+each in log order, returns `Ok` reporting three, and leaves the checkpoint under the
+derived id at the last of them. Held through the fan-out runner by
+`several_scopes_are_one_query_in_a_fan_out`, and against the wrong runners below by
+`the_scopes_rule_rejects_a_runner_reading_only_scope` and
+`the_scopes_rule_rejects_a_runner_that_drops_the_types`; the ids by
+`the_ids_follow_the_set_of_scopes` and the refusal by
+`no_scopes_is_refused_before_anything_is_read`. A typed-layer rule, in
+`crates/happenstance/tests/projection_scopes.rs`. No adapter can fail it, so it is not
+a conformance rule.
+**Cases:** E2E-60.
+**Rejects:** W1, a runner that derives its query from `scope()` alone, which is every
+runner before `0.8.0` and any wrapper projection that forwards `scope()` but not
+`scopes()`; W2, one item per scope over the tags alone (`QueryItem::tagged`), which is
+handed an undeclared type and halts on its decode; W3, one read per scope with the
+results concatenated, which hands the filing tagged both scopes over twice and out of
+log order; and W4, an empty set read as `Query::All`. W1 and W2 are written as runners
+in the rule's file; W3 fails the rule's first leg and W4 the refusal's test, and
+neither is written out.
+
 ---
 
 ### 4.8 Failure policy
@@ -6444,7 +6538,7 @@ new port surface and no store-side knowledge of what a skip means.
 
 **Count retaken at phase 18: one.** The falsifier expected *"record"* to
 degrade into *"log a warning"*, and it never did: `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:853`) writes nothing anywhere, logs nothing,
+(`crates/happenstance/src/runner.rs:910`) writes nothing anywhere, logs nothing,
 and now offers the failure instead. `Projection` carries a provided
 `on_error`, defaulting to halt, so a projection that says nothing stops at the
 first failure as the alpha's runner did; one that answers `Policy::Skip` has its
@@ -6530,14 +6624,14 @@ runner (one read, one decode, twenty applies) and the safe runner (twenty
 `tokio::spawn`s) are opposites the port adjudicates neither way.
 
 **Built at phase 18 (#112): `happenstance::run_fan_out`**
-(`crates/happenstance/src/fan_out.rs:288`) drives N views of one projection type
+(`crates/happenstance/src/fan_out.rs:294`) drives N views of one projection type
 over one read. The owned-batch obstacle is met without sharing anything: each view
 holds its own owned write set (`crates/happenstance-core/src/projection.rs:759`),
 all in one task, and nothing is spawned, so no batch is asked to be `'static` or
 `Send`. It catches no panic, by the owner's call (ADR-0101): an unwind
 leaves the call, every open write set is dropped, and the port rolls a dropped
 batch back, so no row since a view's last commit survives and no checkpoint moves.
-`happenstance::run_projection` (`crates/happenstance/src/runner.rs:853`) still
+`happenstance::run_projection` (`crates/happenstance/src/runner.rs:910`) still
 drives one projection per call, catches no unwind, and spawns nothing.
 
 **The rule holds the observable, and three catching runners fail it.** The MUST
@@ -6664,7 +6758,7 @@ exists, it is unavailable over a function that never landed, and both readings
 fire the same falsifier: the pump has acquired no caller but the typed one,
 because it has acquired no caller and no body. The runner an application calls
 is `happenstance::run_projection`
-(`crates/happenstance/src/runner.rs:853`), which drives the port's `checkpoint`,
+(`crates/happenstance/src/runner.rs:910`), which drives the port's `checkpoint`,
 `begin`, `commit` and `rollback` directly, one crate above the port that states
 the invariant.
 
@@ -6968,7 +7062,7 @@ Three inputs bound this section and are not re-opened in it:
 ### 5.1 The bound decision: ingest never rejects
 
 The catalogue produced three answers from three domains and
-`E2E-CASES.md:1592-1596` records them as mutually contradictory. They are not.
+`E2E-CASES.md:1619-1623` records them as mutually contradictory. They are not.
 Two are the same answer and the third is a case where that answer costs nothing.
 
 **Kestrel Rotor's argument is the general one, and it wins on generality alone.**
@@ -7011,9 +7105,10 @@ An ingesting peer MUST append every event it receives that it does not already
 hold. In particular it MUST NOT evaluate an `AppendCondition` — its own or the
 origin's — as a precondition on the append.
 
-SY-38 is the single exception: an event that claims the receiving store's own
+SY-38 is the first exception: an event that claims the receiving store's own
 `StoreId`, where the store did not hold that identity when the ingest began, is
-refused with its whole call (ADR-0098).
+refused with its whole call (ADR-0098). SY-40 is the second: an event whose
+identity the store has recorded as removed is skipped as held (ADR-0110).
 
 `[FROZEN]`
 Rule: `ingest_never_rejects` (new, `happenstance-sync-testkit`) — two peers each
@@ -7059,8 +7154,20 @@ ES-18 owns the replacement and disposes of what it replaces.
 
 `[FROZEN]`
 Rule: `compensation_is_atomic_with_the_losing_event` (new,
-`happenstance-sync-testkit`), riding for its store-side half on ES-18.
-Cases: E2E-39.
+`happenstance-sync-testkit`), riding for its store-side half on ES-18;
+`the_losing_event_is_never_read_unresolved` (`happenstance-sync-testkit`).
+Cases: E2E-39, E2E-62.
+
+*The second rule and E2E-62 are a repair (#320), not an amendment.* The first
+rule checks the transport's half, and ES-18 and SY-30's fault rule check a write
+that fails. Neither reaches the reader this clause names when nothing fails: a
+store that commits the losing event, awaits, and then commits the compensation.
+`the_losing_event_is_never_read_unresolved` adjudicates a real conflict through
+the shipped `runner::Adjudicate` hook, hands the store the claim and its reversal
+as the runner does, and reads the log on a second handle each time the ingest
+yields. That store was never admitted by the MUST above, so naming the rule
+admits and excludes nothing, which is the test
+`kb-playbook-repair-frozen-clause-001` applies.
 
 *Rejects:* compensate-after-commit — ingest the losing event, return, then have a
 projection or a follow-up command author the compensation. It is the obvious
@@ -7343,6 +7450,9 @@ moves when the runner's adjudication hook mounts `directional_merge_rules_compos
 **SY-11. Re-delivery of an event the receiver already holds MUST be a no-op: no
 second copy, no compensation, no error.**
 
+An event the receiver once held and has recorded as removed is held for this
+clause's purposes (SY-40, ADR-0110).
+
 `[FROZEN]`
 Rule: `redelivery_of_an_accepted_group_is_a_no_op` (new,
 `happenstance-sync-testkit`).
@@ -7483,8 +7593,8 @@ size"*, which no rule can assert, because nothing names the bound. A pull is
 already page-bounded (SY-15), so *one ingest round trip per pulled batch* is a
 number a rule can count. ADR-0027 found the mechanism already in the tree. The
 unique `(origin_store, origin_position)` index VT-8 requires is in all four
-adapters (`crates/happenstance-sqlite/src/event_store.rs:309`,
-`crates/happenstance-cloudflare/src/event_store.rs:227`,
+adapters (`crates/happenstance-sqlite/src/event_store.rs:332`,
+`crates/happenstance-cloudflare/src/event_store.rs:235`,
 `crates/happenstance-postgres/migrations/0001_event_log.sql:92`,
 `crates/happenstance-neon/migrations/0001_neon_log.sql:117`), so what an
 already-written adapter pays to add it is nothing. The SQLite ingest spike skips
@@ -7498,7 +7608,8 @@ the Neon peer's one-shot HTTP, inside the 34-minute window. It passed at phase 1
 ---
 
 **SY-38. An ingest that meets an event claiming the receiver's own `StoreId`,
-which the receiver did not hold when the ingest began, MUST refuse the whole
+which the receiver neither held when the ingest began nor has recorded as
+removed (SY-40), MUST refuse the whole
 call, write nothing in it, and report a failure whose class is stop. This is an
 exception to SY-1 and to SY-33.**
 
@@ -7509,7 +7620,8 @@ event. SY-33 forbids "any refusal whose truth value depends on which events the
 receiver holds", and this refusal's truth value does. The exception is an
 identity-integrity refusal: the event claims an identity the receiver minted
 and does not hold, so the receiver was restored or rewound under an identity
-VT-6 required it to re-mint. Every event carrying another store's identity is
+VT-6 required it to re-mint. A removal keeps the allocator and is recorded, so
+it is a skip, not this refusal (ADR-0110). Every event carrying another store's identity is
 still appended or skipped as SY-1 says. ADR-0098's acceptance added a pointer
 to this clause to the texts of SY-1 and SY-33.
 
@@ -7559,6 +7671,69 @@ already re-issued the claimed identity to a different local event, before the
 call, holds it, so the peer's original is skipped as a re-delivery, and two
 events carry one identity. Only the re-mint VT-6 requires after a restore
 prevents that.
+
+---
+
+**SY-40. A store that implements ingest MUST durably record the `EventId` of
+every event removed from it by any means that leaves its position allocator
+where it was, and ingest MUST treat an event whose identity it has recorded as
+removed as one it holds (SY-11): skipped, never appended, never refused under
+SY-38. The record MUST reach every handle and survive reopening, and a restore
+that rolls the allocator back MUST roll the record back with it.**
+
+It is SY-1's second exception, and like SY-38 it says so rather than reading SY-1
+narrowly: a removed event is one the store "does not already hold", and this
+skips it. The removal is the operator's, outside every port: a raw `DELETE`, a
+prune, the `remove_outside_port` every `REMOVAL` fixture performs (ES-38).
+`experiments/retention-reader` measured what a store does without the record. A
+restored edge re-pulls the far side's whole log, so a pruned foreign event lands
+again at the tail and a projection applies it twice (#483); and a pruned own
+event, offered back, is refused as SY-38's unheld own identity, which wedges the
+edge on the spoke side and the hub side alike (#484).
+
+A removal is not a restore, and that is why skipping is exact. VT-6's hazard is a
+store that issues an `EventId` a second time, which needs a rolled-back
+allocator, and a removal keeps the allocator (ES-38). So an identity a removal
+took can never be minted again, and the copy offered back is the event the store
+held. A restore rolls the record back with the allocator and the log, so an own
+event minted after the backup is absent from the restored record, and SY-38
+still refuses a claim on it. The record is consulted only inside `ingest`, under
+the write lock or a lock that excludes every removal, and it reaches a caller
+only as `Ingested::skipped`: no port value reports what was removed, so ES-39's
+refusal stands. Held events still dedupe on the origin pair (VT-8). A removed
+event must not come back on re-delivery; a deployment that needs it to, a pruned
+replica re-hydrated from its hub, needs an explicit operation that clears the
+record, not a change to ingest.
+
+`[FROZEN]` — by [ADR-0115](../.kb/decisions/0115-sy-40-is-frozen.md) at `0.8.0`, on the rule green, not declined, on all five
+adapters that implement ingest: SQLite and the Durable Object on the host, the object under `workerd` warm and cold, a live
+PostgreSQL and a live Neon endpoint (run 44344907519). Minted provisional by [ADR-0110](../.kb/decisions/0110-a-removed-event-is-not-readmitted.md)
+(#483, #484). Reopened by a deployment in which a removed event must come back on re-delivery, or by an adapter that cannot keep
+its allocator across a removal. Each store's record is a table its own delete trigger writes; `MemoryIngestStore`'s is a set
+beside its log.
+Rule: `a_removed_event_is_not_readmitted` (`happenstance-sync-testkit`) — four
+arrangements on three fresh fixtures; (c) runs on (b)'s store after its removal:
+(a) a removed foreign event offered again through a handle held across the
+removal and one connected after it; (b) a removed own event echoed beside a new
+foreign one, which lands; (c) a claim three positions past the head, never
+minted, still refused whole after a removal; and (d) a group of a removed and a
+held event, carrying a compensation, which writes nothing. The rule reaches the
+record through handles onto one open store, so it checks neither that the
+record survives reopening nor that a restore rolls it back: until the ingest
+family has a `REOPEN` capability, each adapter's own regression tests check
+both (the plan's I-4 and I-5).
+Cases: E2E-46, E2E-42.
+
+*Rejects:* the shape every adapter shipped in `0.7.0`, which dedupes only
+against what it holds and re-admits a removed foreign event (`Resurrects`); one
+that refuses a removed own event as an unheld claim
+(`RefusesARemovedOwnIdentity`); one that skips every unheld own claim once
+anything was removed, so a restored store goes uncaught
+(`SkipsEveryUnheldOwnIdentity`); one that keeps the record per handle, so a
+handle connected later re-admits what was removed (`RecordsRemovalsPerHandle`);
+and one that compensates a group because one of its events is not held
+(`CompensatesARemovedGroup`). All five are in
+`crates/happenstance-sync-testkit/tests/wrong_ingest_stores.rs`.
 
 ---
 
@@ -8057,7 +8232,7 @@ replication is whole-log or scoped is DEFERRED"*, against an experiment: build a
 spoke holding a deliberately filtered subset of a hub's log, and attempt a
 position-based resume against it. Its instrument was the testkit-adjacent store
 holding only a suffix or a filtered subset of its own log
-(E2E-CASES.md:1679-1684), which is CF-27's and which phase 14 builds after this
+(E2E-CASES.md:1706-1711), which is CF-27's and which phase 14 builds after this
 phase. Whole-log needs neither, so CF-27 stays phase 14's and the sequencing
 hazard the ledger recorded is gone.
 
@@ -8364,9 +8539,17 @@ claiming the receiver's own identity that it does not hold; it is an
 identity-integrity refusal, not a condition-level one (ADR-0098).
 
 `[FROZEN]`
-Rule: `refusal_is_never_condition_derived` (new, `happenstance-sync-testkit`) —
+Rule: `refusal_is_never_condition_derived` (`happenstance-sync-testkit`'s sync
+peer family, `sync_suite.rs`; written by #465) —
 the fixture receiver is driven into every refusal it can produce; the rule
-asserts none of them varies with the receiver's log contents.
+asserts none of them varies with the receiver's log contents. It drives them
+once on the fresh receiver and once after pushing a rival claim the probe's
+guard names and unrelated events, with a re-sent probe and a late one between,
+and compares refused or accepted and the class. The rule's own pushes never
+provoke SY-38's refusal, since their origins are the rule's own.
+`tests/wrong_refusals.rs` holds it against a peer that refuses what it holds,
+one that refuses a violated guard, one that does so only for new events, and
+one whose refusal's class follows its log.
 Cases: E2E-45, E2E-39, E2E-47.
 
 *Rejects:* the reading that will otherwise be re-litigated the first time someone
@@ -8386,7 +8569,7 @@ door SY-1 did not close.
 It MUST NOT delete, rewrite or reorder a local event because a peer declined it.
 
 `[FROZEN]`
-Rule: `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` (`happenstance-sync`'s `tests/runner/main.rs`), repointed by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) from the never-written a_refused_spoke_retains_its_log (#465): the shipped `Edge` is refused a push and must leave the local log, the watermark and the pending count as they were, and park on the class. No wrong runner is built for it; a rollback runner fails its log assertion.
+Rule: `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` (`happenstance-sync`'s `tests/runner/main.rs`), repointed by [ADR-0108](../.kb/decisions/0108-phase-14s-clauses-are-frozen.md) from the never-written a_refused_spoke_retains_its_log (#465): the shipped `Edge` is refused a push and must leave the local log, the watermark and the pending count as they were, and park on the class. Its log assertion is shared with `tests/runner/wrong_runners.rs`, where `a_refused_push_keeps_the_log_rejects_a_runner_that_rolls_back_on_refusal` holds it against a `MiniEdge` that removes the own events it offered when the push is refused, and against the shipped `Edge` (#487).
 Cases: E2E-45.
 
 *Rejects:* the assumption E2E-45 names as untested in the whole catalogue — that a
@@ -9056,7 +9239,7 @@ and say
 nothing about visibility — the property Wattline's nineteen-millisecond window
 breaks and the property `Guard::after` is sound only under. Shipping
 this rule without the fixture would violate CF-1: it would be a rule that has
-never failed anything, which is precisely what E2E-CASES.md:1555-1561 warns
+never failed anything, which is precisely what E2E-CASES.md:1582-1588 warns
 against.
 
 **The experiment this clause deferred has been run, and it is why the marker
@@ -9432,7 +9615,7 @@ holds a peer's one budget to both of its store's field ceilings. On `append_repo
 seventeen mutants, `SharedPayloadBudgetStore` (#143) among them. The falsifier's constant-ceiling half is answered
 by every real adapter. `happenstance-sqlite` states its ceilings as constants mirrored from the adapter's own `pub
 const` rather than restated (`crates/happenstance-sqlite/tests/support/mod.rs:212-218`, mirroring
-`crates/happenstance-sqlite/src/event_store.rs:342`, `:349` and `:358`), and `happenstance-postgres` and
+`crates/happenstance-sqlite/src/event_store.rs:365`, `:372` and `:381`), and `happenstance-postgres` and
 `happenstance-neon` state constant policy ceilings below any physical wall, so the rule asserts a number each store
 honours. `happenstance-cloudflare`'s documented 2 MB row limit is a budget its fields share, and the adapter carves
 it into four constant ceilings that fit together (ADR-0093): one row at all four is 1,835,264 bytes
@@ -9872,7 +10055,7 @@ and run through the event-store, concurrency and model families with its pass li
 a last-call-only report, leaky membership). Recorded limit: it masks ingest-side harms (`experiments/retention-reader`'s controls), so an ingest
 claim needs `Fixture::REMOVAL`, not the decorator. Reopened by an instrument whose report misstates what it withholds while the suite passes,
 or by a suite rule that can tell a holed log from a young one. The decision this marker waited on,
-E2E-CASES.md:1663-1669's eleventh open decision, was taken by ADR-0028: the report shape is instrument-local, not a port surface.
+E2E-CASES.md:1690-1696's eleventh open decision, was taken by ADR-0028: the report shape is instrument-local, not a port surface.
 [ADR-0028](../.kb/decisions/0028-what-a-store-may-forget.md) widens the instrument
 from a suffix to an arbitrary retained set, because a suffix-only instrument
 cannot falsify the floor that ES-39 rejects. It also names a `Fixture`
@@ -10234,7 +10417,7 @@ CF-33, which forbids a conformance rule to assert on an operation count; every
 plausible answer to that question touches this clause's text, so the marker stays
 until it is answered.]`
 Rule: none — the harness is not the bar, which is the clause's content.
-Cases: E2E-CASES.md:1671-1677 records this as one of the two things that are
+Cases: E2E-CASES.md:1698-1704 records this as one of the two things that are
 neither blocked nor cases.
 Rejects: a benchmark result gating a merge. A threshold nobody can justify
 becomes a threshold everybody raises, and the number stops meaning anything the
@@ -10490,10 +10673,10 @@ between them because its *shape* does not wait on a transport but its
 | §2.1–§2.6 value types | `VT` | 36 | 33 | 2 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
 | §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
-| §4 `ProjectionStore` | `PS` | 39 | 33 | 1 | 0 | 5 |
-| §5 `SyncPeer` | `SY` | 39 | 38 | 1 | 0 | 0 |
+| §4 `ProjectionStore` | `PS` | 41 | 33 | 3 | 0 | 5 |
+| §5 `SyncPeer` | `SY` | 40 | 39 | 1 | 0 | 0 |
 | §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **212** | **194** | **9** | **2** | **7** |
+| **Total** | | **215** | **195** | **11** | **2** | **7** |
 
 ### 7.2 The table
 
@@ -10521,7 +10704,7 @@ between them because its *shape* does not wait on a transport but its
 | VT-18 | FROZEN | compile tests `event_new_accepts_a_held_event_type` and `command_handler_compo… | E2E-51 |
 | VT-19 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set`, `wire::decode_accepts_an_over_… | E2E-40, E2E-42 |
 | VT-20 | FROZEN | unit tests `rejects_invalid_event_types` and `rejects_invalid_tags`; `store_ac… | E2E-40 |
-| VT-21 | FROZEN | `store_accepts_the_guaranteed_minimum_payload`, `append_reports_exceeded_store… | E2E-42 |
+| VT-21 | FROZEN | `store_accepts_the_guaranteed_minimum_payload`, `append_reports_exceeded_store… | E2E-61 |
 | VT-22 | PROVISIONAL | `store_accepts_the_guaranteed_minimum_tag_count` | E2E-40 |
 | VT-23 | PROVISIONAL | `store_evaluates_a_query_at_the_guaranteed_minimum_item_count` | E2E-36, E2E-40 |
 | VT-24 | FROZEN | `store_accepts_the_guaranteed_minimum_batch_size`, `bulk_ingest_is_idempotent_… | E2E-35, E2E-36, E2E-39 |
@@ -10550,7 +10733,7 @@ between them because its *shape* does not wait on a transport but its
 | WF-6 | FROZEN | `wire::store_id_encodes_as_hex_in_json`, `wire::store_id_encodes_as_bytes_in_p… | E2E-34, E2E-42 |
 | WF-7 | FROZEN | `wire::round_trips_in_json`, `wire::round_trips_in_postcard`, `wire::round_tri… | E2E-33, E2E-42 |
 | WF-8 | FROZEN | `wire::rejects_an_unknown_format_version`, `wire::version_is_readable_before_t… | E2E-35, E2E-42 |
-| WF-9 | FROZEN | `wire::decode_accepts_an_over_capacity_value`, `append_reports_exceeded_store_… | E2E-42 |
+| WF-9 | FROZEN | `wire::decode_accepts_an_over_capacity_value`, `append_reports_exceeded_store_… | E2E-61 |
 | WF-10 | FROZEN | `wire::decode_rejects_a_non_canonical_tag_set`, `wire::decode_rejects_an_uncon… | E2E-40 |
 | WF-11 | PROVISIONAL | `wire::payload_is_base64_in_json`, `wire::payload_is_raw_in_postcard` | E2E-33 |
 | WF-12 | FROZEN | `read_options_is_not_serialisable`, a **const-evaluation assertion in `crates/… | E2E-58 |
@@ -10646,13 +10829,15 @@ between them because its *shape* does not wait on a transport but its
 | PS-37 | FROZEN | *(none — see clause)* | E2E-52, E2E-53 |
 | PS-38 | FROZEN | `commit_advances_the_checkpoint`, `fresh_projection_has_no_checkpoint`, `fan_o… | E2E-15, E2E-17, E2E-23 |
 | PS-39 | FROZEN | `projection_ids_round_trip_by_bytes` | E2E-18 |
+| PS-40 | PROVISIONAL | `a_checkpoint_is_not_resumed_against_another_store` †, `source_mark_fits_a_sig… | E2E-59 |
+| PS-41 | PROVISIONAL | `several_scopes_are_one_query` †, `several_scopes_are_one_query_in_a_fan_out` … | E2E-60 |
 
 #### `SY` — the `SyncPeer` port (§5)
 
 | Clause | Maturity | Conformance rule — † = does not exist yet | Cases |
 |---|---|---|---|
 | SY-1 | FROZEN | `ingest_never_rejects` | E2E-33, E2E-39, E2E-42, E2E-45, E2E-47 |
-| SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event` | E2E-39 |
+| SY-2 | FROZEN | `compensation_is_atomic_with_the_losing_event`, `the_losing_event_is_never_rea… | E2E-39, E2E-62 |
 | SY-3 | FROZEN | `dedupe_reaches_identity_without_decoding` | E2E-33, E2E-39 |
 | SY-4 | FROZEN | `transitive_convergence_over_a_partial_mesh` | E2E-42 |
 | SY-5 | FROZEN | `ingested_events_land_above_the_local_head` | E2E-42 |
@@ -10683,13 +10868,14 @@ between them because its *shape* does not wait on a transport but its
 | SY-30 | FROZEN | `push_envelope_preserves_group_boundaries`, `ingest_group_is_atomic_under_a_mi… | E2E-35, E2E-39 |
 | SY-31 | FROZEN | `watermark_advances_transactionally_with_a_read_model`, `ack_never_confirms_a_… | E2E-33, E2E-44 |
 | SY-32 | FROZEN | `retention_gap_is_reported_not_silent` | E2E-44, E2E-46, E2E-47 |
-| SY-33 | FROZEN | `refusal_is_never_condition_derived` † | E2E-45, E2E-39, E2E-47 |
-| SY-34 | FROZEN | `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` † | E2E-45 |
+| SY-33 | FROZEN | `refusal_is_never_condition_derived` | E2E-45, E2E-39, E2E-47 |
+| SY-34 | FROZEN | `a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class` †, `a_r… | E2E-45 |
 | SY-35 | FROZEN | `the_sync_suite_never_decodes` † | E2E-34, E2E-39, E2E-40, E2E-42 |
 | SY-36 | FROZEN | `every_refusal_states_its_class` | E2E-45, E2E-35, E2E-44 |
 | SY-37 | FROZEN | `nothing_waiting_means_the_next_pull_is_empty` | E2E-36 |
 | SY-38 | FROZEN | `an_unheld_own_identity_stops_the_ingest_and_writes_nothing` (unit test, `crat… | E2E-42, E2E-34 |
 | SY-39 | FROZEN | `an_append_reads_back_as_one_group`, `an_ingested_group_keeps_its_boundary_and… | E2E-35, E2E-39 |
+| SY-40 | FROZEN | `a_removed_event_is_not_readmitted` | E2E-46, E2E-42 |
 
 #### `CF` — conformance obligations (§6)
 
@@ -10728,7 +10914,7 @@ between them because its *shape* does not wait on a transport but its
 | CF-31 | FROZEN | `cargo xtask spec-trace` (CF-38), which fails when a rule name referenced by a… | *all* |
 | CF-32 | FROZEN | a `cargo xtask ci` manifest check, added at phase 3 stage 6. It reads the `[pa… | *(none — see clause)* |
 | CF-33 | FROZEN | a `cargo xtask ci` lint step over `happenstance-testkit/src`, rejecting `std::… | *(none — see clause)* |
-| CF-34 | PROVISIONAL | *(none — see clause)* | E2E-CASES.md:1671-1677 records this as one of the two things that are neither … |
+| CF-34 | PROVISIONAL | *(none — see clause)* | E2E-CASES.md:1698-1704 records this as one of the two things that are neither … |
 | CF-35 | FROZEN | `cargo xtask spec-trace` (CF-38). | *all* |
 | CF-36 | FROZEN | `cargo xtask spec-trace` (CF-38), cross-referencing each case's level marker (… | E2E-28, E2E-29, E2E-39, E2E-42 |
 | CF-37 | FROZEN | `cargo xtask spec-trace` (CF-38). | *all* |
@@ -11031,7 +11217,7 @@ recounted it against §7.2 rather than against itself.
 | **ES-42** — `read`'s return carries no `+ Unpin` | Nothing. Its `Rule:` is compile-level — ADR-0011's E11 erasure wrapper | **Acceptable, and the only one of the five that expires.** Its marker requires re-evaluation before phase 12, because adding a bound to an opaque return type after publish is breaking. A case naming it would be a case about what a *consumer* can write, not about what a store does, and E2E-CASES is a catalogue of store behaviour |
 | **CF-32** — the testkit carries its own `version` key | Nothing; a packaging obligation with a machine check | **Acceptable.** CF-35 permits a clause whose check is a manifest check rather than a behavioural one, and there is no user-visible behaviour to write a case against |
 | **CF-33** — no rule may read a clock | Nothing; it constrains the suite | **Acceptable**, same reason |
-| **CF-34** — benchmarks are not conformance | `E2E-CASES.md:1671-1677`, which records the harness as one of the two things that are neither blocked nor cases | **Acceptable**, and the citation is the right one |
+| **CF-34** — benchmarks are not conformance | `E2E-CASES.md:1698-1704`, which records the harness as one of the two things that are neither blocked nor cases | **Acceptable**, and the citation is the right one |
 | **PS-3** — ship behind `unstable-projection` | "none directly", then E2E-15 through E2E-25 | **Acceptable.** It is a packaging decision that makes a range of cases safe to answer before publication |
 | **PS-33** — evaluate ADR-0007's falsifier | "none directly", then E2E-26 through E2E-28 | **Closed at the typed layer's phase exit.** It was listed in §7.3 as belonging in a work list, and it has gone there: the clause is `[NON-NORMATIVE]` with its ID retained, so it no longer owes this table a case. The row stays because a defect list that deletes its own entries cannot be audited |
 
@@ -11044,7 +11230,10 @@ that nobody reads the unchanged number as evidence that nothing moved.
 
 ### 7.6 E2E cases no clause claims
 
-**None. All 58 cases are claimed by at least one clause.**
+**None. All 62 cases are claimed by at least one clause.** E2E-59 joined at `0.8.0`,
+claimed by PS-40 alone (ADR-0109), E2E-60 in the same release, claimed by PS-41
+alone (the owner's call D3 = A), E2E-61 too, claimed by VT-21 and WF-9 (#100), and
+E2E-62, claimed by SY-2 alone (#320).
 
 That result is suspicious enough to state how it was reached, because "the defect
 list is empty" is the shape of a list that was never computed.
@@ -11058,10 +11247,12 @@ with a stricter rule — discarding any `Cases:` line beginning with the word
 prose contributed nothing. The orphan set was empty under both readings.
 
 The distribution is uneven and the unevenness is informative rather than
-alarming. Four cases are claimed by exactly one clause each: **E2E-14** (SY-6),
-**E2E-31** (PS-31), **E2E-50** (PS-25) and **E2E-51** (VT-18). Single-claim cases
-are the ones a later edit can orphan without anyone noticing, and three of the
-four are the lifecycle cases whose surrounding decisions are still open. At the
+alarming. Six cases are claimed by exactly one clause each: **E2E-14** (SY-6),
+**E2E-31** (PS-31), **E2E-50** (PS-25), **E2E-51** (VT-18), **E2E-59** (PS-40) and
+**E2E-60** (PS-41).
+Single-claim cases
+are the ones a later edit can orphan without anyone noticing. Three of the first four
+are lifecycle cases, and the last two cases' clauses are still provisional (PS-40, PS-41). At the
 other end, **E2E-42** — transitive convergence — is claimed by 26 clauses across
 four sections, which is what a case that exercises a whole design looks like.
 

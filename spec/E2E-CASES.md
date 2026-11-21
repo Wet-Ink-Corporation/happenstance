@@ -23,9 +23,9 @@ wrong implementation is not in this list.
 | **scenario** | a worked example under `examples/` | A whole deployment, run for a human to read. |
 
 A contract-level case that cannot be expressed against a single store handle is
-still contract-level if it belongs in `happenstance-sync-testkit` — that crate is
-named in `crates/happenstance-sync/src/lib.rs:9-11` and does not exist. Those are
-marked **⚠ crate does not exist**.
+still contract-level if it belongs in `happenstance-sync-testkit` — published since
+`0.4.4`, and mounted by every peer and ingest adapter. Those are marked `contract
+(sync)`; the **⚠ crate does not exist** marker they carried before it did is gone.
 
 **⚠ `happenstance`** means something narrower, because that crate *does* exist.
 After [ADR-0006](../.kb/decisions/0006-bare-name-to-the-typed-layer.md) the bare name
@@ -39,9 +39,9 @@ types, errors, in-memory store — is `happenstance-core`, and that is what a
 | Group | Cases |
 |---|---|
 | [A — Event store semantics](#a--event-store-semantics) | E2E-01 … E2E-14 |
-| [B — Projections and the runner](#b--projections-and-the-runner) | E2E-15 … E2E-32 |
-| [C — Sync and convergence](#c--sync-and-convergence) | E2E-33 … E2E-45 |
-| [D — Lifecycle and evolution](#d--lifecycle-and-evolution) | E2E-46 … E2E-51 |
+| [B — Projections and the runner](#b--projections-and-the-runner) | E2E-15 … E2E-32, E2E-60 |
+| [C — Sync and convergence](#c--sync-and-convergence) | E2E-33 … E2E-45, E2E-62 |
+| [D — Lifecycle and evolution](#d--lifecycle-and-evolution) | E2E-46 … E2E-51, E2E-59, E2E-61 |
 | [E — Edge and `!Send`](#e--edge-and-send) | E2E-52 … E2E-58 |
 | [What cannot be written yet](#what-cannot-be-written-yet) | — |
 
@@ -850,6 +850,33 @@ items is precisely what makes their order stop mattering. VT-31's
 
 ---
 
+### E2E-60 — One projection over every case an owner holds
+
+- **From:** the deployment-patterns review (P5, gap 1: "all cases I own" is an OR over
+  many case tags); serves **PS-41**
+- **Level:** contract
+- **Spans:** `happenstance`, `happenstance-core`
+
+**GIVEN** a projection over one event type that names two scopes, `case:c1` and `case:c2`,
+and a log holding a `c1` filing, a `c3` filing, an event of another type tagged `c1`, a
+`c2` filing and one filing tagged both `c1` and `c2`.
+**WHEN** it is run, alone or as one view of a fan-out.
+**THEN** it is handed the three owned filings, once each and in log order, and never the
+`c3` filing or the other type; its checkpoint, under the id derived from both scopes,
+stands at the last of them.
+
+**Falsifies:** that a typed projection's subscription is one conjunction of tags.
+`Query` ORs its items (VT-31), but the typed layer derived one item
+from `scope()`, so following several cases took one projection and one checkpoint per
+case, or an owner tag that stops being true when a case changes hands.
+
+**Rejects:** a runner that reads `scope()` alone, which is every runner before `0.8.0` and
+any wrapper that forwards `scope()` but not `scopes()`: it applies what the one scope
+nominates and commits under another id. And a runner that ORs the scopes' tags without the
+event types, which is handed a type the projection cannot decode.
+
+---
+
 ## C — Sync and convergence
 
 Every case in this group needs `happenstance-sync`, which today is a module doc
@@ -861,7 +888,7 @@ not exist. They are specified anyway, because the port's shape is what they cons
 
 - **From:** Kestrel Cold Chain (`IngestPeerBatch` after a dropped socket) — **the sharpest single finding in the catalogue**
 - **Level:** contract (sync)
-- **Spans:** ⚠ `happenstance-sync`, ⚠ `happenstance-sync-testkit`; blocked on `EventId` (`RUNBOOK.md:70`)
+- **Spans:** `happenstance-sync`, `happenstance-sync-testkit`; blocked on `EventId` (`RUNBOOK.md:70`)
 
 **GIVEN** a hub that has accepted a peer's condition group and written its events.
 **WHEN** the identical group is delivered again.
@@ -886,7 +913,7 @@ failure is not a duplicate but an inversion.
 
 - **From:** Kestrel Cold Chain; Turnstile; Kestrel Rotor
 - **Level:** contract (sync)
-- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`; blocked on `RUNBOOK.md:70`'s shape
+- **Spans:** `happenstance-core`, `happenstance-sync`; blocked on `RUNBOOK.md:70`'s shape
 
 **GIVEN** an ingested event carrying a store-assigned identity.
 **WHEN** a peer asks "have I already ingested this?".
@@ -914,7 +941,7 @@ writes at append time**, which is the Lamport pair the ledger already decided.
 
 - **From:** Kestrel Cold Chain (39 events, 7 groups); Kestrel Rotor
 - **Level:** contract (sync)
-- **Spans:** ⚠ `happenstance-sync`
+- **Spans:** `happenstance-sync`
 
 **GIVEN** a push carrying seven independently-conditioned groups.
 **WHEN** the hub crashes after ingesting four.
@@ -938,7 +965,7 @@ a `[(AppendCondition, Vec<Event>)]` envelope; no contract change.
 
 - **From:** Kestrel Rotor (1,840 events in a 34-minute satellite window) — the finding nothing else in the workspace would have produced
 - **Level:** contract (sync)
-- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`
+- **Spans:** `happenstance-core`, `happenstance-sync`
 
 **GIVEN** a peer batch of 1,840 events, some already ingested.
 **WHEN** the receiving store ingests over a transport that costs one round trip per
@@ -966,7 +993,7 @@ lands with the already-decided identity row.
 
 - **From:** Kestrel Cold Chain (the cut `ChargeRefrigerant` decision); Kestrel Motor; Wattline (`after: Some(7730)` from a site controller)
 - **Level:** contract (sync)
-- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`
+- **Spans:** `happenstance-core`, `happenstance-sync`
 
 **GIVEN** a peer-supplied `AppendCondition` deserialised from the wire.
 **WHEN** its `after` field is `Some(p)`.
@@ -992,7 +1019,7 @@ The rule is blunt, and E2E-38 is why.
 
 - **From:** Turnstile (`SellAtDoor`); Kestrel Motor; Norvant (`RecordProofOfDelivery`)
 - **Level:** contract (sync)
-- **Spans:** ⚠ `happenstance-sync`; blocked
+- **Spans:** `happenstance-sync`; blocked
 
 **GIVEN** an offline terminal that decided at its own local position *L*, having
 replicated the hub up to hub position *H*.
@@ -1019,7 +1046,7 @@ replication semantics in the contract crate.
 
 - **From:** Kestrel Cold Chain (the whole scenario)
 - **Level:** integration
-- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`, ⚠ e2e crate
+- **Spans:** `happenstance-core`, `happenstance-sync`, ⚠ e2e crate
 
 **GIVEN** two peers that each accepted a conflicting claim under byte-identical
 position-free conditions.
@@ -1049,7 +1076,7 @@ half needs no new seam.
 
 - **From:** Kestrel Cold Chain (a buggy spoke, not a malicious one)
 - **Level:** contract (sync)
-- **Spans:** ⚠ `happenstance-sync`
+- **Spans:** `happenstance-sync`
 
 **GIVEN** a peer push whose condition is `Query::All`.
 **WHEN** the hub ingests.
@@ -1078,7 +1105,7 @@ only cost is unguarded.
 
 - **From:** Kestrel Rotor (`stock-on-hand` converges; `unit-ledger` does not) — the case that turns a hope into a check
 - **Level:** contract (sync)
-- **Spans:** ⚠ `happenstance-sync-testkit`
+- **Spans:** `happenstance-sync-testkit`
 
 **GIVEN** a projection and a set of events from two origins.
 **WHEN** they are applied under two interleavings that agree on per-origin order and
@@ -1105,8 +1132,8 @@ one peer by fiat — and nothing lets a projection declare that.
 ### E2E-42 — Transitive convergence: a peer forwards what it holds, not what it originated
 
 - **From:** Kestrel Rotor (vessel ↔ depot A ↔ depot B, with the vessel never reaching depot B)
-- **Level:** integration
-- **Spans:** ⚠ `happenstance-sync`, ⚠ e2e crate
+- **Level:** contract (sync)
+- **Spans:** `happenstance-sync`, `happenstance-sync-testkit` — `sync_model_conformance!` generates exactly these chains, ends that never meet included, from **one fixture per node** of a single adapter, so an adapter author runs this case against their own crate (re-levelled from integration under #100); a mesh of two different adapters is the e2e crate's
 
 **GIVEN** three peers *A*—*B*—*C* where *A* and *C* never communicate.
 **WHEN** each peer syncs only with its neighbour.
@@ -1159,7 +1186,7 @@ works. What survives is only the audit question above.
 
 - **From:** Kestrel Rotor (a vessel on a 120-day charter against a 90-day compaction window); Kestrel Cold Chain (the 90-day device prune)
 - **Level:** integration
-- **Spans:** ⚠ `happenstance-sync`, ⚠ e2e crate
+- **Spans:** `happenstance-sync`, ⚠ e2e crate
 
 **GIVEN** a peer offline longer than another peer's compaction window.
 **WHEN** it reconnects.
@@ -1179,7 +1206,7 @@ the default behaviour.
 
 - **From:** Kestrel Motor — **the direction no scenario in this catalogue walks**
 - **Level:** integration
-- **Spans:** ⚠ `happenstance-sync`, ⚠ e2e crate
+- **Spans:** `happenstance-sync`, ⚠ e2e crate
 
 **GIVEN** a device holding events it believes are committed.
 **WHEN** the hub declines them.
@@ -1195,6 +1222,34 @@ exactly one direction.
 
 **Rejects:** the assumption that a spoke's merge rule is the hub's merge rule read
 backwards. `sync/lib.rs:45-51` already says it is not.
+
+---
+
+### E2E-62 — A reader never sees an adjudicated loser without its compensation
+
+- **From:** Kestrel Cold Chain (the hub's adjudication, E2E-39), at the store; #320, the
+  authoring half of **SY-2** that E2E-39's integration level left without a contract case
+- **Level:** contract (sync)
+- **Spans:** `happenstance-sync`, `happenstance-sync-testkit`
+
+**GIVEN** a store holding one origin's claim on a seat, and a second origin's claim on the
+same seat, which the hub's merge rule, mounted through the shipped `runner::Adjudicate`
+hook, answers with a reversal.
+**WHEN** the store ingests the claim and its reversal as the runner hands them, one
+`IngestGroup`, and a reader reads the log through a second handle each time the ingest
+yields, and once after it returns.
+**THEN** no read shows the losing claim without its reversal, and the read after the
+ingest shows both.
+
+**Falsifies:** that atomicity a store promises only under a fault it is asked to arm is
+the atomicity a reader relies on. A store that commits the losing event, awaits, and then
+commits the compensation fails no call and leaves the right log, and SY-30's rule reaches
+it only through a fault its fixture can arm.
+
+**Rejects:** compensate-after-commit in a store: the foreign rows and their compensation
+written as two statements with an await between them and no transaction around both.
+`happenstance-sync-testkit`'s `tests/wrong_ingest_stores.rs` carries it as
+`Mistake::CompensatesAfterCommit`, and every other ingest rule passes it.
 
 ---
 
@@ -1233,7 +1288,7 @@ strongest evidence available that it belongs in the port and not in an adapter.
 
 - **From:** Kestrel Motor (Tuesday 18:02) — the load-bearing failure of that scenario
 - **Level:** contract
-- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`; depends on E2E-46. **The THEN below is rejected for 1.x** by ADR-0028 (phase 17). The condition passes vacuously, which is ES-40's MAY. A third outcome would make an append admitted today fail, so it is a behaviour break
+- **Spans:** `happenstance-core`, `happenstance-sync`; depends on E2E-46. **The THEN below is rejected for 1.x** by ADR-0028 (phase 17). The condition passes vacuously, which is ES-40's MAY. A third outcome would make an append admitted today fail, so it is a behaviour break
 
 **GIVEN** a condition whose query ranges over events that have been destroyed.
 **WHEN** it is evaluated.
@@ -1362,6 +1417,61 @@ into, is two lines and lands on all thirty-odd queries in this catalogue.
 
 ---
 
+### E2E-59 — A projection resumed against another store
+
+- **From:** ES-39's reader experiment (`experiments/retention-reader`, R1-4, #156);
+  Kestrel Motor (a hub restored from another hub's backup, its views kept); serves **PS-40**
+- **Level:** contract
+- **Spans:** `happenstance`, `happenstance-core`; and, for a real column,
+  `happenstance-sqlite`
+
+**GIVEN** a view built to the end of store A's log, and store B holding four events of its
+own followed by five that read like A's.
+**WHEN** the same view and the same projection store are run against B.
+**THEN** the run stops with `SourceChanged`, naming the view's pin, A's mark and B; it
+applies nothing; and the main checkpoint, the pin and the rows are as A's run left them.
+Run against A again, the view resumes.
+
+**Falsifies:** that a checkpoint is a fact about the view. It is a fact about the view
+**and the log it was read from**: positions are store-local (ES-29, SY-19), so a position
+from A means nothing in B, and a runner that resumes there skips B's own events at or below
+it and applies the rest as though they followed. Nothing in the port could tell, because
+the port stores a position per id and nothing else.
+
+**Rejects:** every runner before `0.8.0`, which keys the checkpoint on the view alone and
+resumes: on R1-4's fixture it skips B's four events and applies one of A's again, and
+returns `Ok`. And the store's identity folded into the checkpoint id, which reads
+`NeverRun` on B and replays B into A's rows without resetting them.
+
+---
+
+### E2E-61 — A store takes the payload floor, and refuses above its own ceiling by name
+
+- **From:** Turnstile (peer D under a 128 KiB value cap, beside Postgres holding a 340 KB
+  seat map); serves **VT-21** and **WF-9**
+- **Level:** contract
+- **Spans:** `happenstance-core`, `happenstance-testkit`
+
+**GIVEN** a store, and the payload ceiling its fixture declares, if it has one.
+**WHEN** it is handed an event whose `data` is exactly `MIN_SUPPORTED_EVENT_DATA_LEN`
+(65,536 bytes), then one at its ceiling, then one a byte above it.
+**THEN** the first is appended and read back byte-identical, and the second is appended; the
+third is refused with `AppendError::ExceedsStoreLimit`, and nothing of it is durable. A
+store that declares no ceiling has nothing to refuse, and says so as a skip.
+
+**Falsifies:** that a store's limit is a private fact. It is what a peer set compares
+against before it replicates: a floor every store holds tells an application what it may
+write and still expect to travel, and a refusal by name is what lets the sync runner park
+an event instead of losing it (WF-9).
+
+**Rejects:** two stores, both written into `happenstance-testkit`'s own tests.
+`PayloadCeilingStore` refuses below the floor, so an application's 64 KiB event is
+durable at one peer and unrepresentable at the next. `TruncatingPayloadStore` accepts
+the oversized event and keeps a prefix, so the refusal WF-9 needs never happens and the
+corruption is discovered at a reader.
+
+---
+
 ## E — Edge and `!Send`
 
 ### E2E-52 — A whole command path composes with no `Send` bound
@@ -1471,7 +1581,7 @@ invisible from the application side.
 
 - **From:** Kestrel Cold Chain (`ClaimPooledUnit`) — recorded because the scenario got this wrong and the corrected version is a real test
 - **Level:** integration
-- **Spans:** `happenstance-core`, ⚠ `happenstance-sync`, ⚠ e2e crate
+- **Spans:** `happenstance-core`, `happenstance-sync`, ⚠ e2e crate
 
 **GIVEN** two spokes holding different slices of one hub's log, and a decision whose
 condition is made position-free by deriving a counter from the slice

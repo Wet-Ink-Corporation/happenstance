@@ -21,7 +21,7 @@ use happenstance::{
     Chunk, Codec, CodecError, ConvergentProjection, Delivered, DomainEvent, Event, EventId,
     EventType, Json, MemoryEventStore, MemoryProjectionBatch, MemoryProjectionStore,
     MemoryProjectionStoreError, Progressed, Projection, ProjectionId, RecordedAt, SequencePosition,
-    SequencedEvent, StoreId, Tags, run_projection,
+    SequencedEvent, Source, StoreId, Tags, run_projection,
 };
 use serde::{Deserialize, Serialize};
 
@@ -271,7 +271,7 @@ where
 {
     let models = MemoryProjectionStore::new();
     let chunk = Chunk::of(2.try_into()?);
-    let progressed = run_projection(events, &models, &mut projection, &Json, chunk)
+    let progressed = run_projection(events.into(), &models, &mut projection, &Json, chunk)
         .await
         .map_err(|error| error.to_string())?;
     if progressed.applied != 4 {
@@ -346,6 +346,7 @@ async fn a_convergent_projection_commits_one_read_model_for_two_interleavings() 
 /// `Projection`'s documented spawner, verbatim, plus `+ ConvergentProjection`.
 fn spawn_run<S, P, St>(
     events: Arc<S>,
+    id: StoreId,
     models: Arc<St>,
     mut projection: P,
     chunk: Chunk,
@@ -358,7 +359,8 @@ where
     St: happenstance::SendProjectionStore<Batch: Send> + Sync + 'static,
 {
     tokio::spawn(async move {
-        let run = run_projection(&*events, &*models, &mut projection, &Json, chunk)
+        let source = Source::new(&*events, id);
+        let run = run_projection(source, &*models, &mut projection, &Json, chunk)
             .await
             .map_err(|e| e.to_string());
         (projection, run)
@@ -377,7 +379,9 @@ async fn a_declared_send_projection_spawns_from_code_generic_over_it() -> Fallib
     let models = Arc::new(MemoryProjectionStore::new());
     let chunk = Chunk::of(64.try_into()?);
 
-    let (latest, run) = spawn_run(events, Arc::clone(&models), SendLatest::new(), chunk).await?;
+    let id = events.store_id();
+    let (latest, run) =
+        spawn_run(events, id, Arc::clone(&models), SendLatest::new(), chunk).await?;
 
     assert_eq!(run?.applied, 1);
     assert_eq!(

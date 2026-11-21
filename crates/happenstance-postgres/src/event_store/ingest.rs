@@ -94,14 +94,15 @@ use happenstance_core::{AppendCondition, Event, EventId, RecordedAt, StoreId};
 use happenstance_sync::{
     Classify, FailureClass, IngestError, IngestGroup, Ingested, SendIngestStore, Watermark,
 };
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{Executor, PgPool, Postgres, Row, Transaction};
 
 use super::{
-    IDENTITY_SQL, NewRow, Origin, PostgresEventStore, ROW_PARAMETERS, StoredOrigin,
-    allocate_positions, exceeded, identity_from_row, insert_statement, now, position_from_row,
-    stored_store_id, write_group,
+    NewRow, Origin, PostgresEventStore, ROW_PARAMETERS, StoredOrigin, allocate_positions, exceeded,
+    identity_from_row, insert_statement, now, position_from_row, stored_store_id, write_group,
 };
 use crate::error::PostgresEventStoreError;
+
+mod removal;
 
 /// Appended to `insert_statement` for foreign rows.
 ///
@@ -114,19 +115,27 @@ const CONFLICT_CLAUSE: &str = " ON CONFLICT (origin_store, origin_position) \
      WHERE origin_store IS NOT NULL AND origin_position IS NOT NULL DO NOTHING \
      RETURNING origin_store, origin_position, position";
 
-/// The transaction's first statement: this store's identity, and the begin
-/// snapshot a claim on that identity is judged against.
+/// The transaction's first round trip: the removal record's lock, then this
+/// store's identity, the begin snapshot a claim on that identity is judged
+/// against, and whether the record holds anything (SY-40).
 ///
-/// One statement, so the snapshot is still the transaction's first and the
-/// identity read costs no round trip of its own. The snapshot is taken on
-/// every call, though only a call that carries a claim reads it: in the same
-/// statement it is free.
+/// Two statements in one simple-protocol batch, sent with `sqlx::raw_sql`
+/// because neither binds anything, so the lock costs no round trip of its own.
+/// `LOCK` takes no snapshot, so the `SELECT`'s is still the transaction's
+/// first, and it is taken after the lock is granted: it sees every removal
+/// that committed before this call could proceed. `removal.rs` says why the
+/// mode is `SHARE`.
+///
+/// One `SELECT`, so the identity read and the record's emptiness cost nothing
+/// beyond it. The snapshot is taken on every call, though only a call that
+/// carries a claim reads it: in the same statement it is free.
 ///
 /// Always exactly one row: the identity is a scalar subquery, NULL when the
 /// meta row is gone, so it decodes through the one decoder an append and the
 /// port's `store_id` use.
-const IDENTITY_AND_SNAPSHOT_SQL: &str = "SELECT (SELECT v FROM store_meta WHERE k = 'store_id'), \
-     pg_current_snapshot()::text";
+const FIRST_ROUND_TRIP_SQL: &str = "LOCK TABLE event_removed IN SHARE MODE; \
+     SELECT (SELECT v FROM store_meta WHERE k = 'store_id'), \
+     pg_current_snapshot()::text, EXISTS (SELECT 1 FROM event_removed)";
 
 /// Of the claimed own positions the insert skipped, those whose row the begin
 /// snapshot could not see: written by this call, or committed by another
@@ -242,16 +251,8 @@ impl SendIngestStore for PostgresEventStore {
     /// cached (ADR-0086), so a re-mint is answered by the next call on any
     /// handle, clones included.
     async fn store_id(&self) -> Result<StoreId, Self::Error> {
-        let pool = self.pool.clone();
-        let stored: Option<Vec<u8>> = self
-            .on_runtime(async move {
-                sqlx::query_scalar(IDENTITY_SQL)
-                    .fetch_optional(&pool)
-                    .await
-                    .map_err(PostgresEventStoreError::from)
-            })
-            .await?;
-        identity_from_row(stored)
+        // The inherent read, which needs no feature (#485).
+        PostgresEventStore::store_id(self).await
     }
 
     async fn ingest(
@@ -272,7 +273,8 @@ impl SendIngestStore for PostgresEventStore {
 /// does not compile until somebody decides its class. A driver failure is
 /// transient when the server aborted or never started the work and time or an
 /// operator cures it: the network, the pool, a serialisation failure, a
-/// deadlock, an administrator's shutdown, or exhausted resources. Every other
+/// deadlock, a lock timeout, an administrator's shutdown, or exhausted
+/// resources. Every other
 /// driver failure, and every decoding variant, fails the same way again.
 #[cfg_attr(docsrs, doc(cfg(feature = "sync")))]
 impl Classify for PostgresEventStoreError {
@@ -317,18 +319,28 @@ fn transient_driver_failure(error: &sqlx::Error) -> bool {
 }
 
 /// Connection exceptions (`08`), insufficient resources (`53`), a
-/// serialisation failure, a deadlock, and the three operator interventions
+/// serialisation failure, a deadlock, a lock not granted within the session's
+/// `lock_timeout` (`55P03`: an ingest and a removal wait for each other on the
+/// removal record, SY-40), and the three operator interventions
 /// (`57P01`–`57P03`). Matched on the code, as `is_serialisation_failure` is,
 /// rather than by a variant per code.
 fn transient_sqlstate(code: &str) -> bool {
     code.starts_with("08")
         || code.starts_with("53")
-        || matches!(code, "40001" | "40P01" | "57P01" | "57P02" | "57P03")
+        || matches!(
+            code,
+            "40001" | "40P01" | "55P03" | "57P01" | "57P02" | "57P03"
+        )
 }
 
 /// One group, owned so it can cross onto the runtime.
 struct OwnedGroup {
+    /// The foreign events still to insert: every one the peer sent, less any
+    /// whose identity the store has recorded as removed (SY-40).
     events: Vec<ForeignEvent>,
+    /// How many foreign events the peer sent in this group, so an event
+    /// dropped as removed is counted as skipped.
+    offered: usize,
     compensation: Vec<Event>,
     /// The origin's condition, stored with the group (#420) and never
     /// evaluated (SY-1).
@@ -357,6 +369,7 @@ impl OwnedGroup {
             .collect::<Result<_, PostgresEventStoreError>>()?;
         Ok(Self {
             events,
+            offered: group.events.len(),
             compensation: group.compensation.to_vec(),
             // Cloned out of the borrowed group for the reason the events are:
             // the work crosses onto the runtime and must be `'static`, and the
@@ -396,18 +409,34 @@ enum Outcome {
 /// One ingest: every group, in order, in one transaction.
 async fn ingest_in_transaction(
     pool: PgPool,
-    groups: Vec<OwnedGroup>,
+    mut groups: Vec<OwnedGroup>,
     recorded_at: RecordedAt,
 ) -> Result<Outcome, PostgresEventStoreError> {
     let mut transaction = pool.begin().await?;
 
-    // First, so the snapshot is the call's begin snapshot, and so a store with
-    // no identity refuses before anything is written. The transaction is
-    // dropped uncommitted on that `?`.
-    let (stored, snapshot): (Option<Vec<u8>>, String) = sqlx::query_as(IDENTITY_AND_SNAPSHOT_SQL)
-        .fetch_one(&mut *transaction)
+    // First, so the snapshot is the call's begin snapshot, taken under the
+    // record's lock, and so a store with no identity refuses before anything
+    // is written. The transaction is dropped uncommitted on that `?`. The
+    // simple protocol answers in text, which the three decoders accept.
+    //
+    // Through `Executor::fetch_one`, whose future is boxed, rather than
+    // `RawSql::fetch_one`, an `async fn` generic over the executor's lifetime:
+    // the compiler cannot prove that one's future `Send` for every lifetime,
+    // which `on_runtime`'s spawn needs.
+    let connection: &mut sqlx::PgConnection = &mut transaction;
+    let first = connection
+        .fetch_one(sqlx::raw_sql(FIRST_ROUND_TRIP_SQL))
         .await?;
+    let stored: Option<Vec<u8>> = first.try_get(0)?;
+    let snapshot: String = first.try_get(1)?;
+    let any_removed: bool = first.try_get(2)?;
     let own = identity_from_row(stored)?;
+
+    // A recorded identity is dropped before any position is drawn for it
+    // (SY-40), and only a store that ever recorded one pays for the lookup.
+    if any_removed {
+        removal::drop_removed(&mut transaction, &mut groups).await?;
+    }
 
     // Only a call that carries a claim runs the claim check, and it is never
     // run without the begin snapshot.
@@ -431,8 +460,9 @@ async fn ingest_in_transaction(
             return Ok(Outcome::UnheldOwnIdentity(id));
         }
         ingested.appended += landed.ids.len();
-        // A duplicate inside one call lands once and counts as a skip.
-        ingested.skipped += group.events.len().saturating_sub(landed.ids.len());
+        // A duplicate inside one call lands once and counts as a skip, and so
+        // does an event dropped as removed (SY-40).
+        ingested.skipped += group.offered.saturating_sub(landed.ids.len());
 
         // Only for a group that landed something (SY-11): the first delivery
         // of a re-delivered group already wrote its compensation, and its

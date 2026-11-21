@@ -20,6 +20,14 @@ their stories at `report`, and three are not yet built: `HS-P0023`
 reach-and-adapter-path (blocked, after a `changes-requested` slice),
 `HS-P0024` comprehension-evidence and `HS-P0025` durable-audience-closeout.
 
+**For `HS-P0024`'s friction log (#174, 2026-11-18):** the reader now starts at the
+documentation site, `https://wet-ink-corporation.github.io/happenstance/`, not at
+`docs/` on GitHub. Every link from `happenstance`'s crate docs into the site points
+there: the guide root (`crates/happenstance/src/lib.rs:23`), the front-door
+sentence (`lib.rs:66`) and the bridge link (`crates/happenstance/src/domain.rs:105`),
+so a walk that begins on docs.rs lands on the rendered page. Walk the log from the
+site.
+
 **Work carried in from phase 16**
 
 - [x] #149 · **ES-23's adapter half, for the next adapter author**
@@ -36,6 +44,19 @@ reach-and-adapter-path (blocked, after a `changes-requested` slice),
       adapter row naming the four `cancellation_statement.rs` targets; the
       pointer is in `docs/adapter-reading-order.md`, the recipe atom and
       `CONTRIBUTING.md`, and the atom is superseded.
+
+**Work carried in from phase 21's audit**
+
+- [ ] #188 · **The rules three `[FROZEN]` ES clauses name and nothing owned**
+      (`kb-decision-0114`, proposed 2026-11-18). This phase owns them because it is
+      the last phase phase 21 waits on that is not `done`, which is PS-40's
+      precedent. Phase 21 settles nothing, and its audit reads a frozen clause as met.
+      ES-6's `store_error_crosses_a_join_handle`, bound by ADR-0009's marker. ES-31's
+      `checkpoint_lag_is_not_a_position_difference`, beside the typed runner. ES-29's
+      `wire_condition_with_after_is_refused`, shared with SY-6, which needs SY-6's
+      refusal built in the shape the owner picks in that record. Each rule lands with
+      its wrong implementation and takes its `Scheduled` entry out of
+      `xtask/src/spec_trace.rs`.
 
 **Proof artefact.** The initiative's own Definition of Done
 (`.bklg/docs-that-teach/initiative.md`), re-observed from a clean checkout, which is
@@ -56,3 +77,9 @@ what its terminal project `HS-P0025` was specified to do.
 first session on this phase owes a number.
 
 **Session log**
+
+- **2026-11-20** (#148). The row says `in progress`, and before this entry nothing
+  here backed it. What has landed: #510 pointed the crate docs' bridge links at
+  the site, so HS-P0024's friction log starts a reader there; the owning-phase box
+  for #188 under "Work carried in" (ADR-0114, accepted 2026-11-20, owns ES-6, ES-29
+  and ES-31 here). No exit criterion is ticked, and the estimate is still owed.

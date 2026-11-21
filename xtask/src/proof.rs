@@ -1268,7 +1268,7 @@ const CLOUDFLARE_FIXTURE_CONTRACT_TESTS: &[&str] = &[
 ///   module that stopped compiling would leave that permission resting on
 ///   nothing;
 /// * the ingest store (#108, part F; behind `sync` since part E, which is why
-///   this row's selector passes `--features sync`): the eight ingest rules and
+///   this row's selector passes `--features sync`): the nine ingest rules and
 ///   the fixture's capability check, mounted in a `--lib` module, so it has no
 ///   `WASM_TARGETS` row to be held to the enumeration by; the unit cases the
 ///   store's atomicity rests on — the settle table, the throw that takes the
@@ -1331,6 +1331,7 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::ingest::tests::family::ingest_conformance::dedupe_reaches_identity_without_decoding",
     "event_store::ingest::tests::family::ingest_conformance::every_declined_capability_is_stated_by_this_fixture",
     "event_store::ingest::tests::family::ingest_conformance::ingest_group_is_atomic_under_a_mid_group_fault",
+    "event_store::ingest::tests::family::ingest_conformance::ingest_holds_the_call_to_its_events_per_batch_ceiling",
     "event_store::ingest::tests::family::ingest_conformance::ingest_holds_the_call_to_its_tags_per_batch_ceiling",
     "event_store::ingest::tests::family::ingest_conformance::ingest_preserves_origin_identity",
     "event_store::ingest::tests::family::ingest_conformance::ingest_preserves_the_recorded_time",
@@ -1373,6 +1374,7 @@ const CLOUDFLARE_UNIT_TESTS: &[&str] = &[
     "event_store::ingest::tests::served::sync_conformance::peer_declares_its_own_limits",
     "event_store::ingest::tests::served::sync_conformance::peer_takes_a_batch_at_its_declared_limits",
     "event_store::ingest::tests::served::sync_conformance::every_refusal_states_its_class",
+    "event_store::ingest::tests::served::sync_conformance::refusal_is_never_condition_derived",
     "event_store::ingest::tests::served::sync_conformance::nothing_waiting_means_the_next_pull_is_empty",
     "event_store::ingest::tests::served::sync_conformance::ack_never_confirms_a_non_durable_event",
     "event_store::ingest::tests::served::sync_conformance::push_envelope_preserves_group_boundaries",

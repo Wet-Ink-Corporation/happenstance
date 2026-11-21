@@ -29,6 +29,16 @@ use happenstance_testkit::Capability;
 
 use crate::ingest::fixture::WorkerdIngestFixture;
 
+/// The reason [`WorkerdSyncFixture`] declines
+/// [`COMPACTION`](SyncFixture::COMPACTION), in the harness's own words.
+///
+/// `pub` because it is the one skip the `workerd` runner tolerates:
+/// `test/sync-peer.test.ts` carries this text word for word, and the host test
+/// in `crate::sync_peer` holds the two together (D10, #158, #480).
+pub const COMPACTION_DECLINED: &str = "the object serves a StoreSyncPeer over CloudflareIngestStore, and a store peer \
+     cannot read a retention floor through the port (ADR-0028), so the object has no compaction \
+     to offer";
+
 /// One isolated log inside the object, reached as a remote peer.
 ///
 /// One instance per ingest fixture, so per namespace: a rule's fixtures see
@@ -71,6 +81,11 @@ impl SyncFixture for WorkerdSyncFixture {
          the object, the crash the capability stands for, is beyond a runner inside one \
          request, and the restarts this harness drives are phased across two (crate::restart)",
     );
+
+    /// Declined, in [`COMPACTION_DECLINED`]'s words: the object serves a
+    /// `StoreSyncPeer`, which cannot read a retention floor through the port
+    /// (ADR-0028), so it has no compaction to offer until one is built for it.
+    const COMPACTION: Capability = Capability::declined(COMPACTION_DECLINED);
 
     /// [`PeerLimits::minimum`] at both ends, as the object's own routes
     /// declare: the limits a client must be told out of band (ADR-0097).

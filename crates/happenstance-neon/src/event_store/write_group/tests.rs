@@ -69,7 +69,10 @@ fn the_ingest_request_ends_with_the_stamp_after_the_refusal() {
         .ingest_request::<std::io::Error>(&groups)
         .expect("every guard encodes");
 
-    let [_, refusal, stamp] = request.statements.as_slice() else {
+    // Since the removal record (SY-40) the request opens with its lock, and
+    // what follows it is the request this test was written against.
+    assert_eq!(request.statements.len(), 4);
+    let [_, refusal, stamp] = ingest::after_lock(&request, &store.config) else {
         panic!(
             "the write, the refusal, the stamp: {:?}",
             request.statements
@@ -126,7 +129,11 @@ fn every_ingested_row_is_written_under_a_provisional_tag() {
     let request = store
         .ingest_request::<std::io::Error>(&[IngestGroup::new(&rows, &reversal)])
         .expect("no guard to encode");
-    let write = &request.statements.first().expect("the write").query;
+    // The first statement after the removal record's lock (SY-40).
+    let write = &ingest::after_lock(&request, &store.config)
+        .first()
+        .expect("the write")
+        .query;
 
     assert_eq!(
         write.matches(&format!(", {PROVISIONAL_GROUP} ")).count(),

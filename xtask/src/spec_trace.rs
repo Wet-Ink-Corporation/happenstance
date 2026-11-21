@@ -1029,7 +1029,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 62] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 71] = [
     // ---- VT: value types -------------------------------------------------
     // VT-6's `restored_peer_does_not_reissue_identities` left this table at
     // #133, in the change that wrote it as the restore family's rule: a name
@@ -1335,6 +1335,53 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 62] = [
         Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
     ),
     (
+        "PS-40",
+        "a_checkpoint_is_not_resumed_against_another_store",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
+    ),
+    (
+        "PS-40",
+        "a_view_refuses_another_sqlite_file",
+        Unresolvable::Elsewhere("examples/rebuilding-read-models/tests/rebuild_through_reset.rs"),
+    ),
+    (
+        "PS-40",
+        "source_mark_fits_a_signed_sixty_four_bit_column",
+        Unresolvable::Elsewhere("crates/happenstance/src/checkpoint/tests.rs"),
+    ),
+    (
+        // A typed-layer rule, as PS-40's: no adapter can fail it, because the
+        // union is derived above the port and `Query` already ORs its items.
+        "PS-41",
+        "several_scopes_are_one_query",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
+        "PS-41",
+        "several_scopes_are_one_query_in_a_fan_out",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
+        "PS-41",
+        "the_scopes_rule_rejects_a_runner_reading_only_scope",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
+        "PS-41",
+        "the_scopes_rule_rejects_a_runner_that_drops_the_types",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
+        "PS-41",
+        "the_ids_follow_the_set_of_scopes",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
+        "PS-41",
+        "no_scopes_is_refused_before_anything_is_read",
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_scopes.rs"),
+    ),
+    (
         "PS-26",
         "failure_policy_is_per_projection",
         Unresolvable::Elsewhere("crates/happenstance/tests/fan_out/rules.rs"),
@@ -1561,45 +1608,49 @@ fn check_case_levels(
 /// fourteenth is as invisible as these thirteen were. The entries are what
 /// `spec-trace` measured on its first run, at the commit that added the check.
 ///
-/// Nine of the thirteen are one fact: the `SY` family names rules for
+/// Nine of the thirteen were one fact: the `SY` family names rules for
 /// `happenstance-sync-testkit`, which CF-36's own `Rejects` paragraph points at
-/// and which did not exist then. That is not thirteen independent oversights.
-const CF36_UNDISCHARGED: [(&str, &str); 13] = [
-    (
-        "VT-21",
-        "names `store_accepts_the_guaranteed_minimum_payload` and \
-         `append_reports_exceeded_store_limits` — both live rules in `suite.rs` — against \
-         E2E-42 alone, which is transitive convergence across a peer mesh. The rules are \
-         single-store and the case is not; the mismatch is in the `Cases:` line rather than \
-         in the rules",
-    ),
-    (
-        "WF-9",
-        "the same shape as VT-21, and it shares one of the two rule names with it",
-    ),
+/// and which did not exist then. That was not thirteen independent oversights.
+///
+/// # What #100 discharged, and what is left
+///
+/// Nine went under #100. VT-21 and WF-9 cite E2E-61, a contract-level case
+/// written for their single-store rules, in place of the mesh case E2E-42.
+/// E2E-42 is itself `contract (sync)` now, because `sync_model_conformance!`
+/// generates its chains from one adapter's fixture, and that discharges SY-4,
+/// SY-5, SY-7, SY-9, SY-10, SY-24 and SY-25, all of which cite it. SY-9's rule
+/// is still unwritten; that is `SYNC_UNRESOLVABLE_RULE_NAMES`'s to count, not
+/// CF-36's.
+///
+/// The three left are one fact, and it is not a missing case: PS-29,
+/// PS-30 and SY-34 oblige a runner this workspace ships — the typed layer's
+/// fan-out runner, and `happenstance-sync`'s `Edge` — not an adapter. Their
+/// rules run against that runner in its own crate's tests, so there is no case
+/// an adapter author could run to cite, and calling E2E-28 or E2E-45
+/// contract-level would be false. CF-36 was written for adapter-obliging
+/// clauses. The route is a decision, owned by phase 21 (#68, under #100):
+/// whether a clause that obliges shipped library code is outside CF-36's
+/// reach, or its rules move into a family an adapter mounts. SY-2 left under
+/// #320, which gave it a contract-level case, E2E-62, for its store-side rule.
+const CF36_UNDISCHARGED: [(&str, &str); 3] = [
     (
         "PS-29",
-        "names `one_poisoned_projection_does_not_stall_the_others` against E2E-28, which is \
-         the integration-level case of the same name. The rule exists since #112, beside \
-         the fan-out runner in `crates/happenstance/tests/fan_out/rules.rs`, and needs a \
-         runner, so no contract-level case can carry it",
+        "obliges the typed layer's fan-out runner, not an adapter. Its rule, \
+         `one_poisoned_projection_does_not_stall_the_others`, runs against that runner in \
+         `crates/happenstance/tests/fan_out/rules.rs` (#112), and E2E-28 is honestly \
+         integration-level. Route: phase 21 decides whether runner-obliging clauses are \
+         outside CF-36 (#68, #100)",
     ),
-    ("PS-30", "the same shape as PS-29, against the same case"),
     (
-        "SY-2",
-        "the replication family; CF-36 homes its rules in `happenstance-sync-testkit`, absent \
-         when measured (`crates/happenstance-sync/src/lib.rs:23-24`) and present since #111. \
-         SY-2's case is still E2E-39 alone, and its rule checks only the transport's half: \
-         compensate-after-commit, which the clause's `Rejects` names, is #320",
+        "PS-30",
+        "the same shape as PS-29, against the same case and the same runner",
     ),
-    ("SY-4", "the replication family, as SY-2"),
-    ("SY-5", "the replication family, as SY-2"),
-    ("SY-7", "the replication family, as SY-2"),
-    ("SY-9", "the replication family, as SY-2"),
-    ("SY-10", "the replication family, as SY-2"),
-    ("SY-24", "the replication family, as SY-2"),
-    ("SY-25", "the replication family, as SY-2"),
-    ("SY-34", "the replication family, as SY-2"),
+    (
+        "SY-34",
+        "obliges `happenstance-sync`'s shipped `Edge`, not a peer adapter: its rule runs \
+         in `crates/happenstance-sync/tests/runner/main.rs`, and its only case, E2E-45, is \
+         a spoke refused by its hub, which is integration-level. The same route as PS-29",
+    ),
 ];
 
 /// Check 11's other direction — a recorded CF-36 breach that is no longer one.
@@ -4089,8 +4140,8 @@ mod tests {
         let mut problems = Vec::new();
         let live = reconcile_cf36(
             &one_clause_with(
-                "SY-2",
-                "`compensation_is_atomic_with_the_losing_event`",
+                "SY-34",
+                "`a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class`",
                 "E2E-01",
             ),
             &levels,
@@ -4101,7 +4152,7 @@ mod tests {
         assert!(
             problems
                 .iter()
-                .any(|p| p.contains("SY-2") && p.contains("can only shrink")),
+                .any(|p| p.contains("SY-34") && p.contains("can only shrink")),
             "got {problems:?}"
         );
     }
@@ -4119,7 +4170,7 @@ mod tests {
     }
 
     /// The whole of check 10 against the real documents. §7.6 states the result
-    /// this asserts — *"None. All 58 cases are claimed by at least one clause."*
+    /// this asserts — *"None. All 62 cases are claimed by at least one clause."*
     /// — and until this check that sentence was a hand computation nothing
     /// reproduced.
     #[test]
@@ -4127,7 +4178,7 @@ mod tests {
         let root = workspace_root().unwrap();
         let clauses = parse_clauses(&read(&root, SPEC).unwrap());
         let cases = collect_cases(&read(&root, CASES).unwrap());
-        assert_eq!(cases.len(), 58, "§7.6's count of the document");
+        assert_eq!(cases.len(), 62, "§7.6's count of the document");
 
         let mut problems = Vec::new();
         check_case_ownership(&clauses, &cases, &mut problems);
@@ -4135,7 +4186,7 @@ mod tests {
     }
 
     /// Check 11 against the real documents, both directions. Every case carries
-    /// a level, and the thirteen breaches are exactly the recorded ones.
+    /// a level, and the breaches are exactly the recorded ones.
     #[test]
     fn the_real_documents_breach_cf36_exactly_where_recorded() {
         let root = workspace_root().unwrap();

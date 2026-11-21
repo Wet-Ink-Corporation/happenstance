@@ -365,7 +365,7 @@ fn the_failure_policy_is_the_projections_and_halts_by_default() {
         .expect("the fixture seeds");
 
         let mut shreds = Shreds::new(None);
-        let error = run_projection(&events, &models, &mut shreds, &Json, chunk(1))
+        let error = run_projection((&events).into(), &models, &mut shreds, &Json, chunk(1))
             .await
             .expect_err("the poisoned event stops the run");
 
@@ -441,7 +441,7 @@ fn no_fan_out_runner_catches_a_panic() {
             let mut shreds = Shreds::new(Some("BOOM"));
             // One chunk over both events, so the first is applied into the
             // batch the second one panics inside.
-            let _ = run_projection(&events, &models, &mut shreds, &Json, chunk(8)).await;
+            let _ = run_projection((&events).into(), &models, &mut shreds, &Json, chunk(8)).await;
         });
     }));
     assert!(
@@ -510,7 +510,7 @@ fn fan_out_does_not_catch_a_panic_either() {
     // here, outside the runner. Only the fresh stores are read afterwards.
     let unwound = std::panic::catch_unwind(AssertUnwindSafe(|| {
         block_on(async {
-            let _ran = run_fan_out(&events, &models, &mut views, &Json, chunk(8)).await;
+            let _ran = run_fan_out((&events).into(), &models, &mut views, &Json, chunk(8)).await;
         });
     }));
     assert!(

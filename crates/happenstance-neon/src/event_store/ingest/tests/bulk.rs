@@ -35,7 +35,7 @@ use happenstance_sync::{EventGroup, PeerLimits, PushBatch, SyncPeer, Waiting, Wr
 use happenstance_sync_testkit::{IngestFixture, MemoryIngestFixture};
 
 use super::endpoint::{LiveTransport, fresh_schema};
-use super::peer_requests::{identity, set};
+use super::peer_requests::{identity, locked, set};
 use super::{OWN, Scripted, rows};
 use crate::event_store::{NeonEventStore, NeonSyncPeer};
 use crate::transport::{HttpResponse, SqlRequest, SqlTransport};
@@ -50,9 +50,14 @@ const GROUP_LEN: usize = 40;
 /// The window Rotor's ingest has to finish in: 34 minutes (ADR-0027 §6).
 const ROTOR_WINDOW: Duration = Duration::from_mins(34);
 
-/// The statements one push sends: the ingest's three, then the watermark and
-/// the identity. Fixed, whatever the push carries.
+/// The statements one push sends after the removal record's lock (SY-40): the
+/// ingest's three, then the watermark and the identity. Fixed, whatever the
+/// push carries, and what a push sent in all before the record.
 const STATEMENTS_PER_PUSH: usize = 5;
+
+/// The statements one push sends in all: the lock, then
+/// [`STATEMENTS_PER_PUSH`].
+const STATEMENTS_PER_PUSH_WITH_THE_LOCK: usize = STATEMENTS_PER_PUSH + 1;
 
 /// Pages past which a push loop is a near store that never ends, not a log.
 const MAX_PAGES: usize = ROTOR_EVENTS;
@@ -144,10 +149,12 @@ where
     panic!("the near store's log did not end within {MAX_PAGES} pages");
 }
 
-/// Queues one landed push's five answers: its counts, the refusal's `DO`, the
-/// stamp's `UPDATE`, the watermark and the identity.
+/// Queues one landed push's six answers: the removal record's lock's, its
+/// counts, the refusal's `DO`, the stamp's `UPDATE`, the watermark and the
+/// identity.
 fn answer_push(transport: &Scripted, appended: usize, skipped: usize) {
     transport.answer_batch(&[
+        locked(),
         set(&[serde_json::json!({
             "appended": appended.to_string(), "skipped": skipped.to_string(),
             "compensated": "0", "unheld": "",
@@ -223,9 +230,15 @@ async fn rotors_ingest_is_one_request_per_push_however_much_is_held() {
     let first_shape = sent.first().map(shape);
     assert_eq!(
         first_shape.as_ref().map(|(_, statements, _)| *statements),
-        Some(STATEMENTS_PER_PUSH)
+        Some(STATEMENTS_PER_PUSH_WITH_THE_LOCK)
     );
+    let store = transport.store();
     for request in &sent {
+        assert_eq!(
+            super::super::after_lock(request, store.config()).len(),
+            STATEMENTS_PER_PUSH,
+            "every push opens with the removal record's lock"
+        );
         assert_eq!(
             Some(shape(request)),
             first_shape,

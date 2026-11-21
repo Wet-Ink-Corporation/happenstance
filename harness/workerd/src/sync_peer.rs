@@ -37,8 +37,8 @@
 //!
 //! # The one tolerated skip (D10, #158)
 //!
-//! `retention_gap_is_reported_not_silent` skips here, with
-//! `UNSTATED_COMPACTION`'s reason and no other. The object serves a
+//! `retention_gap_is_reported_not_silent` skips here, with the fixture's own
+//! `COMPACTION_DECLINED` reason and no other. The object serves a
 //! `StoreSyncPeer`, and a store peer cannot read a retention floor through
 //! the port (ADR-0028), so its fixture declines `COMPACTION`; giving the
 //! Durable Object a compaction to offer is follow-up F1. The runner accepts
@@ -89,26 +89,35 @@ mod tests {
         assert!(names.contains(&"round_trip_preserves_the_whole_log"));
     }
 
-    /// The one skip the runner tolerates is SY-32's, for the reason the suite
-    /// writes when a fixture declines compaction, and the runner names that
-    /// reason word for word: a reworded reason, or a fixture that starts
-    /// declining for another one, turns this red on the host before the
-    /// `workerd` job sees it (D10).
+    /// The one skip the runner tolerates is SY-32's, for the reason the
+    /// object's fixture states when it declines compaction, and the runner
+    /// names that reason word for word: a reworded reason, or a fixture that
+    /// starts declining for another one, turns this red on the host before the
+    /// `workerd` job sees it (D10). The reason is the fixture's own, never the
+    /// suite's default, which `sync_declensions_are_stated` refuses (#480).
     #[test]
-    fn the_one_tolerated_skip_is_compaction_in_the_suites_words() {
+    fn the_one_tolerated_skip_is_compaction_in_the_fixtures_words() {
         use happenstance_sync_testkit::{SyncFixture as _, UNSTATED_COMPACTION};
 
-        use super::fixture::WorkerdSyncFixture;
+        use super::fixture::{COMPACTION_DECLINED, WorkerdSyncFixture};
 
         assert_eq!(
             WorkerdSyncFixture::COMPACTION.reason(),
-            Some(UNSTATED_COMPACTION),
-            "the object's fixture declines compaction in the suite's words"
+            Some(COMPACTION_DECLINED),
+            "the object's fixture declines compaction in its own words"
+        );
+        assert_ne!(
+            COMPACTION_DECLINED, UNSTATED_COMPACTION,
+            "the stated reason is not the suite's default"
         );
         let runner = include_str!("../test/sync-peer.test.ts");
         assert!(
-            runner.contains(UNSTATED_COMPACTION),
+            runner.contains(COMPACTION_DECLINED),
             "test/sync-peer.test.ts tolerates the skip only with this exact reason"
+        );
+        assert!(
+            !runner.contains(UNSTATED_COMPACTION),
+            "test/sync-peer.test.ts no longer tolerates the suite's default reason"
         );
         assert!(
             rule_names().contains(&"retention_gap_is_reported_not_silent"),

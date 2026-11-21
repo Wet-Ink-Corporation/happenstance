@@ -84,6 +84,13 @@
 //! that read as groups of one. Deploy this build to every writer and peer of
 //! an object before it serves replication.
 //!
+//! **A table and a trigger record removals** (#483, #484, SY-40):
+//! `event_removed` holds the origin identity of every event deleted from
+//! `event`, written by `event_record_removal`, an `AFTER DELETE` trigger, and
+//! ingest skips an identity recorded there. Both are created `IF NOT EXISTS`
+//! after the columns above, with no marker either; the `removal` module
+//! carries their statements and says why.
+//!
 //! [`contains_event_id`]: EventStore::contains_event_id
 //!
 //! # Why the whole object is one consistency boundary
@@ -212,6 +219,7 @@ fn migration(tables: &Tables) -> [String; 4] {
         event_tag,
         store_meta,
         event_type_idx,
+        ..
     } = tables;
     [
         format!(
@@ -589,6 +597,8 @@ impl CloudflareEventStore {
         }
         // The write-group columns (#420), added to a table that lacks them.
         write_group::add_columns(&self.sql, &self.tables)?;
+        // The removal record and its trigger (SY-40), `IF NOT EXISTS`.
+        removal::create(&self.sql, &self.tables)?;
         // `randomblob` is SQLite's own CSPRNG. Sixteen bytes of entropy from the
         // engine already under the object, weighed against adding a crate for
         // them: `happenstance-core` mints nothing because it is `no_std`-capable
@@ -604,7 +614,7 @@ impl CloudflareEventStore {
         // The read-back is the load-bearing half. `INSERT OR IGNORE` makes only
         // one mint land; reading the row back is what makes this call report a
         // row it cannot read rather than return as if the object had one.
-        self.store_id()?;
+        self.incarnation()?;
         Ok(())
     }
 
@@ -682,12 +692,12 @@ impl CloudflareEventStore {
             ),
             &[SqlValue::Text(STORE_ID_KEY.to_owned())],
         )?;
-        self.store_id()
+        self.incarnation()
     }
 
     /// This log's incarnation, read from `store_meta` every time it is asked
     /// for, so that no handle can go on believing one a re-mint has replaced.
-    fn store_id(&self) -> Result<StoreId, CloudflareEventStoreError> {
+    fn incarnation(&self) -> Result<StoreId, CloudflareEventStoreError> {
         let mut cursor = self.sql.exec(
             &format!(
                 "SELECT v AS store_id FROM {} WHERE k = ?",
@@ -1366,7 +1376,7 @@ impl EventStore for CloudflareEventStore {
         }
         self.check_ceilings(events)?;
 
-        let store_id = self.store_id().map_err(AppendError::Store)?;
+        let store_id = self.incarnation().map_err(AppendError::Store)?;
 
         // Nothing is awaited from here to the end of the function — this whole
         // body contains no `.await` — so the object cannot yield to its event
@@ -5235,3 +5245,12 @@ pub use ingest::CloudflareIngestStore;
 // Write groups (#420): the two columns `migrate` adds, and the group read. A
 // child for `ingest`'s reason, and declared below it for the same one.
 mod write_group;
+
+// The incarnation read with no feature (#485): what a typed view's `Source` is
+// built from. A child for `ingest`'s reason, and declared last for the same one.
+mod identity;
+
+// The removal record (#483, #484, SY-40): the table and trigger `migrate`
+// creates, and the probe ingest consults. A child for `ingest`'s reason, and
+// declared last for the same one.
+mod removal;

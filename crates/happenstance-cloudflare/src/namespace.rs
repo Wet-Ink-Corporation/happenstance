@@ -144,6 +144,10 @@ pub(crate) struct Tables {
     pub(crate) event_tag: Cow<'static, str>,
     pub(crate) store_meta: Cow<'static, str>,
     pub(crate) event_type_idx: Cow<'static, str>,
+    /// The removal record (SY-40): every identity deleted from `event`.
+    pub(crate) event_removed: Cow<'static, str>,
+    /// The trigger on `event` that writes [`event_removed`](Self::event_removed).
+    pub(crate) event_record_removal: Cow<'static, str>,
 }
 
 impl Tables {
@@ -154,6 +158,8 @@ impl Tables {
         event_tag: Cow::Borrowed("event_tag"),
         store_meta: Cow::Borrowed("store_meta"),
         event_type_idx: Cow::Borrowed("event_type_idx"),
+        event_removed: Cow::Borrowed("event_removed"),
+        event_record_removal: Cow::Borrowed("event_record_removal"),
     };
 
     /// The names for `namespace`'s log.
@@ -164,6 +170,8 @@ impl Tables {
             event_tag: prefixed("event_tag"),
             store_meta: prefixed("store_meta"),
             event_type_idx: prefixed("event_type_idx"),
+            event_removed: prefixed("event_removed"),
+            event_record_removal: prefixed("event_record_removal"),
         }
     }
 }
@@ -510,6 +518,9 @@ mod tests {
         assert_eq!(tables.event_tag, "t_event_tag");
         assert_eq!(tables.store_meta, "t_store_meta");
         assert_eq!(tables.event_type_idx, "t_event_type_idx");
+        // The removal record and its trigger (SY-40), added beside them.
+        assert_eq!(tables.event_removed, "t_event_removed");
+        assert_eq!(tables.event_record_removal, "t_event_record_removal");
     }
 
     #[test]
@@ -520,6 +531,8 @@ mod tests {
                 tables.event_tag.to_string(),
                 tables.store_meta.to_string(),
                 tables.event_type_idx.to_string(),
+                tables.event_removed.to_string(),
+                tables.event_record_removal.to_string(),
             ]
         };
         // The pairs a careless suffix scheme collides on: one namespace that is

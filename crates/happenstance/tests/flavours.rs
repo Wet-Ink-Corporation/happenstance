@@ -18,9 +18,14 @@ use happenstance::bytes::Bytes;
 use happenstance::{
     AppendCondition, AppendError, Codec, CodecError, DecisionModel, DomainEvent, Event, EventId,
     EventStore, EventType, Json, MemoryEventStore, MemoryStoreError, Query, ReadOptions, Retry,
-    SequencePosition, SequencedEvent, Tags, commit, commit_with, run_projection,
+    SequencePosition, SequencedEvent, Source, StoreId, Tags, commit, commit_with, run_projection,
 };
 use serde::{Deserialize, Serialize};
+
+/// The identity the generic spawners pin their runs to. Each test hands one
+/// store to one projection store, so any fixed identity is the right one;
+/// what these tests measure is the bounds `Source` leaves unchanged.
+const SOURCE_ID: StoreId = StoreId::from_bytes([0x5e; 16]);
 
 const SUBSCRIBED: EventType = EventType::from_static("StudentSubscribed");
 
@@ -373,7 +378,8 @@ async fn every_entry_point_binds_the_weak_flavour() {
         };
         let chunk = Chunk::of(NonZeroUsize::new(64).expect("64 is not zero"));
 
-        let progressed = run_projection(&store, &models, &mut seen, &Json, chunk)
+        let source = Source::new(&store, SOURCE_ID);
+        let progressed = run_projection(source, &models, &mut seen, &Json, chunk)
             .await
             .expect("a replay against a !Send store");
         assert_eq!(progressed.applied, 2);
@@ -534,7 +540,8 @@ where
         // bound; a spawner generic over `P: SendProjection` also writes
         // `Error: Send` on it, for the same hold
         // (`spawns_a_projection_generic_over_its_type`).
-        let applied = run_projection(&*events, &*models, &mut projection, &Json, chunk)
+        let source = Source::new(&*events, SOURCE_ID);
+        let applied = run_projection(source, &*models, &mut projection, &Json, chunk)
             .await
             .map_or(0, |progressed| progressed.applied);
 
@@ -618,7 +625,8 @@ where
             happenstance::Chunk::of(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
         // Collapsed to a count inside the task, so the `JoinHandle`'s output
         // asks nothing of the error types: every bound above is the runner's.
-        let applied = run_projection(&*events, &*models, &mut projection, &Json, chunk)
+        let source = Source::new(&*events, SOURCE_ID);
+        let applied = run_projection(source, &*models, &mut projection, &Json, chunk)
             .await
             .map_or(0, |progressed| progressed.applied);
         (projection, applied)
@@ -719,9 +727,15 @@ async fn a_concrete_bare_projection_spawns() {
     let applied = tokio::spawn(async move {
         let chunk =
             happenstance::Chunk::of(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
-        run_projection(&*task_events, &*task_models, &mut local, &Json, chunk)
-            .await
-            .map_or(0, |progressed| progressed.applied)
+        run_projection(
+            (&*task_events).into(),
+            &*task_models,
+            &mut local,
+            &Json,
+            chunk,
+        )
+        .await
+        .map_or(0, |progressed| progressed.applied)
     })
     .await
     .expect("the spawned task did not panic");
@@ -804,7 +818,8 @@ async fn a_not_send_projection_runs_through_the_bare_flavour() {
     let models = MemoryProjectionStore::new();
     let chunk = happenstance::Chunk::of(NonZeroUsize::new(64).expect("64 is not zero"));
 
-    let progressed = run_projection(&store, &models, &mut local, &Json, chunk)
+    let source = Source::new(&store, SOURCE_ID);
+    let progressed = run_projection(source, &models, &mut local, &Json, chunk)
         .await
         .expect("a replay of a !Send projection against a !Send store");
 
@@ -883,7 +898,8 @@ where
     tokio::spawn(async move {
         let chunk =
             happenstance::Chunk::of(core::num::NonZeroUsize::new(64).expect("64 is not zero"));
-        let ran = happenstance::run_fan_out(&*events, &*models, &mut views, &Json, chunk).await;
+        let source = Source::new(&*events, SOURCE_ID);
+        let ran = happenstance::run_fan_out(source, &*models, &mut views, &Json, chunk).await;
         // Collapsed to a count inside the task, as above, so every bound is
         // the runner's and none is the `JoinHandle`'s.
         let applied = ran
@@ -966,7 +982,8 @@ async fn run_fan_out_binds_the_weak_flavour() {
     let models = MemoryProjectionStore::new();
     let chunk = happenstance::Chunk::of(NonZeroUsize::new(64).expect("64 is not zero"));
 
-    let ran = happenstance::run_fan_out(&store, &models, &mut views, &Json, chunk).await;
+    let source = Source::new(&store, SOURCE_ID);
+    let ran = happenstance::run_fan_out(source, &models, &mut views, &Json, chunk).await;
 
     assert!(ran.read.is_none(), "the !Send store's read did not fail");
     assert!(ran.views.iter().all(Result::is_ok), "{:?}", ran.views);

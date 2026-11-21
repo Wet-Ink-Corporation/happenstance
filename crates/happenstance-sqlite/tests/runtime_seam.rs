@@ -37,7 +37,12 @@
 //! `a_store_with_no_runtime_anywhere_reports_no_runtime` in
 //! `tests/concurrency.rs`. The projection store had none, so it is here.
 
-#![cfg(not(target_arch = "wasm32"))]
+// Both modules below are feature-gated, so with neither role enabled the two
+// runtime helpers would have no caller (#497).
+#![cfg(all(
+    not(target_arch = "wasm32"),
+    any(feature = "event-store", feature = "projection-store")
+))]
 
 use tokio::runtime::{Builder, Runtime};
 

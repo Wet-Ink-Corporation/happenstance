@@ -36,7 +36,7 @@
 //!
 //! # Intended schema
 //!
-//! Migrations 1 and 2, exactly as [`SqliteEventStore::open`] applies them on
+//! Migrations 1 to 3, exactly as [`SqliteEventStore::open`] applies them on
 //! every connect — through a private `migrate`, which is why this block and not a
 //! rustdoc link is what a reader has. It is compared object-by-object against
 //! `sqlite_master` by
@@ -79,6 +79,19 @@
 //! -- Migration 2 (#420), once, on a file whose marker reads 1.
 //! ALTER TABLE event ADD COLUMN write_group INTEGER;  -- first position of the write
 //! ALTER TABLE event ADD COLUMN group_guard BLOB;     -- on that first row only
+//!
+//! -- Migration 3 (#483, #484), once, on a file whose marker reads 2.
+//! CREATE TABLE event_removed (                        -- the removal record
+//!     origin_store    BLOB    NOT NULL,
+//!     origin_position INTEGER NOT NULL,
+//!     PRIMARY KEY (origin_store, origin_position)
+//! ) WITHOUT ROWID;
+//! CREATE TRIGGER event_record_removal AFTER DELETE ON event
+//! WHEN OLD.origin_store IS NOT NULL BEGIN
+//!     INSERT INTO event_removed (origin_store, origin_position)
+//!     VALUES (OLD.origin_store, OLD.origin_position)
+//!     ON CONFLICT (origin_store, origin_position) DO NOTHING;
+//! END;
 //! ```
 //!
 //! Every line of it is load-bearing, and the two amendments in the middle are
@@ -133,6 +146,14 @@
 //! refuses the file rather than relay its groups torn. A row written before it
 //! has `NULL` in both and reads back as a group of its own; there is no
 //! backfill, because nothing recorded which rows one call wrote.
+//!
+//! **Migration 3 records removals** (SY-40, ADR-0110): a trigger writes the
+//! origin pair of every row deleted from `event`, by any client of the file,
+//! into `event_removed`, and ingest skips an event recorded there instead of
+//! re-admitting it, or refusing it as an unheld own identity. It raises the
+//! marker to 3, so a build that predates it refuses the file. A row deleted
+//! before it is not recorded; the private `removal` module says how an
+//! operator records one by hand, and what deleting a record row reopens.
 //!
 //! # Cancellation
 //!
@@ -288,8 +309,10 @@ pub struct SqliteEventStore {
 /// a schema with no version marker cannot be migrated later without guessing.
 ///
 /// 2 since #420: migration 2 adds the write-group columns, and a file it has
-/// run on is refused by a build that predates it.
-pub const SCHEMA_VERSION: u32 = 2;
+/// run on is refused by a build that predates it. 3 since #483 and #484:
+/// migration 3 adds the removal record and its trigger (SY-40), on the same
+/// terms.
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// Migration 1, verbatim. Mirrored in the [module documentation](self), which
 /// `tests/migration.rs` compares against `sqlite_master`.
@@ -895,8 +918,15 @@ impl SqliteEventStore {
     /// re-mint (VT-6). The transaction is dropped uncommitted and the call fails
     /// as `IngestError::UnheldOwnIdentity` (SY-38). An own-identity row the
     /// store does hold meets the `UNIQUE` constraint and is an ordinary skip.
-    /// No lookup runs ahead of the insert, so the check costs nothing on the
-    /// path every echoed event takes.
+    /// No lookup runs ahead of the insert for that, so the check costs nothing
+    /// on the path every echoed event takes.
+    ///
+    /// One lookup does, and only in a store that has had a row deleted: an
+    /// event whose identity migration 3's trigger recorded as removed is
+    /// dropped before the insert and counted as skipped (SY-40), own or
+    /// foreign, so it neither lands again nor reads as an unheld own identity.
+    /// The first statement asks whether the record holds anything at all, so a
+    /// store nobody prunes runs no probe.
     ///
     /// A skip is not always a hold, though. This call's own compensation is
     /// stamped with this store's identity, so a claim on the position a
@@ -925,11 +955,14 @@ impl SqliteEventStore {
         // The head before this call wrote anything, read once under the write
         // lock. An own identity above it was not held when the call began,
         // whatever the insert says, because only this call can have put a row
-        // there. `max` over the `INTEGER PRIMARY KEY` is one B-tree seek.
-        let started_at: i64 = transaction
-            .query_row("SELECT coalesce(max(position), 0) FROM event", [], |row| {
-                row.get(0)
+        // there. `max` over the `INTEGER PRIMARY KEY` is one B-tree seek, and
+        // the same statement asks whether anything was ever removed (SY-40).
+        let (started_at, any_removed): (i64, bool) = transaction
+            .query_row(removal::HEAD_AND_ANY_REMOVED_SQL, [], |row| {
+                Ok((row.get(0)?, row.get(1)?))
             })
+            .map_err(|error| IngestError::Store(error.into()))?;
+        let mut probe = removal::Probe::new(&transaction, any_removed)
             .map_err(|error| IngestError::Store(error.into()))?;
         let write = |rows: &[NewRow<'_>]| {
             write_batch(&transaction, store_id, rows).map_err(IngestError::Store)
@@ -937,17 +970,11 @@ impl SqliteEventStore {
 
         let mut ingested = happenstance_sync::Ingested::default();
         for group in groups {
-            let foreign: Vec<NewRow<'_>> = group
-                .events
-                .iter()
-                .map(|replicated| NewRow {
-                    event: &replicated.event,
-                    origin: Origin::Foreign {
-                        id: replicated.id,
-                        recorded_at: replicated.recorded_at,
-                    },
-                })
-                .collect();
+            // A recorded removal is dropped here, before the insert, so it is
+            // a skip that burns no position and is never refused (SY-40).
+            let foreign = probe
+                .unrecorded(group.events)
+                .map_err(|error| IngestError::Store(error.into()))?;
             let written = write(&foreign)?;
             // Landed, so not held; or skipped against a row this call wrote.
             let hidden = written
@@ -955,12 +982,14 @@ impl SqliteEventStore {
                 .filter(|echo| claimed_after(*echo, started_at));
             if let Some(id) = written.unheld_own.or(hidden) {
                 // Dropping the transaction uncommitted rolls back every group
-                // this call has written so far, not only this one.
+                // this call has written so far, not only this one. The probe
+                // borrows it, so it goes first.
+                drop(probe);
                 drop(transaction);
                 return Err(IngestError::unheld_own_identity(id));
             }
             ingested.appended += written.inserted;
-            ingested.skipped += foreign.len() - written.inserted;
+            ingested.skipped += group.events.len() - written.inserted;
 
             if written.inserted > 0 && !group.compensation.is_empty() {
                 let compensation: Vec<NewRow<'_>> = group
@@ -997,6 +1026,7 @@ impl SqliteEventStore {
         // An explicit rollback, not a drop: this is a success path, and a
         // failed ROLLBACK swallowed by `Drop` would leave the connection inside
         // a transaction that refuses every later write.
+        drop(probe);
         if ingested.appended == 0 && ingested.compensated == 0 {
             transaction
                 .rollback()
@@ -1113,20 +1143,12 @@ impl SqliteEventStore {
         let transaction =
             connection.transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)?;
 
-        transaction.execute_batch(MIGRATION_1)?;
-        transaction.execute(
-            "INSERT OR IGNORE INTO store_meta (k, v) VALUES (?, ?)",
-            rusqlite::params![SCHEMA_VERSION_KEY, write_group::BASELINE_SCHEMA_VERSION],
-        )?;
+        // Each step is its own function so that a unit test can compose the
+        // same steps and stop at version 2: `write_group/tests/version_2.rs`.
+        apply_baseline(&transaction)?;
         write_group::migrate_to_2(&transaction)?;
-        // `randomblob` is SQLite's own CSPRNG. Sixteen bytes of entropy from the
-        // driver already in the tree, weighed against adding a crate for them
-        // and chosen deliberately — `happenstance-core` mints nothing because it
-        // is `no_std`-capable and has no entropy source, so the adapter must.
-        transaction.execute(
-            "INSERT OR IGNORE INTO store_meta (k, v) VALUES (?, randomblob(16))",
-            [STORE_ID_KEY],
-        )?;
+        removal::migrate_to_3(&transaction)?;
+        mint_identity(&transaction)?;
 
         let store_id = read_identity(&transaction)?;
         transaction.commit()?;
@@ -3927,5 +3949,45 @@ mod busy_conformance {
     }
 }
 
+/// Migration 1 and the baseline marker: the first step of `migrate`.
+///
+/// `INSERT OR IGNORE`, so a file that already carries a marker keeps it and
+/// the later steps read the version it is really at.
+///
+/// # Errors
+///
+/// The driver failed.
+fn apply_baseline(transaction: &Connection) -> rusqlite::Result<()> {
+    transaction.execute_batch(MIGRATION_1)?;
+    transaction.execute(
+        "INSERT OR IGNORE INTO store_meta (k, v) VALUES (?, ?)",
+        rusqlite::params![SCHEMA_VERSION_KEY, write_group::BASELINE_SCHEMA_VERSION],
+    )?;
+    Ok(())
+}
+
+/// Mints this file's incarnation unless it already has one: the last step of
+/// `migrate` before the read-back.
+///
+/// `randomblob` is SQLite's own CSPRNG. Sixteen bytes of entropy from the
+/// driver already in the tree, weighed against adding a crate for them and
+/// chosen deliberately — `happenstance-core` mints nothing because it is
+/// `no_std`-capable and has no entropy source, so the adapter must.
+///
+/// # Errors
+///
+/// The driver failed.
+fn mint_identity(transaction: &Connection) -> rusqlite::Result<()> {
+    transaction.execute(
+        "INSERT OR IGNORE INTO store_meta (k, v) VALUES (?, randomblob(16))",
+        [STORE_ID_KEY],
+    )?;
+    Ok(())
+}
+
 // Write groups (#420): migration 2, the stamp, and the group read.
 mod write_group;
+
+// The removal record (#483, #484, SY-40): migration 3, its trigger, and the
+// probe ingest runs.
+mod removal;

@@ -135,6 +135,7 @@ pub mod rules {
     use crate::violation::{Violation, ensure};
     use crate::{MAX_PROVOKED_BATCH_BYTES, MAX_PROVOKED_BATCH_EVENTS, SyncFixture};
 
+    mod condition_free;
     mod retention;
     mod whole_log;
 
@@ -544,6 +545,69 @@ pub mod rules {
                 )
             })?;
         }
+        Ok(RuleOutcome::Ran)
+    }
+
+    /// SY-33: a peer refuses a push for transport or authorisation reasons
+    /// only, never for a condition-level one, so no refusal's answer varies
+    /// with what the receiver holds.
+    ///
+    /// The fixture drives the peer into every refusal it can produce
+    /// ([`SyncFixture::refusals`]) twice, on one handle: once on the fresh
+    /// receiver, and once after the rule has grown its log. In between, the
+    /// rule pushes a probe, a claim under the position-free guard "nobody has
+    /// claimed the slot", then a seed of a rival claim on that slot and
+    /// unrelated notes, then the probe again and the probe's shape from a
+    /// fresh origin. Every provocation, and each probe, must be answered the
+    /// same both times: accepted, or refused with the same
+    /// [`FailureClass`](happenstance_sync::FailureClass).
+    ///
+    /// Only refusals are compared. What an acknowledgement counts is SY-1's
+    /// and SY-31's to judge, so a peer that drops the rival claim and says so
+    /// in its ack fails `ingest_never_rejects` and passes this rule.
+    ///
+    /// # SY-38's refusal is not counted
+    ///
+    /// The one log-dependent refusal SY-33 permits is SY-38's, of an event
+    /// claiming the receiver's own identity that it does not hold (ADR-0098).
+    /// The rule never provokes it: its three origins are fixed identities of
+    /// its own, which no fixture in this workspace gives its receiver and a
+    /// store that mints its identity at random does not draw, so no push it
+    /// makes is an own-identity claim. A fixture that declares an own-identity claim
+    /// among its refusals is answered the same both times, because a refused
+    /// claim writes nothing and no push can make the receiver hold its own
+    /// identity: the claim is as unheld after the seed as before it.
+    ///
+    /// # Rejects
+    ///
+    /// A peer that refuses what it holds, as a "duplicate"; one that refuses,
+    /// with an error, a group whose guard its log violates, as a "conflict",
+    /// which SY-1's rule rejects too; and one whose oversized-push refusal is
+    /// `Split` on an empty log and `Stop` once it holds anything, which SY-36's
+    /// rule, on a fresh peer, cannot see. `tests/wrong_refusals.rs` carries
+    /// all three.
+    ///
+    /// # Does not reject
+    ///
+    /// A refusal keyed on log contents the rule's seed does not produce, such
+    /// as a count past some threshold. The rule can vary only the state it can
+    /// write through the port, and the seed is the state a condition-level
+    /// refusal reads: a held identity and an event the travelling guard names.
+    /// Nor does it tell a log-keyed refusal from a fixture whose provocation
+    /// depends on something its first run spent, such as a quota: that reads
+    /// as condition-derived here, and no fixture in this workspace has one.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-33 if the peer refuses the seed, if a probe or a
+    /// provocation is answered differently once the receiver holds the seed,
+    /// or if the fixture provokes different refusals the second time.
+    pub async fn refusal_is_never_condition_derived<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        let fixture = open().await;
+        let peer = fixture.connect().await;
+        condition_free::never_condition_derived(&fixture, &peer).await?;
         Ok(RuleOutcome::Ran)
     }
 
@@ -1828,6 +1892,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- Every refusal states its class (SY-36) ---------------------
             every_refusal_states_its_class,
+
+            // --- No refusal is condition-derived (SY-33) --------------------
+            refusal_is_never_condition_derived,
 
             // --- Nothing waiting means nothing waiting (SY-37) --------------
             nothing_waiting_means_the_next_pull_is_empty,

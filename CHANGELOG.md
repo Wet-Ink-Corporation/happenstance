@@ -33,6 +33,343 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-11-20
+
+**Breaking from `0.7.x`**: read [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md)
+before upgrading. Each break is labelled in place and traced at the end of this
+section. SQLite, Postgres, Neon and the Durable Object each migrate their schema,
+and nothing on the sync wire moves. SY-40 is
+minted and frozen in this release (ADR-0110, ADR-0115). The four phase-21 audit
+records ADR-0111..0114 are accepted, and phase 20 builds what they decide.
+
+A typed projection's checkpoint is pinned to the event store it was built from
+(#485, PS-40, [ADR-0109](.kb/decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md)).
+Resumed against a different store with the same projection store, a view used to
+skip that store's events at or below its old checkpoint and apply
+again the ones above it, in silence (`experiments/retention-reader`'s R1-4). It
+now stops with `ProjectionError::SourceChanged` before it reads or applies
+anything. **This is a breaking change to `happenstance`'s two runners**; read
+[`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md). The pin changes no
+schema: it is one more checkpoint row, under an id of its own.
+
+A store that had events removed outside the port no longer takes them back, or
+refuses them, when they are offered again (#483, #484, SY-40,
+[ADR-0110](.kb/decisions/0110-a-removed-event-is-not-readmitted.md)).
+`experiments/retention-reader` showed a restored edge re-admitting pruned foreign
+events at the tail, so a projection applied them twice, and refusing a pruned own
+event as `UnheldOwnIdentity`, which wedged the edge. Ingest now skips an event
+whose identity the store has recorded as removed. This release's first part is
+the oracle and the conformance rule; the four adapters follow, each with its own
+entry below. **`happenstance-sqlite` migrates its file to schema
+version 3 on open, and a `0.7` build refuses a migrated file**; upgrade every
+process that opens a store before any of them opens it.
+**`happenstance-postgres` and `happenstance-neon` add a migration 4, which
+every process that ingests needs before it runs this build**: apply it, then
+deploy.
+
+### Added
+
+- `happenstance`: `Source<'a, S>`, an event store paired with its `StoreId`, the
+  identity a run's checkpoint is pinned to. `From<&MemoryEventStore>` builds one
+  behind the `memory` feature; elsewhere `Source::new(&events, events.store_id())`.
+- `happenstance`: `source_checkpoint_id`, the id a projection's pin is kept
+  under: `name#digest`, beside PS-25's unchanged `name@digest`. Resetting it is
+  the remedy for a refusal; the next run pins the store it reads.
+- `happenstance`: `SourceMark`, the 63-bit fingerprint of a `StoreId` that the
+  pin holds, non-zero and at most `i64::MAX` so every SQL adapter keeps it
+  exactly. Its value for a given id is a promise, pinned by goldens.
+- `happenstance`: `ProjectionError::SourceChanged { pin, recorded, found }` and
+  `ProjectionError::RecordSource`, on a `#[non_exhaustive]` enum.
+- `happenstance-postgres`, `happenstance-neon`, `happenstance-cloudflare`: an
+  inherent `store_id` on each event store, behind no feature: one read of the
+  identity row, never cached, so it follows a re-mint. It is what a typed
+  view's `Source` is built from on these stores, where it used to need the
+  `sync` feature's `IngestStore::store_id`, which now delegates to it (#485,
+  485-Q4). Async and fallible on Postgres and Neon, fallible on Cloudflare.
+- `happenstance-testkit`: `RecordingProjectionStore::failing_checkpoint_reads_of`,
+  a second handle onto the same recording store whose reads of one checkpoint id
+  fail, so a runner's refused pin or checkpoint read can be tested (#485,
+  485-Q7). Additive.
+- `happenstance`: PS-40's rule, `a_checkpoint_is_not_resumed_against_another_store`,
+  a typed-layer test rather than a conformance rule, rejecting a runner with no pin, a pin never compared, and
+  the identity folded into the main key; and `a_view_refuses_another_sqlite_file`
+  on two real SQLite files.
+- `happenstance-sync`: `MemoryIngestStore::remove`, behind `memory`, the
+  oracle's removal outside the port. It removes the events at the positions
+  named, records each removed identity, keeps the position allocator where it
+  was (ES-38), and returns how many it removed. Its ingest skips a recorded
+  identity, foreign or own, and counts it in `Ingested::skipped` (SY-40).
+- `happenstance-sync-testkit`: `IngestFixture::REMOVAL`,
+  `IngestFixture::remove_outside_port` and `UNSTATED_INGEST_REMOVAL`, defaulted
+  to declined, so an existing fixture compiles and reports the new rule as a
+  skip. `MemoryIngestFixture` grants it.
+- `happenstance-sync-testkit`: SY-40's rule, `a_removed_event_is_not_readmitted`,
+  in the ingest family. It rejects a store that re-admits a removed foreign event,
+  one that refuses a removed own event, one that skips every unheld own claim once
+  anything was removed, one that keeps its record per handle, and one that
+  compensates a group of removed and held events. **A new rule is a minor for
+  this crate; pin it exactly.** It runs only against a fixture that grants
+  `REMOVAL`, so no adapter's CI turns red until that adapter grants it.
+  **SY-40 is `[FROZEN]`** (ADR-0115). It was minted provisional, and the rule has
+  since run green, not declined, on all five adapters that implement ingest,
+  Neon against a live endpoint among them.
+- `happenstance-sqlite`: the removal record (#483, #484, SY-40). Migration 3
+  adds a table, `event_removed`, and an `AFTER DELETE` trigger on `event` that
+  records the origin identity of every row deleted from the file, by any client.
+  Ingest skips a recorded identity, own or foreign, and counts it in
+  `Ingested::skipped`: it burns no position, a call that lands nothing still
+  leaves the file byte-identical (#359), and an own claim the store never held is
+  still refused (SY-38). The probe runs only once the record holds a row, and
+  seeks its primary key. The ingest fixture grants `REMOVAL`, so the mounted
+  ingest family runs `a_removed_event_is_not_readmitted`, and
+  `tests/pruned_replica.rs` holds `experiments/retention-reader`'s three R2-dst
+  scenarios as regression tests, fixed, with their control.
+- `happenstance-cloudflare`: the removal record (#483, #484, SY-40). `migrate`
+  creates a table, `event_removed`, and an `AFTER DELETE` trigger on `event`,
+  `event_record_removal`, that records the origin identity of every event
+  deleted from the log by any statement the object runs; a namespaced log gets
+  its own pair under its prefix. Ingest skips a recorded identity, own or
+  foreign, and counts it in `Ingested::skipped`: it is dropped before it is
+  staged, so it spends no position, and an own claim the object never held is
+  still refused (SY-38). One `EXISTS` per ingest call while the record is
+  empty, and a point lookup on its key per event once it is not. Like the
+  write-group columns there is no schema marker: an older build ignores the
+  table and re-admits what it ingests, so deploy this build to every writer of
+  an object before it serves replication again. The ingest fixture, and
+  `harness/workerd`'s, grant `REMOVAL`, so `a_removed_event_is_not_readmitted`
+  runs on the gate's Node host and under `workerd`.
+- `happenstance-postgres`: the removal record (#483, #484, SY-40). Migration 4,
+  `migration::MIGRATION_4`, adds a table, `event_removed`, and a `BEFORE DELETE`
+  row trigger on `event`, `event_record_removal`, that records the origin
+  identity of every row deleted from the log, by any client and whatever its
+  `search_path`. Every ingest takes `LOCK TABLE event_removed IN SHARE MODE` in
+  its first round trip, which is still one round trip, so a removal and an
+  ingest wait for each other rather than race; once the record holds a row, the
+  ingest reads the recorded identities among the offered ones and drops them
+  before writing. A dropped event draws no position, counts in
+  `Ingested::skipped`, and an own claim the store never held is still refused
+  (SY-38). The ingest fixture grants `REMOVAL`, so the mounted ingest family runs
+  `a_removed_event_is_not_readmitted` under `live-postgres`, and the restore
+  family's fixture rolls the record back with the log, as a real restore does.
+- `happenstance-neon`: the removal record (#483, #484, SY-40).
+  `migration::MIGRATION_4` creates the table, `<event table>_removed`, and
+  `migration::removal_trigger_statements` builds the `BEFORE DELETE` trigger
+  and its function as two whole statements, because the migration splitter
+  would cut a `plpgsql` body in half. The ingest request is still one round
+  trip, now of four statements: `LOCK TABLE ... IN SHARE MODE` first, and an
+  ingest statement that anti-joins the record before its `INSERT`. The ingest
+  fixture grants `REMOVAL`, so the rule runs under `live-neon`.
+- `happenstance-neon`: `migration::removal_record_request(&config)`, a new
+  public function that returns migration 4 whole, the table and the trigger
+  statements, as one request. Sending `MIGRATION_4` through `migration::request`
+  alone creates the table and no trigger, so ingests lock it and succeed while
+  nothing records a removal; this is the request to send. Additive.
+- `happenstance-postgres`, `happenstance-neon`: the trigger's function is
+  `SECURITY DEFINER SET search_path = pg_catalog, pg_temp`, with `EXECUTE`
+  revoked from `PUBLIC`, so a role that deletes needs nothing on the record. A
+  role that ingests needs `SELECT, UPDATE` on it (`SELECT, MAINTAIN` on
+  Postgres 17), because `LOCK ... IN SHARE MODE` needs one of `UPDATE`,
+  `DELETE`, `TRUNCATE` or `MAINTAIN`. Both READMEs say so, and that an open
+  transaction holding a `DELETE` holds every ingest under the default
+  `lock_timeout = 0`.
+- `happenstance-postgres`, `happenstance-neon`: SQLSTATE `55P03`
+  (`lock_not_available`) is classified as transient, so an ingest that gives up
+  waiting on a removal under a `lock_timeout` is retried rather than stopping
+  an edge.
+- **`happenstance-sync-testkit`: `IngestFixture::MAX_EVENTS_PER_BATCH`** and the
+  ingest rule **`ingest_holds_the_call_to_its_events_per_batch_ceiling`** (VT-24;
+  #379). A store that declares an events-per-call ceiling is held to it over the
+  whole `ingest` call, every group and every compensation counted together. A
+  call exactly at the ceiling lands. A call one event over, spread across groups
+  or over only because of its compensation, is refused as
+  `IngestError::ExceedsStoreLimit { limit: EventsPerBatch, len }`, with `len` the
+  call's length and nothing written. The const defaults to `None`, so an existing
+  fixture still compiles, and a fixture that declares nothing reports the rule
+  **skipped** with `NO_EVENTS_PER_BATCH_LIMIT` and
+  `NO_EVENTS_PER_BATCH_LIMIT_REASON`. A ceiling at or above
+  `MAX_PROVOKED_BATCH_EVENTS` (4,096) is not exercised. VT-24's floor stays with
+  `bulk_ingest_is_idempotent_in_bounded_round_trips`. It rejects a store that
+  holds each group to the ceiling apart, one that leaves the compensation out,
+  one that refuses a call exactly at the ceiling, and one that writes the call
+  and then refuses it. **A new rule is a minor for this crate; pin it exactly.**
+  The ingest fixtures of `happenstance-sqlite`'s spike (256),
+  `happenstance-postgres` (256), `happenstance-neon` (128),
+  `happenstance-cloudflare` (1,024) and `harness/workerd` now declare their
+  stores' ceilings and run it.
+- `happenstance-sync-testkit`: `ingest_holds_the_call_to_its_tags_per_batch_ceiling`
+  now checks VT-36's reachable half before it writes, closing the gap its
+  documentation named under "Not checked: the call's length". When a fixture
+  declares `MAX_EVENTS_PER_BATCH`, `ceiling + 1` tags must fit in that many
+  events of at most `MAX_TAGS_PER_EVENT` tags, or the declaration is a VT-36
+  violation. A coherent declaration too tight for the rule's own spread reports
+  the rule skipped with `TAGS_PER_BATCH_PAST_THE_CALL_LENGTH_REASON`. Before this
+  change, such a store failed the rule naming the wrong limit.
+- `happenstance`: `Projection::scopes`, a provided method returning `&[Tags]`,
+  so one projection can follow several tag sets at once, such as every case one
+  owner holds (PS-41, the owner's call D3 = A). Both runners read the union:
+  one query item per scope, each over the projection's `EVENT_TYPES`, so an
+  event matching any scope is applied once, in log order. The default is
+  `scope()` alone, so a projection that does not override it reads and keys
+  its checkpoint exactly as before. Adding or dropping a scope changes
+  `checkpoint_id` and `source_checkpoint_id`, and the view replays from the
+  start (PS-25); their order and a repeat do not. An empty slice is refused
+  before anything is read, as `ProjectionError::Boundary` holding
+  `InvalidQuery::NoItems`. A wrapper projection that forwards `scope()` should
+  forward `scopes()` too. PS-41's rule, `several_scopes_are_one_query`, is a
+  typed-layer test in `crates/happenstance/tests/projection_scopes.rs`, held
+  against both runners and against a runner reading `scope()` alone and one
+  dropping the event types.
+- **`happenstance-sync-testkit`: SY-33's rule,
+  `refusal_is_never_condition_derived`**, in the sync peer family (#465).
+  SY-33 was frozen naming it, and it had never been written. It drives every refusal the fixture declares through
+  `SyncFixture::refusals` twice on one handle, once on the fresh receiver and
+  once after the rule has grown its log, and requires each to be answered the
+  same: accepted, or refused with the same `FailureClass`. In between it pushes a
+  guarded claim, a seed of a rival claim that guard names and unrelated events,
+  the claim again and the claim's shape from a fresh origin, each held to the
+  claim's first answer. Only refusals are compared, never acks. SY-38's
+  own-identity refusal is never provoked: the rule's origins are its own. It
+  rejects a peer that refuses an event it already holds, one that refuses a
+  group whose guard its log violates, which SY-1's rule rejects too, the same
+  peer made careful enough to skip a re-delivery first, which only the
+  fresh-origin probe catches, and one whose oversized-push refusal is `Split` on an empty log and `Stop` once it
+  holds anything, in `tests/wrong_refusals.rs`. `SyncFixture` is unchanged, so
+  every existing fixture runs the rule with no edit: it is green on
+  `MemorySyncPeer`, the KV-capped, `!Send`, remote and store peers, and mounted
+  for the Durable Object, `harness/workerd`, and the Postgres and Neon peers
+  under `live-postgres` and `live-neon`. **A new rule is a minor for this crate;
+  pin it exactly.**
+- **`happenstance-sync-testkit`: SY-2's authoring half,
+  `the_losing_event_is_never_read_unresolved`**, in the ingest family (#320).
+  The rule mounts the seat family's merge rule through the shipped
+  `runner::Adjudicate` hook and has it answer a conflicting claim with a
+  reversal. It hands the store the claim and the reversal as the runner does,
+  in one `IngestGroup`. While that ingest is pending, the rule reads the log on
+  a second handle each time the ingest yields. No read may show the losing
+  claim without its reversal, and the read after the ingest must show both. It
+  rejects compensate-after-commit in a store: one that commits the losing
+  event, awaits, and only then commits the compensation. Nothing fails, and
+  the log is right once the call returns, so SY-30's rule reached that store
+  only when its fixture could arm a fault (`tests/wrong_ingest_stores.rs`,
+  `Mistake::CompensatesAfterCommit`). The reader shares the ingest's task
+  rather than running in its own, so the rule needs no runtime and no `Send`
+  bound. A store that never yields in the middle of a call has no gap to be
+  read in. SY-2's `Rule:` line names the rule, and SY-2 cites a new
+  contract-level case, E2E-62. Both are a repair to the frozen clause, not an
+  amendment, so SY-2 leaves `CF36_UNDISCHARGED`. `IngestFixture` is unchanged,
+  so every existing fixture runs the rule with no edit. **A new rule is a
+  minor for this crate; pin it exactly.**
+
+### Changed
+
+- **Breaking: `happenstance`: `run_projection` and `run_fan_out` take a
+  `Source<'_, S>` as their first argument, in place of `&S`.** Over a memory
+  store the change is `(&events).into()`. The first run of a view records its
+  source under `source_checkpoint_id` with an empty commit, before the stream
+  opens; a later run whose source differs stops with `SourceChanged`, and in a
+  fan-out stops only that view (PS-29). A `0.7.x` checkpoint with no pin is
+  adopted by the store its first `0.8` run reads, so **run that first run
+  against the store each view was built from.**
+- **Breaking (behaviour): `happenstance`: a run performs one more
+  `ProjectionStore::checkpoint` read per view, and a view's first run under
+  `0.8` one more `begin` and `commit`, even when it has nothing to apply.** A
+  store that counts its calls sees them.
+- `happenstance-sync-testkit`: the convergence suite builds its runs' `Source`
+  from each log's own `store_id`. No rule's verdict changes.
+- `happenstance-sync-testkit`: SY-7's and SY-10's ingest rules keep each
+  fixture alive until the store connected from it drops, so a fixture that tears
+  its backing down on drop no longer does so under a live handle (#500). No
+  rule's verdict changes.
+- `happenstance-sync`'s runner tests: SY-34's log assertion now fails a wrong
+  runner, a `MiniEdge` that rolls its own events back when a push is refused,
+  where the specification had only argued that it would (#487, ADR-0108's open
+  point C). No rule's verdict changes.
+- **Breaking (testkit): `happenstance-sync-testkit`: `sync_declensions_are_stated`
+  checks `SyncFixture::COMPACTION` as well as `REOPEN`** (#480, CF-18). A
+  fixture that inherits `COMPACTION`'s default declension, in
+  `UNSTATED_COMPACTION`'s words, now fails the test `sync_peer_conformance!`
+  emits, as one silent on `REOPEN` already did. Write the constant on the
+  `impl`, with your peer's own reason, or declare it supported. Every fixture
+  in this workspace states one: the Postgres, Neon and Cloudflare peer
+  families, the local, remote and store mounts, and the `workerd` harness,
+  whose tolerated SY-32 skip is now keyed on its fixture's own words.
+- **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
+  an identity that is not the store's.
+- **Breaking (schema): `happenstance-sqlite`: `SCHEMA_VERSION` is 3, was 2.**
+  `open`, `open_on` and `open_in_memory` apply migration 3 to a file at 2 and
+  raise its marker in the same transaction; `new`, which never migrates, refuses
+  a file at 2 with `SchemaNeedsMigration { found: 2, required: 3 }`; and a `0.7`
+  build refuses a file at 3 with `UnsupportedSchemaVersion`. Rows deleted before
+  the migration are not recorded, and the README gives the `INSERT` that records
+  one by hand. See [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md#a-sqlite-store-migrates-to-schema-version-3-h4).
+- **Breaking (schema): `happenstance-postgres`: migration 4, and
+  `SCHEMA_VERSION` is 3, was 2.** Every ingest locks `event_removed` first, so
+  this build's first ingest against a schema without migration 4 fails with an
+  undefined table: run `migration::apply`, then deploy. Appends do not read the
+  record. An older build keeps working against a migrated schema, but its
+  ingest ignores the record. See
+  [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md#postgres-and-neon-add-the-removal-record-h5-h6).
+- **Breaking (schema): `happenstance-neon`: migration 4 and its trigger.** As
+  Postgres: send `migration::removal_record_request(&config)` after migrations
+  1 and 3, then deploy. An ingest answer is now read from its second result set, after
+  the lock's.
+- **PS-41 is minted `[PROVISIONAL]`**, with E2E-60, falsified by a projection
+  that needs different event types under different scopes.
+  `ProjectionError::Boundary` and `InvalidCheckpointId::Query` were documented
+  as unreachable; an empty `scopes` now reaches them, and their docs say so.
+- **SY-40 is minted `[PROVISIONAL]`** by ADR-0110, and the frozen
+  SY-1 and SY-38 are amended by it: a removed event is SY-1's second exception,
+  and SY-38's refusal no longer covers an identity the store has recorded as
+  removed. SY-11 and ES-39 point at it. `happenstance-sync`'s docs on
+  `Ingested::skipped`, `IngestStore` and `IngestError::UnheldOwnIdentity` say so.
+- **CF-36's recorded breaches go from thirteen to four** (#100). VT-21 and
+  WF-9 cite a new contract-level case, E2E-61, in place of the mesh case
+  E2E-42. E2E-42 is `contract (sync)` now, because `sync_model_conformance!`
+  runs it against one adapter's fixtures, and that discharges seven `SY`
+  clauses. PS-29, PS-30 and SY-34 oblige a runner the workspace ships rather
+  than an adapter, and stay recorded for phase 21 to decide. SY-2 is #320's.
+  No normative text changes.
+
+### `0.8.0` trace
+
+Every break `0.8.0` carries, each with the decision that caused it. The table was
+begun on 2026-11-16 against `phase-21-prep` at `5f71d44` with #485 applied, and
+completed for the release on 2026-11-20.
+It has **hand** rows only, found by reading every entry above for a changed
+signature, a removed or renamed item, a changed value or a changed refusal.
+
+**Run:** `cargo semver-checks check-release --workspace --baseline-version
+0.7.0 --release-type minor` (0.50.0) on 2026-11-20, against `phase-21-prep`
+before the version bump: 196 checks pass in each of the nine crates, and no lint
+fires, so there are no **T** rows. That tool has no lint for a changed parameter
+type, which is why H1 is a hand row.
+
+| # | Crate | Break | Source | Decided by | Entry above |
+|---|---|---|---|---|---|
+| H1 | `happenstance` | `run_projection`'s and `run_fan_out`'s first parameter is `Source<'_, S>`, was `&S` (signature) | hand | PS-40, ADR-0109 (#485, 485-Q1) | Changed |
+| H2 | `happenstance` | a run against a store other than the one its checkpoint was built from returns `ProjectionError::SourceChanged`, where it resumed; a `0.7.x` checkpoint is adopted on its first run (behaviour) | hand | PS-40, ADR-0109 (#485, 485-Q2, 485-Q3) | Changed |
+| H3 | `happenstance` | a view's first run commits its pin with an empty batch, and every run reads it, so a `ProjectionStore` sees one more `checkpoint` call per run and one more `begin` and `commit` per view (behaviour) | hand | ADR-0109 (#485) | Changed |
+| H4 | `happenstance-sqlite` | `SCHEMA_VERSION` 2 → 3: a file this release opens is migrated and refused by a `0.7` build, and `new` refuses a file at 2 (value, schema) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
+| H5 | `happenstance-postgres` | `SCHEMA_VERSION` 2 → 3, and every ingest locks migration 4's `event_removed`, so this build's first ingest against a schema without it fails with an undefined table: migrate, then deploy; an ingest role needs `SELECT, UPDATE` on `event_removed` (or `SELECT, MAINTAIN` on 17), a deleting role nothing more (value, schema, privileges) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
+| H6 | `happenstance-neon` | as H5, through `migration::removal_record_request`: migrate, then deploy; the same grants, on `<event table>_removed` (schema, privileges) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
+| H7 | `happenstance-sync-testkit` | `sync_declensions_are_stated`, emitted by `sync_peer_conformance!`, fails a fixture that inherits `SyncFixture::COMPACTION`'s default declension (behaviour, testkit) | hand | CF-18 (#480) | Changed |
+| H8 | `happenstance-sync-testkit` | new rules that can turn a passing adapter red: VT-24's events-per-call ceiling (#379), SY-33's `refusal_is_never_condition_derived` (#465), SY-2's `the_losing_event_is_never_read_unresolved` (#320) and SY-40's `a_removed_event_is_not_readmitted` (#483, #484). A new rule is a minor for this crate; pin it exactly (behaviour, testkit) | hand | CF-22, ADR-0110 | Added |
+
+**Not breaks, recorded so the absence is a decision:** `SourceChanged` and
+`RecordSource` are new variants on the `#[non_exhaustive]` `ProjectionError`,
+and `progress()` reports `Progressed::default()` for both; what changes for a
+caller is which runs produce them, and H2 is that. `Source`, `SourceMark` and
+`source_checkpoint_id` are new items. `checkpoint_id` and PS-25's goldens are
+unchanged, so no `0.7.x` checkpoint is orphaned. The adapters' new inherent
+`store_id` shadows `IngestStore::store_id` in method-call syntax on
+`PostgresEventStore` and `NeonEventStore`, with the same signature and the same
+answer, so a call written against the trait compiles and behaves unchanged.
+`Projection::scopes` is a provided method, which semver counts as a minor
+change: an existing implementation compiles and derives the same query and the
+same ids. The one way it can bite is a type that also has a method named
+`scopes` from another trait in scope, where a method call becomes ambiguous.
+
+
 ## [0.7.0] — 2026-11-16
 
 Phase 14: what a store may forget, and what a peer does about it. The sync

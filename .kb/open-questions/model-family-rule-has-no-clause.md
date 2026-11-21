@@ -35,7 +35,7 @@ source_paths:
   - .kb/_intake/monotone-visibility-is-unstated.md
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
-last_reviewed: 2026-10-19
+last_reviewed: 2026-11-18
 ---
 
 # The model family's rule checks a composition of clauses and belongs to none
@@ -130,3 +130,13 @@ owns this" question until a precedent exists.
    all three be settled by one ADR, given each is an UNCLAIMED_PENDING_ADR entry with a related
    but non-identical shape, or does bundling them risk conflating a one-proposition gap, a
    many-proposition one, and a single-`Err`-arm one?
+
+## Phase 21 audit — 2026-11-18
+
+**Proposed, not settled:** `kb-decision-0111` (ADR-0111, `status: proposed`, #185) answers
+sub-question 1 with a clause, and sub-questions 2 and 3 by making it a suite clause. CF-45 obliges
+the testkit to carry a generative family, says a run checks only what it draws, and leaves the
+composed set to the rule's rustdoc. It obliges no store, so it is true or false by inspection and
+not by `PROPTEST_CASES`. The trailing model's monotone-visibility assumption is explicitly not
+claimed by it, and stays `.kb/_intake/monotone-visibility-is-unstated.md`'s. This atom stays open
+until the owner accepts.
