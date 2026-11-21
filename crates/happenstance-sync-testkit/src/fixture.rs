@@ -483,19 +483,17 @@ mod tests {
         sync_declensions_are_stated,
     };
 
-    /// A fixture over the reference peer whose `REOPEN` is `$reopen` and
-    /// whose `COMPACTION` is `$compaction`, or the trait's defaults for both
-    /// when neither is given.
+    /// A fixture over the reference peer stating `REOPEN` and `COMPACTION`
+    /// as given, each independently, and inheriting the trait's default for
+    /// whichever is left out, so a test can be silent on exactly one.
     macro_rules! over_the_reference {
-        ($name:ident $(, $reopen:expr, $compaction:expr)?) => {
+        ($name:ident $(, reopen = $reopen:expr)? $(, compaction = $compaction:expr)?) => {
             struct $name(MemorySyncFixture);
 
             impl SyncFixture for $name {
                 type Peer = MemorySyncHandle;
-                $(
-                    const REOPEN: Capability = $reopen;
-                    const COMPACTION: Capability = $compaction;
-                )?
+                $(const REOPEN: Capability = $reopen;)?
+                $(const COMPACTION: Capability = $compaction;)?
 
                 async fn connect(&self) -> Self::Peer {
                     self.0.connect().await
@@ -509,16 +507,29 @@ mod tests {
     }
 
     over_the_reference!(Silent);
-    over_the_reference!(Supports, Capability::SUPPORTED, Capability::SUPPORTED);
+    over_the_reference!(
+        Supports,
+        reopen = Capability::SUPPORTED,
+        compaction = Capability::SUPPORTED
+    );
     over_the_reference!(
         States,
-        Capability::declined("a test fixture over the reference peer, which keeps no medium"),
-        Capability::declined("a test fixture that does not drive the reference peer's compaction")
+        reopen =
+            Capability::declined("a test fixture over the reference peer, which keeps no medium"),
+        compaction = Capability::declined(
+            "a test fixture that does not drive the reference peer's compaction"
+        )
     );
     over_the_reference!(
         SilentOnCompaction,
-        Capability::declined("a test fixture over the reference peer, which keeps no medium"),
-        Capability::declined(UNSTATED_COMPACTION)
+        reopen =
+            Capability::declined("a test fixture over the reference peer, which keeps no medium")
+    );
+    over_the_reference!(
+        SilentOnReopen,
+        compaction = Capability::declined(
+            "a test fixture that does not drive the reference peer's compaction"
+        )
     );
 
     /// A fixture that says nothing declines compaction in this crate's words,
@@ -537,14 +548,33 @@ mod tests {
         assert_eq!(violation.clause(), "SY-32");
     }
 
+    /// A fixture that states `COMPACTION` and inherits `REOPEN` is rejected,
+    /// and the violation names only `REOPEN`: this is the fixture that fails
+    /// if the `REOPEN` row leaves the check, which `Silent` no longer does
+    /// alone once `COMPACTION` is checked too.
     #[test]
     fn a_fixture_that_inherits_the_default_reopen_declension_is_rejected() {
-        let checked = sync_declensions_are_stated(async || Silent(MemorySyncFixture::new()));
+        let violation =
+            sync_declensions_are_stated(async || SilentOnReopen(MemorySyncFixture::new()))
+                .expect_err("an inherited REOPEN declension is unstated");
 
-        assert_eq!(
-            checked.map_err(|violation| violation.clause()),
-            Err("CF-18")
-        );
+        assert_eq!(violation.clause(), "CF-18");
+        let message = violation.to_string();
+        assert!(message.contains("REOPEN"), "{message}");
+        assert!(!message.contains("COMPACTION"), "{message}");
+    }
+
+    /// A fixture silent on both is told about both in one violation, so its
+    /// author does not learn of the second only on the next run.
+    #[test]
+    fn a_fixture_silent_on_both_is_told_about_both() {
+        let violation = sync_declensions_are_stated(async || Silent(MemorySyncFixture::new()))
+            .expect_err("both declensions are inherited");
+
+        assert_eq!(violation.clause(), "CF-18");
+        let message = violation.to_string();
+        assert!(message.contains("REOPEN"), "{message}");
+        assert!(message.contains("COMPACTION"), "{message}");
     }
 
     /// A fixture that states `REOPEN` and inherits `COMPACTION` is rejected,

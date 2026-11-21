@@ -598,19 +598,19 @@ const BLOCKED_BEHIND_SQL: &str = "SELECT count(*) FROM pg_stat_activity \
 /// wrong. Far above the round trip it needs.
 const BLOCK_DEADLINE: Duration = Duration::from_secs(30);
 
-/// Polls, a round trip at a time and with no pause beyond it, until some
-/// session is waiting on a lock the backend `pid` holds.
+/// The pause between two polls of `pg_stat_activity`, as `claims.rs`'s
+/// `GATE_POLL` paces its own.
+const BLOCK_POLL: Duration = Duration::from_millis(10);
+
+/// Polls, pausing [`BLOCK_POLL`] after each round trip, until some session is
+/// waiting on a lock the backend `pid` holds.
 ///
 /// # Panics
 ///
 /// After [`BLOCK_DEADLINE`], because then the arrangement is wrong.
 async fn wait_until_blocked_behind(pool: &PgPool, pid: i32) {
     let blocked = async {
-        // Paced, so the poll yields between reads rather than spinning on
-        // `pg_stat_activity` until the deadline (#517).
-        let mut tick = tokio::time::interval(Duration::from_millis(10));
         loop {
-            tick.tick().await;
             let waiting: i64 = sqlx::query_scalar(BLOCKED_BEHIND_SQL)
                 .bind(pid)
                 .fetch_one(pool)
@@ -619,6 +619,10 @@ async fn wait_until_blocked_behind(pool: &PgPool, pid: i32) {
             if waiting > 0 {
                 return;
             }
+            // A sleep after the query, not an `interval`: an interval's missed
+            // ticks fire at once when a round trip outlasts the period, so the
+            // poll would spin exactly when the server is slow (#517).
+            tokio::time::sleep(BLOCK_POLL).await;
         }
     };
     tokio::time::timeout(BLOCK_DEADLINE, blocked)

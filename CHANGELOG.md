@@ -221,9 +221,10 @@ deploy.
   dropping the event types.
 - **`happenstance-sync-testkit`: SY-33's rule,
   `refusal_is_never_condition_derived`**, in the sync peer family (#465).
-  SY-33 was frozen naming it, and it had never been written. It drives every refusal the fixture declares through
-  `SyncFixture::refusals` twice on one handle, once on the fresh receiver and
-  once after the rule has grown its log, and requires each to be answered the
+  SY-33 was frozen naming it, and it had never been written. It drives every
+  refusal the fixture declares through `SyncFixture::refusals` twice on one
+  handle, once on the fresh receiver and once after the rule has grown its
+  log, and requires each to be answered the
   same: accepted, or refused with the same `FailureClass`. In between it pushes a
   guarded claim, a seed of a rival claim that guard names and unrelated events,
   the claim again and the claim's shape from a fresh origin, each held to the
@@ -247,7 +248,8 @@ deploy.
   in one `IngestGroup`. While that ingest is pending, the rule reads the log on
   a second handle each time the ingest yields. No read may show the losing
   claim without its reversal, and the read after the ingest must show both. It
-  rejects compensate-after-commit in a store: one that commits the losing
+  rejects compensate-after-commit inside the store, the in-call form of what
+  SY-2's `Rejects` names: one that commits the losing
   event, awaits, and only then commits the compensation. Nothing fails, and
   the log is right once the call returns, so SY-30's rule reached that store
   only when its fixture could arm a fault (`tests/wrong_ingest_stores.rs`,
@@ -322,12 +324,13 @@ deploy.
   and SY-38's refusal no longer covers an identity the store has recorded as
   removed. SY-11 and ES-39 point at it. `happenstance-sync`'s docs on
   `Ingested::skipped`, `IngestStore` and `IngestError::UnheldOwnIdentity` say so.
-- **CF-36's recorded breaches go from thirteen to four** (#100). VT-21 and
+- **CF-36's recorded breaches go from thirteen to three** (#100, #320). VT-21 and
   WF-9 cite a new contract-level case, E2E-61, in place of the mesh case
   E2E-42. E2E-42 is `contract (sync)` now, because `sync_model_conformance!`
   runs it against one adapter's fixtures, and that discharges seven `SY`
   clauses. PS-29, PS-30 and SY-34 oblige a runner the workspace ships rather
-  than an adapter, and stay recorded for phase 21 to decide. SY-2 is #320's.
+  than an adapter, and stay recorded for phase 21 to decide. SY-2 left with
+  its authoring rule (#320).
   No normative text changes.
 
 ### `0.8.0` trace
