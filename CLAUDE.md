@@ -431,7 +431,7 @@ diverge again; ADR-0029 explains why it is kept rather than deleted.
 Do not settle these silently in passing; they need their own pass and probably
 their own ADR. Two files carry the answers, and they answer different questions.
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) says
-what is **true now** — numbered clauses (212 at the last count; §7.1's
+what is **true now** — numbered clauses (215 at the last count; §7.1's
 generated summary is the live total), each carrying a maturity marker
 (frozen, provisional, deferred, or demoted to non-normative prose) and each
 naming the conformance rule that checks it and the wrong implementation it
@@ -483,11 +483,13 @@ Changing a `[FROZEN]` clause requires a new ADR, not an edit.
   replication (SY-27, SY-28), the push keeping write groups (SY-30), the
   watermark through `ProjectionStore` (SY-31), classified peer errors (SY-36),
   `waiting` (SY-37), the unheld own identity (SY-38) and, with ADR-0105, write
-  groups themselves (SY-39). 38 of the 39 `SY` clauses are frozen:
+  groups themselves (SY-39). 39 of the 40 `SY` clauses are frozen:
   [ADR-0108](.kb/decisions/0108-phase-14s-clauses-are-frozen.md) froze SY-7
   (compensation authorship) and SY-10 (hub-and-spoke and peer-to-peer) at phase
   14 on the runner's adjudication hook (#450), and the retention floor (SY-32)
-  with a risk acceptance, since no real peer compacts yet. **Still open:** SY-29,
+  with a risk acceptance, since no real peer compacts yet. SY-40, a removed
+  event is not readmitted, was minted by ADR-0110 and frozen by
+  [ADR-0115](.kb/decisions/0115-sy-40-is-frozen.md) at `0.8.0`. **Still open:** SY-29,
   renewed past 1.0 against the first scoped-replication proposal. The message set is four types
   in the envelope with the format version on every message (ADR-0097), at
   version 3 since ADR-0104.

@@ -33,6 +33,15 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-11-20
+
+**Breaking from `0.7.x`**: read [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md)
+before upgrading. Each break is labelled in place and traced at the end of this
+section. SQLite, Postgres, Neon and the Durable Object each migrate their schema,
+and nothing on the sync wire moves. SY-40 is
+minted and frozen in this release (ADR-0110, ADR-0115). The four phase-21 audit
+records ADR-0111..0114 are accepted, and phase 20 builds what they decide.
+
 A typed projection's checkpoint is pinned to the event store it was built from
 (#485, PS-40, [ADR-0109](.kb/decisions/0109-a-checkpoint-is-pinned-to-its-source-store.md)).
 Resumed against a different store with the same projection store, a view used to
@@ -323,15 +332,17 @@ deploy.
 
 ### `0.8.0` trace
 
-Every break `0.8.0` carries so far, each with the decision that caused it,
-written on 2026-11-16 against `phase-21-prep` at `5f71d44` with #485 applied.
+Every break `0.8.0` carries, each with the decision that caused it. The table was
+begun on 2026-11-16 against `phase-21-prep` at `5f71d44` with #485 applied, and
+completed for the release on 2026-11-20.
 It has **hand** rows only, found by reading every entry above for a changed
 signature, a removed or renamed item, a changed value or a changed refusal.
 
-**Not run here:** `cargo semver-checks` is not installed on the machine that
-wrote this table. Before tagging, run `cargo semver-checks check-release
---workspace --baseline-version 0.7.0` on the release's merge commit. Any lint
-it reports that no row below covers becomes a **T** row.
+**Run:** `cargo semver-checks check-release --workspace --baseline-version
+0.7.0 --release-type minor` (0.50.0) on 2026-11-20, against `phase-21-prep`
+before the version bump: 196 checks pass in each of the nine crates, and no lint
+fires, so there are no **T** rows. That tool has no lint for a changed parameter
+type, which is why H1 is a hand row.
 
 | # | Crate | Break | Source | Decided by | Entry above |
 |---|---|---|---|---|---|
@@ -342,6 +353,7 @@ it reports that no row below covers becomes a **T** row.
 | H5 | `happenstance-postgres` | `SCHEMA_VERSION` 2 → 3, and every ingest locks migration 4's `event_removed`, so this build's first ingest against a schema without it fails with an undefined table: migrate, then deploy; an ingest role needs `SELECT, UPDATE` on `event_removed` (or `SELECT, MAINTAIN` on 17), a deleting role nothing more (value, schema, privileges) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 | H6 | `happenstance-neon` | as H5, through `migration::removal_record_request`: migrate, then deploy; the same grants, on `<event table>_removed` (schema, privileges) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 | H7 | `happenstance-sync-testkit` | `sync_declensions_are_stated`, emitted by `sync_peer_conformance!`, fails a fixture that inherits `SyncFixture::COMPACTION`'s default declension (behaviour, testkit) | hand | CF-18 (#480) | Changed |
+| H8 | `happenstance-sync-testkit` | new rules that can turn a passing adapter red: VT-24's events-per-call ceiling (#379), SY-33's `refusal_is_never_condition_derived` (#465), SY-2's `the_losing_event_is_never_read_unresolved` (#320) and SY-40's `a_removed_event_is_not_readmitted` (#483, #484). A new rule is a minor for this crate; pin it exactly (behaviour, testkit) | hand | CF-22, ADR-0110 | Added |
 
 **Not breaks, recorded so the absence is a decision:** `SourceChanged` and
 `RecordSource` are new variants on the `#[non_exhaustive]` `ProjectionError`,
@@ -357,7 +369,6 @@ change: an existing implementation compiles and derives the same query and the
 same ids. The one way it can bite is a type that also has a method named
 `scopes` from another trait in scope, where a method call becomes ambiguous.
 
-**Pending:** the release's other entries.
 
 ## [0.7.0] — 2026-11-16
 

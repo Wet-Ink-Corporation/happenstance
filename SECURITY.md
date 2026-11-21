@@ -85,7 +85,7 @@ backporting: a fix lands in the next release, and the release before it is not
 patched. Pin an exact version and read [`CHANGELOG.md`](CHANGELOG.md) at each
 upgrade.
 
-`0.2.0` was the first stable release and `0.7.0` is current; what each promises
+`0.2.0` was the first stable release and `0.8.0` is current; what each promises
 is worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
 [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
 `0.2.0`. `ProjectionStore` was **not** at `0.2.0` — it shipped behind an
@@ -98,7 +98,8 @@ change to the runner is now a violation of this table like any other.
 
 | Version | Supported |
 |---|---|
-| `0.7.0` | ✅ current |
+| `0.8.0` | ✅ current |
+| `0.7.0` | ❌ superseded by `0.8.0`, a breaking release: a typed projection's checkpoint is pinned to its source store, so `run_projection` and `run_fan_out` take a `Source` and stop with `ProjectionError::SourceChanged` against another store; ingest skips an event its store recorded as removed (SY-40), which moves `happenstance-sqlite` to schema version 3 and adds a migration 4 to `happenstance-postgres` and `happenstance-neon`; and `sync_peer_conformance!` requires a stated `COMPACTION` declension; [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md) |
 | `0.6.0` | ❌ superseded by `0.7.0`, a breaking release: `happenstance-sync` gains the adjudication hook and reports a retention gap as the fifth failure class, `Reseed`, which `SyncError::BelowRetentionFloor` now carries instead of `Stop`; `RemoteSyncPeer` refuses an over-limit push before sending it; and both testkits gain rules, the sync-testkit failing a fixture that leaves `REOPEN` at its default declension; the `0.7.0` section of [`CHANGELOG.md`](CHANGELOG.md) and its trace are the way across |
 | `0.5.1` | ❌ superseded by `0.6.0`, a breaking release: `happenstance-sync` gains its runner and network peers, the sync wire format is version 3 (every peer upgrades together), and each event store's schema moves for write groups (`happenstance-postgres` and `happenstance-neon`: migrate, then deploy); [`docs/upgrading-to-0-6.md`](docs/upgrading-to-0-6.md) is the way across |
 | `0.5.0` | ❌ superseded by `0.5.1`, a documentation and tooling release with no API change: rustdoc that builds again (`happenstance-testkit` under its default features, `happenstance-neon` with `--no-default-features`), stale feature comments corrected, and a rebuild how-to that drives the runner |

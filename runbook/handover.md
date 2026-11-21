@@ -12,8 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/project-thread-xxl8lr-070`, cut from `origin/phase-14` at `2c19afd1`, with
-`origin/main` (#468, #470) merged in. 2026-11-16.
+`claude/0.8.0-release`, cut from `origin/phase-21-prep` after #523. 2026-11-20.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -21,44 +20,31 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**Phase 14 is done** on `phase-14`, and this branch is its `0.7.0` release commit:
-`[Unreleased]` becomes `[0.7.0] — 2026-11-16` under a summary that marks it breaking from
-`0.6.x`, with a `0.7.0` trace of six hand rows: `BelowRetentionFloor`'s class moving from
-`Stop` to `Reseed`, `MemorySyncPeer::with_limits`' floor, `RemoteSyncPeer`'s refusal before
-sending, and the new rules in both testkits, with the sync-testkit's `REOPEN` declension
-check. Nothing on the wire or in a schema moves. All nine crates, the workspace
-requirements, the sync-testkit's pin, the testkit's recipe pins and the seven examples are
-at `0.7.0`; `Cargo.lock` and seven off-workspace lockfiles move only the path crates. Status
-and install lines (`"0.7"`), SECURITY's table, the README's table and roadmap, the site's
-cards and reference table, two how-to pages that said adjudication was not built, the
-`0.7.0` status row and phase 14's file follow.
+**`0.8.0` is the release on this branch**, breaking from `0.7.x`: the checkpoint pinned
+to its source store (PS-40, ADR-0109), the removal record with SY-40 minted and frozen
+(ADR-0110, ADR-0115), `Projection::scopes` (PS-41), and new sync-testkit rules and the
+stated `COMPACTION` declension. The trace has hand rows H1–H8; semver-checks against
+`0.7.0` fires no lint. ADR-0111..0114 are accepted, and their follow-ups belong to phase 20.
 
-**`0.6.0` is the latest on crates.io** (2026-11-09). Phases 0–18 are done, 17b included.
-What remains is sequenced in [`roadmap.md`](roadmap.md): `1.0.0` (21), beside phases 19,
-20 and 22.
+The release PR merges into `phase-21-prep`, `phase-21-prep` merges into `main` with a merge
+commit, and `v0.8.0` is tagged on that merge commit (`git tag -a`), which `release.yml`
+publishes.
 
-**`0.7.0` is tagged on `main`, at `phase-14` → `main`'s merge commit**, as `0.6.0` was at
-#462's: the release PR merges into `phase-14`, and `release.yml` publishes only a tag on
-`main`, then creates the GitHub release from the tag's `## [0.7.0]` section
-(`scripts/release-notes.sh`). Cloud sessions cannot push tags; the owner pushes them.
+What remains is sequenced in [`roadmap.md`](roadmap.md): phase 20 (with #188's three rules,
+ES-44/CF-44/CF-45 under ADR-0111, and ADR-0113's stderr SKIP line and Cloudflare README
+correction), 22, then `1.0.0` (21, #68). `CF36_UNDISCHARGED` holds PS-29, PS-30 and SY-34,
+owned by phase 21.
 
 ## In flight
 
-The `0.7.0` release PR, `claude/project-thread-xxl8lr-070` → `phase-14`, is pushed and not
-yet opened.
+Nothing past the release itself.
 
 ## Next action
 
-1. The owner merges the release PR into `phase-14`.
-2. `phase-14` → `main`. On its merge commit run `cargo semver-checks check-release
-   --workspace --baseline-version 0.6.0 --release-type minor`; any lint no trace row
-   covers becomes a **T** row in the `0.7.0` trace before the tag.
-3. Tag `v0.7.0` on that merge commit. Check that the GitHub release job read the
-   `## [0.7.0]` section.
-4. On the merge, close #65, #144, #147, #151, #154, #156, #158 and #163, whose PRs merged
-   into `phase-14` and so closed nothing.
-5. Phase 21 (`1.0.0`, #68), with the retention harms phase 14 filed (#483, #484, #485) and
-   #480 ahead of it.
+1. After the tag: close #483, #484, #485, #379, #497, #174, #500, #487, #465, #517, #148,
+   #480, #320, #185, #115, #145 and #188's ADR half, whose PRs merged into
+   `phase-21-prep` and so closed nothing. #100 closes when its last three entries go.
+2. Phase 20: ADR-0114's three rules, ADR-0111's clauses, ADR-0113's SKIP line.
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
@@ -66,21 +52,12 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
-- The `0.7.0` release PR into `phase-14`, `phase-14` → `main`, the semver-checks run and
-  the `v0.7.0` tag.
-- No `docs/upgrading-to-0-7.md` was written. Every break is behaviour, none needs a code
-  change to compile, and the trace states each; write a guide on the `0.6` precedent if
-  you want one.
-- #480: `sync_declensions_are_stated` still accepts an inherited `COMPACTION` declension,
-  because every real peer fixture inherits it.
-- Seven `[FROZEN]` `SY` clauses name a † rule that exists nowhere in the tree (SY-6, SY-9,
-  SY-13, SY-16, SY-19, SY-26, SY-35), each declared in `SYNC_UNRESOLVABLE_RULE_NAMES`
-  with its owner (#458). SY-33's, the eighth, was written by #465:
-  `refusal_is_never_condition_derived`, in the sync peer family.
-- Calls taken *as recommended* while the owner was asked, still unconfirmed: #101 O1–O3,
-  #103 O1(a), #118's schema call, and #123 O1(B)/O2.
-- Defaults in force: `trait-variant` keeps its caret (ADR-0092); new CI jobs are not
-  required checks.
+- The deployed `workerd` leg runs only on a manual dispatch (#515). Never dispatch it
+  without asking.
+- Defaults recorded in the weigh-in ledger, still unreviewed: an empty `scopes()` is
+  refused as `Boundary(NoItems)`; #379 extended VT-24/VT-36 as a repair, with no ADR.
+- #522 treated adding a second rule and a case to SY-2's frozen `Rule:`/`Cases:` lines
+  as a repair under the playbook, not a record.
 
 ## Do not re-open
 

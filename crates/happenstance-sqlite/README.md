@@ -11,7 +11,7 @@ with programs you can run.
 
 [![Buy me a coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-support-yellow?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/ryanbritton)
 
-> **Status: conformant, and in the `0.7.0` release set.** This is the first
+> **Status: conformant, and in the `0.8.0` release set.** This is the first
 > happenstance adapter to pass
 > [`happenstance-testkit`](https://crates.io/crates/happenstance-testkit)'s
 > conformance suite against a real file on disk — the event store family, the
@@ -35,9 +35,9 @@ with programs you can run.
 ## Features, and the one that costs you a promise
 
 ```toml
-happenstance-sqlite = "0.7"                                # the event store
-happenstance-sqlite = { version = "0.7", features = ["projection-store"] }
-happenstance-sqlite = { version = "0.7", features = ["sync"] }   # + the ingest port
+happenstance-sqlite = "0.8"                                # the event store
+happenstance-sqlite = { version = "0.8", features = ["projection-store"] }
+happenstance-sqlite = { version = "0.8", features = ["sync"] }   # + the ingest port
 
 rusqlite = "0.41"                                          # only for tables of your own
 ```

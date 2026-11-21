@@ -50,7 +50,7 @@ checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
 
 [[package]]
 name = "happenstance-core"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "bytes",
  "futures-core",
@@ -61,7 +61,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-sqlite"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
@@ -72,7 +72,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-testkit"
-version = "0.7.0"
+version = "0.8.0"
 dependencies = [
  "futures-core",
  "happenstance-core",
