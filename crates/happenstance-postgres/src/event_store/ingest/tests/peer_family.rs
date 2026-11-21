@@ -101,6 +101,16 @@ impl SyncFixture for PostgresPeerFixture {
     /// the server committed do.
     const REOPEN: Capability = Capability::SUPPORTED;
 
+    /// Declined: the peer is a `StoreSyncPeer`, which cannot read a retention
+    /// floor through the port (ADR-0028). A raw `DELETE` can remove events
+    /// from the server, and SY-40's record makes ingest skip them, but
+    /// nothing reports the gap as a floor, which is what SY-32's rule reads.
+    const COMPACTION: Capability = Capability::declined(
+        "the peer is a StoreSyncPeer over PostgresEventStore, and a store peer cannot read a \
+         retention floor through the port (ADR-0028); an operator's DELETE removes events, but \
+         no PeerLimits::retention_floor reports the gap, so there is no compaction to declare",
+    );
+
     async fn connect(&self) -> Self::Peer {
         // Refcounted handles onto the one pool, which every handle shares.
         let pool = self.pool().await;

@@ -475,6 +475,13 @@ impl SyncFixture for StorePeerFixture {
          medium outside the process a reopen could read back",
     );
 
+    /// Declined: a `StoreSyncPeer` cannot read a retention floor through the
+    /// port (ADR-0028), so it has no compaction to report.
+    const COMPACTION: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+        "a StoreSyncPeer cannot read a retention floor through the port (ADR-0028), so this \
+         peer over the in-memory ingest store has no compaction to report",
+    );
+
     async fn connect(&self) -> Self::Peer {
         StoreSyncPeer::new(self.store.connect().await, self.store.connect().await)
     }

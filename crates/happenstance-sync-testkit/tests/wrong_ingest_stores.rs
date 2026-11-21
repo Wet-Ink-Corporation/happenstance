@@ -220,6 +220,14 @@ enum Mistake {
     /// events is unheld rather than whether any landed, so a group of removed
     /// events is answered again although nothing in it was written.
     CompensatesARemovedGroup,
+    /// SY-2's, the compensate-after-commit its `Rejects` names, in a store
+    /// (#320): decide the whole call, commit the first group's foreign rows,
+    /// await, and only then commit its compensation and the rest. Nothing
+    /// faults and the log is right once the call returns; a reader scheduled
+    /// into the await reads the losing event with nothing resolving it. Every
+    /// other rule awaits the call before it reads, and SY-30's arms a fault,
+    /// under which this store takes the faithful path, so only SY-2's sees it.
+    CompensatesAfterCommit,
 }
 
 /// The ceilings every [`WrongIngestStore`] declares and enforces, far above
@@ -406,6 +414,45 @@ impl WrongIngestStore {
                 .extend(gone.iter().copied());
         }
         Ok(())
+    }
+
+    /// One `ingest` under [`Mistake::CompensatesAfterCommit`], through a
+    /// handle keeping `handle_record`: decided whole, as the faithful store
+    /// decides it, and committed in two writes, the first group's foreign rows
+    /// first. An armed fault takes the faithful path, so SY-30's rule judges
+    /// the faithful store and not this mistake.
+    async fn ingest_in_two_commits(
+        &self,
+        groups: &[IngestGroup<'_>],
+        handle_record: &Mutex<BTreeSet<EventId>>,
+    ) -> Result<Ingested, IngestError<WrongError>> {
+        let armed = self
+            .fault
+            .lock()
+            .map_err(|_| IngestError::Store(WrongError::Poisoned))?
+            .is_some();
+        if armed {
+            return self.ingest_through(groups, handle_record);
+        }
+        self.within_the_call_length(groups)?;
+        self.check_ceilings(groups)?;
+        let removed = self.record_for(handle_record).map_err(IngestError::Store)?;
+        // The first write, its lock released before the await.
+        let (counts, mut rest) = {
+            let mut rows = self.rows().map_err(IngestError::Store)?;
+            let Written {
+                counts,
+                mut working,
+                marks,
+            } = self.write_groups(&mut rows, groups, &removed)?;
+            let first = marks.first().copied().unwrap_or(working.len());
+            let rest = working.split_off(first);
+            *rows = working;
+            (counts, rest)
+        };
+        YieldOnce(false).await;
+        self.rows().map_err(IngestError::Store)?.append(&mut rest);
+        Ok(counts)
     }
 
     /// One `ingest`, through a handle keeping `handle_record`.
@@ -1012,6 +1059,27 @@ impl SendIngestStore for WrongIngestStore {
     }
 }
 
+/// Pending once, waking itself, then ready: the await a store that commits in
+/// two writes spends between them, where a scheduler may run anything else.
+#[derive(Debug)]
+struct YieldOnce(bool);
+
+impl Future for YieldOnce {
+    type Output = ();
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<()> {
+        if self.0 {
+            return std::task::Poll::Ready(());
+        }
+        self.0 = true;
+        cx.waker().wake_by_ref();
+        std::task::Poll::Pending
+    }
+}
+
 /// An owned stream, so a read borrows nothing from the store.
 #[derive(Debug)]
 struct Owned(std::vec::IntoIter<Result<SequencedEvent, WrongError>>);
@@ -1156,6 +1224,9 @@ impl SendIngestStore for WrongHandle {
         &self,
         groups: &[IngestGroup<'_>],
     ) -> Result<Ingested, IngestError<Self::Error>> {
+        if self.0.mistake == Mistake::CompensatesAfterCommit {
+            return self.0.ingest_in_two_commits(groups, &self.1).await;
+        }
         self.0.ingest_through(groups, &self.1)
     }
 
@@ -1277,6 +1348,7 @@ fn every_rule_reports_a_store_that_cannot_read_its_identity() {
             "ingest_holds_the_call_to_its_events_per_batch_ceiling",
             "VT-24",
         ),
+        ("the_losing_event_is_never_read_unresolved", "SY-2"),
         ("only_the_adjudicator_compensates", "SY-7"),
         ("directional_merge_rules_compose", "SY-10"),
         ("bulk_ingest_is_idempotent_in_bounded_round_trips", "SY-14"),
@@ -1867,4 +1939,13 @@ impl IngestFixture for ForgetsToRemove {
     async fn connect(&self) -> Self::Store {
         self.0.connect().await
     }
+}
+
+#[test]
+fn the_losing_event_is_never_read_unresolved_fails_a_store_that_compensates_after_commit() {
+    fails_exactly(
+        &verdicts(async || WrongFixture::new(Mistake::CompensatesAfterCommit)),
+        "the_losing_event_is_never_read_unresolved",
+        "SY-2",
+    );
 }

@@ -230,6 +230,26 @@ deploy.
   for the Durable Object, `harness/workerd`, and the Postgres and Neon peers
   under `live-postgres` and `live-neon`. **A new rule is a minor for this crate;
   pin it exactly.**
+- **`happenstance-sync-testkit`: SY-2's authoring half,
+  `the_losing_event_is_never_read_unresolved`**, in the ingest family (#320).
+  The rule mounts the seat family's merge rule through the shipped
+  `runner::Adjudicate` hook and has it answer a conflicting claim with a
+  reversal. It hands the store the claim and the reversal as the runner does,
+  in one `IngestGroup`. While that ingest is pending, the rule reads the log on
+  a second handle each time the ingest yields. No read may show the losing
+  claim without its reversal, and the read after the ingest must show both. It
+  rejects compensate-after-commit in a store: one that commits the losing
+  event, awaits, and only then commits the compensation. Nothing fails, and
+  the log is right once the call returns, so SY-30's rule reached that store
+  only when its fixture could arm a fault (`tests/wrong_ingest_stores.rs`,
+  `Mistake::CompensatesAfterCommit`). The reader shares the ingest's task
+  rather than running in its own, so the rule needs no runtime and no `Send`
+  bound. A store that never yields in the middle of a call has no gap to be
+  read in. SY-2's `Rule:` line names the rule, and SY-2 cites a new
+  contract-level case, E2E-62. Both are a repair to the frozen clause, not an
+  amendment, so SY-2 leaves `CF36_UNDISCHARGED`. `IngestFixture` is unchanged,
+  so every existing fixture runs the rule with no edit. **A new rule is a
+  minor for this crate; pin it exactly.**
 
 ### Changed
 
@@ -255,6 +275,15 @@ deploy.
   runner, a `MiniEdge` that rolls its own events back when a push is refused,
   where the specification had only argued that it would (#487, ADR-0108's open
   point C). No rule's verdict changes.
+- **Breaking (testkit): `happenstance-sync-testkit`: `sync_declensions_are_stated`
+  checks `SyncFixture::COMPACTION` as well as `REOPEN`** (#480, CF-18). A
+  fixture that inherits `COMPACTION`'s default declension, in
+  `UNSTATED_COMPACTION`'s words, now fails the test `sync_peer_conformance!`
+  emits, as one silent on `REOPEN` already did. Write the constant on the
+  `impl`, with your peer's own reason, or declare it supported. Every fixture
+  in this workspace states one: the Postgres, Neon and Cloudflare peer
+  families, the local, remote and store mounts, and the `workerd` harness,
+  whose tolerated SY-32 skip is now keyed on its fixture's own words.
 - **PS-40 is minted `[PROVISIONAL]`**, falsified by callers handing the runner
   an identity that is not the store's.
 - **Breaking (schema): `happenstance-sqlite`: `SCHEMA_VERSION` is 3, was 2.**
@@ -312,6 +341,7 @@ it reports that no row below covers becomes a **T** row.
 | H4 | `happenstance-sqlite` | `SCHEMA_VERSION` 2 → 3: a file this release opens is migrated and refused by a `0.7` build, and `new` refuses a file at 2 (value, schema) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 | H5 | `happenstance-postgres` | `SCHEMA_VERSION` 2 → 3, and every ingest locks migration 4's `event_removed`, so this build's first ingest against a schema without it fails with an undefined table: migrate, then deploy; an ingest role needs `SELECT, UPDATE` on `event_removed` (or `SELECT, MAINTAIN` on 17), a deleting role nothing more (value, schema, privileges) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
 | H6 | `happenstance-neon` | as H5, through `migration::removal_record_request`: migrate, then deploy; the same grants, on `<event table>_removed` (schema, privileges) | hand | SY-40, ADR-0110 (#483, #484, D-3) | Changed |
+| H7 | `happenstance-sync-testkit` | `sync_declensions_are_stated`, emitted by `sync_peer_conformance!`, fails a fixture that inherits `SyncFixture::COMPACTION`'s default declension (behaviour, testkit) | hand | CF-18 (#480) | Changed |
 
 **Not breaks, recorded so the absence is a decision:** `SourceChanged` and
 `RecordSource` are new variants on the `#[non_exhaustive]` `ProjectionError`,

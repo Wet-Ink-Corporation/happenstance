@@ -170,6 +170,8 @@ pub mod ingest_rules {
     mod bulk;
     // SY-40's removed events, foreign and own, offered again.
     mod removal;
+    // SY-2's conflict, adjudicated, and the reader watching it land.
+    mod resolution;
 
     const SHIPPED: EventType = EventType::from_static("Shipped");
     const LOCAL: EventType = EventType::from_static("Local");
@@ -1393,6 +1395,69 @@ pub mod ingest_rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-2: a reader never observes the losing event of an adjudicated
+    /// conflict held without the compensation that resolves it, even while
+    /// the ingest that lands the two is in flight.
+    ///
+    /// One store takes a claim on a seat from one foreign origin, then a
+    /// conflicting claim from another. The rule plays the runner above it,
+    /// mounting the seat family's merge rule through the shipped
+    /// `runner::Adjudicate` hook, which reads the store through a second
+    /// handle and answers the second claim with a reversal. The claim and its
+    /// reversal are handed to the store as the runner hands them: one
+    /// [`IngestGroup`]. While that ingest is pending, the rule reads the log
+    /// through the second handle, in the same task, each time the ingest
+    /// yields. No read may show the losing claim without its reversal. The
+    /// ingest must count one appended and one compensation, and a read after
+    /// it must show both. Both are found by type and bytes, never decoded
+    /// (SY-35), and each observation is one read of the log, so a faithful
+    /// store that commits both between two reads is not mistaken for one that
+    /// showed only one of them.
+    ///
+    /// The runner's half is structural. The hook decides and never writes, and
+    /// the runner lands each group with its compensation in one
+    /// `IngestGroup`, so the runner cannot write a compensation apart from its
+    /// claim (`happenstance-sync`'s `runner::adjudicate`). What remains is the
+    /// store's half: given the two in one group, it must not let a reader in
+    /// between them.
+    ///
+    /// # Rejects
+    ///
+    /// Compensate-after-commit, the shape SY-2's `Rejects` names, in a store:
+    /// it commits the losing event, awaits, and only then commits the
+    /// compensation, as an adapter does that writes a group's foreign rows
+    /// and its compensation as two statements outside one transaction.
+    /// Nothing fails and the log is right once the call returns, so only a
+    /// reader inside the gap sees it, and SY-30's rule reaches it only when
+    /// the fixture can arm a fault there. `tests/wrong_ingest_stores.rs`
+    /// carries it, and asserts that every other rule passes it.
+    ///
+    /// A store that holds the compensation back for a later write is read
+    /// unresolved after the ingest too, but it is not this rule's alone: every
+    /// rule that reads back after an ingest sees it, so it proves nothing
+    /// about this one and has no mutant here.
+    ///
+    /// # Does not reject
+    ///
+    /// A store that commits the two apart **without yielding** between the
+    /// writes. A reader in the same task cannot be scheduled into a gap the
+    /// store never opens, and a reader on another thread is not something
+    /// every emitter has. SY-30's rule owns that shape, through the fault its
+    /// fixture arms.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-2 if the store cannot say who it is, refuses or
+    /// miscounts an ingest, does not show a second handle the claim it just
+    /// took, or is read holding the losing claim without its reversal, during
+    /// the ingest or after it.
+    pub async fn the_losing_event_is_never_read_unresolved<F: IngestFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        resolution::a_reader_never_sees_the_loser_alone(&open).await?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// SY-7: a compensation is written only by the store the assignment names
     /// the fact family's adjudicator, and filed under that store's own
     /// identity, which is how a log records who authored it.
@@ -1937,6 +2002,9 @@ macro_rules! for_each_ingest_store_rule {
 
             // --- A call is held to its events-per-call ceiling (VT-24) ------
             ingest_holds_the_call_to_its_events_per_batch_ceiling,
+
+            // --- A reader never sees the loser unresolved (SY-2) -------------
+            the_losing_event_is_never_read_unresolved,
 
             // --- Only the assigned adjudicator compensates (SY-7) ------------
             only_the_adjudicator_compensates,
