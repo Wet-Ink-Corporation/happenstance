@@ -434,3 +434,30 @@ The record grows by one small row per removed event and is kept for ever.
 Deleting a row of it lets that identity be ingested again, so do that only once
 no peer can offer the event. A restore brings the record back with the log and
 the sequence, which is what keeps SY-38's refusal of a restored store true.
+
+## A sync fixture states its `COMPACTION` declension **[H7, H8]**
+
+This applies only if you maintain a peer adapter and mount
+`happenstance_sync_testkit::sync_peer_conformance!` against your own fixture.
+
+The test the macro emits, `sync_declensions_are_stated`, checks `COMPACTION` as
+well as `REOPEN` now. A fixture that inherits the default declension fails it,
+as one silent on `REOPEN` already did (CF-18, #480). Give the reason in your
+fixture's own words:
+
+```text
+impl SyncFixture for MyFixture {
+    const COMPACTION: Capability = Capability::declined(
+        "this peer keeps every event it has held; it has no retention floor to compact to",
+    );
+    // ...
+}
+```
+
+Grant it instead, with `Capability::SUPPORTED`, if your peer compacts and you
+want SY-32's rule to run against it.
+
+The sync testkit also gains four rules: VT-24's events-per-call ceiling, SY-33's,
+SY-2's and SY-40's. A new rule is a minor for that crate and can turn a passing
+adapter red, which is why you pin it exactly (`=0.8.0`). SY-40's rule runs only
+against a fixture that grants `IngestFixture::REMOVAL`.
