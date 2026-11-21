@@ -52,8 +52,9 @@ use crate::violation::{Violation, ensure};
 /// SY-2, the clause the rule reports under.
 pub(super) const SY_2: &str = "SY-2";
 
-/// The claim already on the seat, and the claim that loses to it. The next
-/// free origins after SY-40's.
+/// The claim already on the seat, and the claim that loses to it. SY-40's
+/// rule holds `0x7E`, the batch-length rule `0x7F` and `sync_suite` `0x81`
+/// and `0x82`; `0x80` is free.
 const INCUMBENT: StoreId = StoreId::from_bytes([0x83; 16]);
 const CHALLENGER: StoreId = StoreId::from_bytes([0x84; 16]);
 

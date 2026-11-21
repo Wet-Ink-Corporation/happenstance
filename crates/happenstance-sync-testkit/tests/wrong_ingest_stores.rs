@@ -220,7 +220,8 @@ enum Mistake {
     /// events is unheld rather than whether any landed, so a group of removed
     /// events is answered again although nothing in it was written.
     CompensatesARemovedGroup,
-    /// SY-2's, the compensate-after-commit its `Rejects` names, in a store
+    /// SY-2's: the in-call form of the compensate-after-commit its `Rejects`
+    /// names, in a store
     /// (#320): decide the whole call, commit the first group's foreign rows,
     /// await, and only then commit its compensation and the rest. Nothing
     /// faults and the log is right once the call returns; a reader scheduled

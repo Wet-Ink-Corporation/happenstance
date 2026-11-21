@@ -1423,7 +1423,9 @@ pub mod ingest_rules {
     ///
     /// # Rejects
     ///
-    /// Compensate-after-commit, the shape SY-2's `Rejects` names, in a store:
+    /// Compensate-after-commit inside the store, the in-call form of the shape
+    /// SY-2's `Rejects` names (which writes the compensation after ingest has
+    /// returned, and has no mutant here):
     /// it commits the losing event, awaits, and only then commits the
     /// compensation, as an adapter does that writes a group's foreign rows
     /// and its compensation as two statements outside one transaction.

@@ -80,6 +80,7 @@ first session on this phase owes a number.
 
 - **2026-11-20** (#148). The row says `in progress`, and before this entry nothing
   here backed it. What has landed: #510 pointed the crate docs' bridge links at
-  the site, so HS-P0024's friction log starts a reader there; the owning-phase box
-  for #188 under "Work carried in" (ADR-0114, accepted 2026-11-20, owns ES-6, ES-29
-  and ES-31 here). No exit criterion is ticked, and the estimate is still owed.
+  the site (#174), so HS-P0024's friction log starts a reader there; and #506
+  added the owning-phase box for #188 under "Work carried in" (ADR-0114, accepted
+  2026-11-20, owns ES-6, ES-29 and ES-31 here). No exit criterion is ticked, and
+  the estimate is still owed.
