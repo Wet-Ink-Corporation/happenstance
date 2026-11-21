@@ -78,6 +78,16 @@ impl SyncFixture for NeonPeerFixture {
     /// no connection to close: each request is one HTTP round trip.
     const REOPEN: Capability = Capability::SUPPORTED;
 
+    /// Declined: `NeonSyncPeer` declares the limits it was built with, and
+    /// none of them is a retention floor. A raw `DELETE` can remove events
+    /// from the endpoint, and SY-40's record makes ingest skip them, but
+    /// nothing reports the gap as a floor, which is what SY-32's rule reads.
+    const COMPACTION: Capability = Capability::declined(
+        "NeonSyncPeer declares the PeerLimits it was built with and never a retention floor; \
+         an operator's DELETE removes events from the endpoint, but nothing reports the gap \
+         through the port, so there is no compaction to declare",
+    );
+
     async fn connect(&self) -> Self::Peer {
         let config = self
             .schema

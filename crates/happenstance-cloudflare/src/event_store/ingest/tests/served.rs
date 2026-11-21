@@ -367,6 +367,15 @@ impl SyncFixture for ServedFixture {
          harness/workerd runs the family on a real object",
     );
 
+    /// Declined: the object serves a `StoreSyncPeer`, which cannot read a
+    /// retention floor through the port (ADR-0028), so the object has no
+    /// compaction to offer until one is built for it.
+    const COMPACTION: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+        "the object serves a StoreSyncPeer over CloudflareIngestStore, and a store peer cannot \
+         read a retention floor through the port (ADR-0028), so the object has no compaction to \
+         offer",
+    );
+
     fn connect(&self) -> impl Future<Output = Self::Peer> {
         core::future::ready(self.client(PeerLimits::minimum()))
     }
