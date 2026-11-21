@@ -37,6 +37,14 @@ impl SyncFixture for LocalFixture {
          there is no medium outside the process a reopen could read back",
     );
 
+    /// Declined: this fixture is the `!Send` mount's account of the port, and
+    /// SY-32's rule is run against the reference peer's compaction by the
+    /// `Send` mount, `memory_sync_conformance.rs`.
+    const COMPACTION: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+        "this `!Send` mount does not drive the reference peer's compaction through its `Rc` \
+         handle; SY-32's rule runs against that compaction in memory_sync_conformance.rs",
+    );
+
     async fn connect(&self) -> Self::Peer {
         LocalPeer {
             inner: Rc::clone(&self.peer),

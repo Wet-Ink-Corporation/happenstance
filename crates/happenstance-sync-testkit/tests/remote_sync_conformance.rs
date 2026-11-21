@@ -344,6 +344,15 @@ impl SyncFixture for RemoteFixture {
          medium outside the process a reopen could read back",
     );
 
+    /// Declined: the far side is a `StoreSyncPeer`, which cannot read a
+    /// retention floor through the port (ADR-0028), so it has no compaction
+    /// to report.
+    const COMPACTION: happenstance_testkit::Capability = happenstance_testkit::Capability::declined(
+        "the far side of the loopback exchange is a StoreSyncPeer over the in-memory ingest \
+         store, and a store peer cannot read a retention floor through the port (ADR-0028), so \
+         it has no compaction to report",
+    );
+
     async fn connect(&self) -> Self::Peer {
         self.client(PeerLimits::minimum()).await
     }
