@@ -9,10 +9,15 @@
 // one. Every rule must answer `ran`: under `PeerLimits::minimum` this peer
 // shows a page boundary and confirms what it acknowledges, so a skip is a
 // regression. One skip is tolerated, SY-32's, and only for the fixture's own
-// stated reason (D10, #158, #480): the object serves a `StoreSyncPeer`, which cannot read a
-// retention floor through the port (ADR-0028), so the object has no compaction
-// to offer until follow-up F1 builds one. A violation answers 422 with its
-// clause, never a trap.
+// stated reason (D10, #158, #480): the object serves a `StoreSyncPeer`, which
+// cannot read a retention floor through the port (ADR-0028), so the object has
+// no compaction to offer until follow-up F1 builds one. A violation answers 422
+// with its clause, never a trap.
+//
+// The deployed leg runs this file against an object deployed from its own
+// build. An object deployed before #480 answers SY-32's rule with the older
+// skip text and fails `TOLERATED_BODY` below until it is redeployed; that is
+// the object being stale, not the rule regressing (#527).
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 

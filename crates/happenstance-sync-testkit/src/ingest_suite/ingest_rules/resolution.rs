@@ -23,6 +23,18 @@
 //! bound, so it runs under every emitter, the `!Send` Durable Object's
 //! included.
 //!
+//! # What the fixture must allow
+//!
+//! The reader runs in the ingest's own task, so the store must let a read on
+//! a second handle make progress while an ingest on the first is suspended. A
+//! store whose ingest holds a synchronous lock across an await — a `RefCell`
+//! borrow, or a `std::sync::Mutex` guard — makes that read block or panic
+//! rather than return, and the rule then hangs or panics instead of reporting
+//! a [`Violation`]. The rule cannot bound that with a timeout without a
+//! runtime, which is the dependency it exists to avoid, so it is the
+//! fixture's obligation: such a store is wrong under ES-11 in any case,
+//! because one handle's in-flight write may not stall another's read.
+//!
 //! # Why one read decides an observation
 //!
 //! The losing claim and its reversal are found in **one** read of the log, a
@@ -38,14 +50,14 @@ use core::pin::{Pin, pin};
 use core::task::Poll;
 
 use happenstance_core::{
-    Event, EventId, EventStore, EventType, Query, QueryItem, RecordedAt, SequencePosition, StoreId,
-    Tag, Tags,
+    Event, EventId, EventStore, EventType, Query, QueryItem, ReadOptions, RecordedAt,
+    SequencePosition, StoreId, Tag, Tags, collect,
 };
 use happenstance_sync::runner::Adjudicate;
 use happenstance_sync::{EventGroup, IngestGroup, IngestStore, ReplicatedEvent};
 
 use super::seat_rule::SeatRule;
-use super::{ensure_counts, ensure_foreign, ingest, opaque, read_all};
+use super::{ensure_counts, ensure_foreign, ingest, opaque};
 use crate::IngestFixture;
 use crate::violation::{Violation, ensure};
 
@@ -139,16 +151,14 @@ pub(super) async fn a_reader_never_sees_the_loser_alone<F: IngestFixture>(
             format!("the store refused the losing claim and its reversal: {error}"),
         )
     })?;
-    for seen in during {
-        if seen?.unresolved() {
-            return Err(Violation::new(
-                SY_2,
-                "a reader read the losing claim held with no reversal, while the ingest that \
-                 carries both was still in flight: the store committed the losing event apart \
-                 from its compensation, so a slice cut at that moment says the seat is held \
-                 twice",
-            ));
-        }
+    if read_unresolved(&during) {
+        return Err(Violation::new(
+            SY_2,
+            "a reader read the losing claim held with no reversal, while the ingest that \
+             carries both was still in flight: the store committed the losing event apart \
+             from its compensation, so a slice cut at that moment says the seat is held \
+             twice",
+        ));
     }
     ensure_counts(
         landed,
@@ -206,9 +216,36 @@ async fn watched<W: Future, O: Future>(
     (output, seen)
 }
 
-/// One read of the log, and what it showed of the conflict.
+/// Whether any read taken while the ingest was in flight showed the losing
+/// claim held with nothing resolving it.
+///
+/// A read that **failed** mid-ingest is no observation, not a violation (#527):
+/// a busy refusal, a pool timeout or a transient HTTP error tells the rule
+/// nothing about what a reader would have seen, and reporting it under SY-2
+/// would blame atomicity for a read path's hiccup. The read after the ingest
+/// returns is still required to succeed.
+fn read_unresolved(during: &[Result<Seen, Violation>]) -> bool {
+    during.iter().any(|seen| match seen {
+        Ok(seen) => seen.unresolved(),
+        Err(_) => false,
+    })
+}
+
+/// One read of the conflict's slice of the log, and what it showed.
+///
+/// Narrowed to the seat tag and the two event types rather than the whole log
+/// (#527): it checks the same two facts in one snapshot, and on Postgres and
+/// Neon every pending poll of the ingest pays for this read.
 async fn observe<S: EventStore>(store: &S) -> Result<Seen, Violation> {
-    let log = read_all(store, SY_2).await?;
+    let slice = conflict()?;
+    let log = collect(store.read(&slice, ReadOptions::new()))
+        .await
+        .map_err(|error| {
+            Violation::new(
+                SY_2,
+                format!("the store refused a read of the seat's slice: {error}"),
+            )
+        })?;
     let holds = |event_type: &EventType, bytes: &[u8]| {
         log.iter()
             .any(|row| row.event_type() == event_type && row.event.data().as_ref() == bytes)
@@ -251,6 +288,14 @@ fn family() -> Result<Query, Violation> {
     Ok(Query::from_item(item))
 }
 
+/// The claim and its reversal on the seat: the slice each observation reads.
+fn conflict() -> Result<Query, Violation> {
+    let item = QueryItem::new([SEAT_CLAIMED, CLAIM_REVERSED], seat()).map_err(|error| {
+        Violation::new(SY_2, format!("the rule's own query is invalid: {error}"))
+    })?;
+    Ok(Query::from_item(item))
+}
+
 fn seat() -> Tags {
     [Tag::from_static(SEAT)].into_iter().collect()
 }
@@ -263,7 +308,35 @@ mod tests {
 
     use happenstance_testkit::block_on;
 
-    use super::watched;
+    use super::{Seen, read_unresolved, watched};
+    use crate::violation::Violation;
+
+    const RESOLVED: Seen = Seen {
+        loser: true,
+        reversal: true,
+    };
+    const UNRESOLVED: Seen = Seen {
+        loser: true,
+        reversal: false,
+    };
+
+    #[test]
+    fn a_read_that_failed_mid_ingest_is_no_observation() {
+        let during = [
+            Err(Violation::new("SY-2", "a busy read, mid-ingest")),
+            Ok(RESOLVED),
+        ];
+        assert!(!read_unresolved(&during));
+    }
+
+    #[test]
+    fn an_unresolved_read_is_still_found_beside_a_failed_one() {
+        let during = [
+            Err(Violation::new("SY-2", "a busy read, mid-ingest")),
+            Ok(UNRESOLVED),
+        ];
+        assert!(read_unresolved(&during));
+    }
 
     /// Pending `remaining` times, waking itself each time, then ready.
     struct PendingFor(usize);
