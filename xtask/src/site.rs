@@ -237,15 +237,59 @@ fn markdown_files(dir: &Path) -> Result<Vec<String>> {
 }
 
 /// Renders every page in [`READING_ORDER`] into the guide section.
+///
+/// # Errors
+///
+/// Also when a page links to a `docs/` page that does not exist (#547): the
+/// renderer aims a link to a page off the site at its `blob/main` URL, which
+/// Zola treats as external and does not check, so this is the only place a
+/// typo'd or deleted page is caught.
 fn write_guide(tree: &Path, guide: &Path) -> Result<()> {
-    check_coverage(&markdown_files(tree)?)?;
+    let present = markdown_files(tree)?;
+    check_coverage(&present)?;
     create_dir(guide)?;
     for (index, file) in READING_ORDER.iter().enumerate() {
         let text = read(&tree.join(file))?;
         let page = render::guide_page(file, &text, index + 1, READING_ORDER)?;
+        let missing = missing_tree_links(&page, &present);
+        if !missing.is_empty() {
+            bail!(
+                "{TREE}/{file} links to {} in {TREE}/, which does not exist: {}",
+                if missing.len() == 1 {
+                    "a page"
+                } else {
+                    "pages"
+                },
+                missing.join(", ")
+            );
+        }
         write(&guide.join(file), &page)?;
     }
     Ok(())
+}
+
+/// Every `docs/` page a rendered guide page links to at its `blob/main` URL
+/// that is not among `present`, the tree's markdown files.
+fn missing_tree_links(page: &str, present: &[String]) -> Vec<String> {
+    let prefix = format!("{}/{TREE}/", render::BLOB);
+    let mut missing: Vec<String> = Vec::new();
+    for (at, _) in page.match_indices(&prefix) {
+        let rest = page.get(at + prefix.len()..).unwrap_or_default();
+        let file: String = rest
+            .chars()
+            .take_while(|c| !matches!(c, ')' | '#' | '>' | '"' | '\'' | ' ' | '\n' | '\r'))
+            .collect();
+        if Path::new(&file)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
+            && !file.contains('/')
+            && !present.contains(&file)
+            && !missing.contains(&file)
+        {
+            missing.push(file);
+        }
+    }
+    missing
 }
 
 /// Writes the facts and the landing page's programs the templates load.
@@ -374,9 +418,36 @@ mod tests {
 
     use std::ffi::OsString;
 
-    use super::{INDEX, OFF_SITE, Options, READING_ORDER, check_coverage, markdown_files};
+    use super::{
+        INDEX, OFF_SITE, Options, READING_ORDER, check_coverage, markdown_files, missing_tree_links,
+    };
     use crate::lint_narrative::TREE;
+    use crate::site::render::BLOB;
     use crate::spec_trace::workspace_root;
+
+    /// #547: a guide link to a `docs/` page that does not exist was rewritten
+    /// to a `blob/main` URL, which Zola treats as external, so the build
+    /// passed. The rendered page is where that URL is visible, so the check
+    /// reads it there.
+    #[test]
+    fn a_link_to_a_missing_docs_page_is_named() {
+        let page = format!(
+            "See [the guide]({BLOB}/{TREE}/no-such-page.md#anchor), \
+             [the readme]({BLOB}/{TREE}/README.md) and [the spec]({BLOB}/spec/SPECIFICATION.md)."
+        );
+        let present = names(&["README.md", "append-conditions.md"]);
+        assert_eq!(
+            missing_tree_links(&page, &present),
+            vec![String::from("no-such-page.md")]
+        );
+    }
+
+    #[test]
+    fn a_link_to_a_present_docs_page_off_the_site_is_not_named() {
+        let page = format!("[upgrade]({BLOB}/{TREE}/upgrading-to-0-8.md)");
+        let present = names(&["upgrading-to-0-8.md"]);
+        assert!(missing_tree_links(&page, &present).is_empty());
+    }
 
     fn names(files: &[&str]) -> Vec<String> {
         files.iter().map(|file| (*file).to_owned()).collect()
