@@ -7,8 +7,8 @@ promises phase 16 wrote down. ADR-0066 names nine: `happenstance-core`,
 `happenstance-sync` and `happenstance-sync-testkit`. `happenstance-ladybug` is
 outside 1.0, and since phase 17 retired (ADR-0078), so it has no `0.x` line to keep.
 
-**Why here.** Last, by definition. Its dependency row is 13, 14, 16, 17, 18 and
-20: sync is inside 1.0 by D-1, so replication and retention are proved before the
+**Why here.** Last, by definition. Its dependency row is 13, 14, 16, 17, 17b, 18
+and 20: sync is inside 1.0 by D-1, so replication and retention are proved before the
 promise is made.
 
 **Decisions it settles.** None. A decision taken here is one phase 16 missed, and
@@ -88,3 +88,9 @@ per-clause disposition table from phase 16 with every row checked.
 **Estimate.** 3–5 days, plus the soak.
 
 **Session log**
+
+- **2026-11-25** (#209, first half). The status-table row was re-read against D-1: it
+  names 13 and 14 (`runbook/README.md`, phase 21: 13, 14, 16, 17, 17b, 18, 20), so sync
+  stays inside 1.0. The prose under *Why here* omitted 17b and now matches the row. Whether
+  phase 22 gates `1.0.0` is the owner's, drafted as a `proposed` record; the row is not
+  edited. No exit criterion is ticked.
