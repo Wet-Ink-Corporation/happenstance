@@ -115,7 +115,7 @@ metadata gains a conformant refusal path; the contract guarantees no metadata ca
 from the four `MIN_SUPPORTED_*` constants and the three `StoreLimit` variants and finds no term for
 metadata anywhere in the port surface. There is one, and it had been there all along:
 `crates/happenstance-sync/src/identity.rs:72` computes `ReplicatedEvent::payload_len` as
-`data.len()` plus `metadata.map_or(0, Bytes::len)`, and `crates/happenstance-sync/src/peer.rs:329`
+`data.len()` plus `metadata.map_or(0, Bytes::len)`, and `crates/happenstance-sync/src/peer.rs:330`
 checks that sum against `PeerLimits::max_event_bytes`, whose `minimum()` is anchored at `65_536` —
 `MIN_SUPPORTED_EVENT_DATA_LEN`'s own number (`:312`). Two consequences follow. A separate non-zero
 metadata floor `N` would mint an event every store must accept — 65,536 bytes of `data` plus `N` of

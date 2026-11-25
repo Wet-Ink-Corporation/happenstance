@@ -360,8 +360,8 @@ is on, and a clone of it is a second handle onto the same file. Neither line
 below is compiled on this page:
 
 ```text
-happenstance-sqlite = { version = "0.8", features = ["sync"] }
-happenstance-sync = "0.8"
+happenstance-sqlite = { version = "0.9", features = ["sync"] }
+happenstance-sync = "0.9"
 ```
 
 ```text

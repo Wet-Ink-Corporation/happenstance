@@ -68,6 +68,27 @@ enum Mistake {
     /// skipped re-delivery, as Postgres's does, so a group whose head was
     /// already held is named that many positions below its first row.
     NamesByFirstAllocated,
+    /// SY-6's first wrong store: evaluates a foreign guard's `after` against
+    /// this store's own log, and drops the group when it would reject. The
+    /// origin's boundary is a position in the origin's numbering, so the store
+    /// throws away a fact another store durably committed (`EvaluatesForeignAfterStore`).
+    EvaluatesForeignAfter,
+    /// SY-6's second: keeps a guard carrying `after` as evidence, which is what
+    /// every store did before ADR-0114, so a relay forwards a boundary that is
+    /// wrong in every store but the origin (`KeepsPositionRelativeGuardStore`).
+    KeepsPositionRelativeGuard,
+}
+
+/// For [`Mistake::KeepsPositionRelativeGuard`]: the position-relative guard each
+/// ingested group arrived under, by the identity of its first event. The oracle
+/// refuses those guards, so this store keeps them beside it.
+type Kept = Arc<Mutex<BTreeMap<EventId, AppendCondition>>>;
+
+/// The group's guard, if any clause of it carries `after`.
+fn positional<'a>(group: &IngestGroup<'a>) -> Option<&'a AppendCondition> {
+    group
+        .guard
+        .filter(|guard| guard.guards().iter().any(|clause| clause.after.is_some()))
 }
 
 /// For [`Mistake::NamesByFirstAllocated`]: each group's first new event, and
@@ -84,6 +105,7 @@ struct WrongFixture {
     inner: MemoryIngestFixture,
     mistake: Mistake,
     burnt: Burnt,
+    kept: Kept,
 }
 
 impl WrongFixture {
@@ -92,6 +114,7 @@ impl WrongFixture {
             inner: MemoryIngestFixture::new(),
             mistake,
             burnt: Burnt::default(),
+            kept: Kept::default(),
         }
     }
 }
@@ -104,6 +127,7 @@ impl IngestFixture for WrongFixture {
             inner: self.inner.connect().await,
             mistake: self.mistake,
             burnt: Arc::clone(&self.burnt),
+            kept: Arc::clone(&self.kept),
         }
     }
 }
@@ -114,6 +138,7 @@ struct WrongHandle {
     inner: MemoryIngestHandle,
     mistake: Mistake,
     burnt: Burnt,
+    kept: Kept,
 }
 
 impl SendEventStore for WrongHandle {
@@ -178,6 +203,37 @@ impl SendIngestStore for WrongHandle {
                 }
             }
         }
+        if self.mistake == Mistake::KeepsPositionRelativeGuard {
+            let mut kept = self.kept.lock().expect("no ingest panics holding the lock");
+            for group in groups {
+                if let (Some(guard), Some(head)) = (positional(group), group.events.first()) {
+                    kept.insert(head.id, guard.clone());
+                }
+            }
+        }
+        if self.mistake == Mistake::EvaluatesForeignAfter {
+            // THE DEFECT: the foreign `after` is evaluated in this store's
+            // numbering, and a group it would reject is dropped.
+            let log = collect(SendEventStore::read(
+                &self.inner,
+                &Query::all(),
+                ReadOptions::new(),
+            ))
+            .await
+            .map_err(IngestError::Store)?;
+            let admitted: Vec<IngestGroup<'_>> = groups
+                .iter()
+                .copied()
+                .filter(|group| {
+                    positional(group).is_none_or(|guard| {
+                        !log.iter().any(|row| {
+                            guard.is_violated_by(row.position, row.event_type(), row.event.tags())
+                        })
+                    })
+                })
+                .collect();
+            return SendIngestStore::ingest(&self.inner, &admitted).await;
+        }
         SendIngestStore::ingest(&self.inner, groups).await
     }
 
@@ -202,7 +258,18 @@ impl SendWriteGroupStore for WrongHandle {
         after: Option<SequencePosition>,
         max_events: NonZeroUsize,
     ) -> Result<GroupPage, Self::Error> {
-        let rows = self.rows().await?;
+        let mut rows = self.rows().await?;
+        if self.mistake == Mistake::KeepsPositionRelativeGuard {
+            // THE DEFECT: the refused guard is handed back with its group.
+            let kept = self.kept.lock().expect("no ingest panics holding the lock");
+            for row in &mut rows {
+                if row.position == row.first
+                    && let Some(guard) = kept.get(&row.event.id)
+                {
+                    row.guard = Some(guard.clone());
+                }
+            }
+        }
         let rows = {
             let burnt = self
                 .burnt
@@ -323,7 +390,9 @@ impl Mistake {
             | Self::CutsAtMaxEvents
             | Self::SkipsAnOversizedGroup
             | Self::ResumesByRowPosition
-            | Self::SaysNothingWhenCut => {}
+            | Self::SaysNothingWhenCut
+            | Self::EvaluatesForeignAfter
+            | Self::KeepsPositionRelativeGuard => {}
         }
         rows
     }
@@ -431,6 +500,29 @@ const COMPENSATION: &str = "compensation_joins_its_group";
 const REDELIVERY: &str = "a_group_after_a_redelivery_is_named_by_its_first_landed_row";
 const NEVER_CUTS: &str = "a_read_never_cuts_a_group";
 const CHAIN: &str = "pages_chain_on_first_and_end_with_nothing";
+const REFUSED: &str = "wire_condition_with_after_is_refused";
+
+/// SY-6's rule reports SY-6 against `mistake`, and every other rule passes.
+fn only_sy_6_fails(mistake: Mistake) {
+    for (name, verdict) in verdicts(mistake) {
+        let expected = if name == REFUSED {
+            Err("SY-6")
+        } else {
+            Ok(RuleOutcome::Ran)
+        };
+        assert_eq!(verdict, expected, "`{name}` against {mistake:?}");
+    }
+}
+
+#[test]
+fn a_store_that_evaluates_a_foreign_after_fails_only_the_refusal_rule() {
+    only_sy_6_fails(Mistake::EvaluatesForeignAfter);
+}
+
+#[test]
+fn a_store_that_keeps_a_position_relative_guard_fails_only_the_refusal_rule() {
+    only_sy_6_fails(Mistake::KeepsPositionRelativeGuard);
+}
 
 #[test]
 fn the_faithful_store_passes_every_rule() {

@@ -1003,10 +1003,11 @@ impl SqliteEventStore {
                 ingested.compensated += write(&compensation)?.inserted;
             }
             // The group's landed rows and its compensation are one write group
-            // under the guard it arrived with (SY-39). A group none of whose
-            // rows landed wrote nothing, so there is nothing to stamp.
+            // under the guard it arrived with (SY-39), if that guard is
+            // position-free: one carrying `after` is refused, not kept (SY-6).
+            // A group none of whose rows landed wrote nothing to stamp.
             if let Some(first) = written.first {
-                write_group::stamp_ingested(&transaction, first, group.guard)
+                write_group::stamp_ingested(&transaction, first, group.kept_guard())
                     .map_err(IngestError::Store)?;
             }
         }

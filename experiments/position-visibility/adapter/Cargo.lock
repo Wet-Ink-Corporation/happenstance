@@ -273,7 +273,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-core"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "bytes",
  "futures-core",
@@ -284,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "happenstance-postgres"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "futures-core",
  "happenstance-core",

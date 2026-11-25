@@ -57,7 +57,7 @@ checksum = "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
 
 [[package]]
 name = "happenstance-core"
-version = "0.2.0-alpha.1"
+version = "0.9.0"
 dependencies = [
  "base64",
  "bytes",

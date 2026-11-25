@@ -35,9 +35,9 @@ with programs you can run.
 ## Features, and the one that costs you a promise
 
 ```toml
-happenstance-sqlite = "0.8"                                # the event store
-happenstance-sqlite = { version = "0.8", features = ["projection-store"] }
-happenstance-sqlite = { version = "0.8", features = ["sync"] }   # + the ingest port
+happenstance-sqlite = "0.9"                                # the event store
+happenstance-sqlite = { version = "0.9", features = ["projection-store"] }
+happenstance-sqlite = { version = "0.9", features = ["sync"] }   # + the ingest port
 
 rusqlite = "0.41"                                          # only for tables of your own
 ```
