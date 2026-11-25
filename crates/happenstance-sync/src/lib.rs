@@ -118,7 +118,8 @@
 //! * **Append conditions across a boundary.** Settled by SY-1 – SY-7: ingest
 //!   never refuses, and a conflict is compensated by an ordinary append. The
 //!   origin's condition travels as [`EventGroup::guard`](peer::EventGroup::guard),
-//!   evidence rather than an instruction (SY-6). Nothing here enforces it yet.
+//!   evidence rather than an instruction (SY-6). A guard carrying `after` is
+//!   refused at ingest by not being kept ([`IngestGroup::kept_guard`]).
 //! * **Ordering.** Settled by SY-19: local position is arrival order, and two
 //!   peers need not agree on a total order. The sketch implements neither.
 //! * **`wasm32` compatibility.** Checked. The whole crate builds for

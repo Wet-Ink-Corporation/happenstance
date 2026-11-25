@@ -1029,7 +1029,7 @@ impl Unresolvable {
 /// The count in the type is deliberate and it is the one number written twice.
 /// It is the count `spec-trace` reported when the prose guard was measured, and
 /// a change to it is a change a reviewer should be made to see.
-const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 71] = [
+const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 70] = [
     // ---- VT: value types -------------------------------------------------
     // VT-6's `restored_peer_does_not_reissue_identities` left this table at
     // #133, in the change that wrote it as the restore family's rule: a name
@@ -1273,11 +1273,11 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 71] = [
         // `send_shape.rs`. Seven lines for seven, so nothing below moves.
         Unresolvable::Elsewhere("crates/happenstance-core/tests/thread_safe_marker.rs"),
     ),
-    (
-        "ES-29",
-        "wire_condition_with_after_is_refused",
-        Unresolvable::Scheduled("the phase that lands the wire condition"),
-    ),
+    // ES-29's `wire_condition_with_after_is_refused` left at #536, written
+    // into the sync testkit's write-group family on ADR-0114's branch (i),
+    // where check 4 resolves it; a resolving name is a stale entry. Five
+    // lines for five, so the `spec_trace.rs:N` citations below keep their
+    // numbers.
     (
         "ES-31",
         "checkpoint_lag_is_not_a_position_difference",

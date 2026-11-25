@@ -233,7 +233,7 @@ the limit rather than hiding it.
 
 ## SY-32
 
-The scalar `PeerLimits::retention_floor` (`crates/happenstance-sync/src/peer.rs:296-301`) is
+The scalar `PeerLimits::retention_floor` (`crates/happenstance-sync/src/peer.rs:297-302`) is
 kept, and it means **the lowest resume point this peer can still satisfy**. A resume token is a
 prefix concept, so a floor is the right shape for it. ES-39's objection to floors is about
 completeness, not resumability. A scattered purge on a peer is a deleted-from store under ES-38

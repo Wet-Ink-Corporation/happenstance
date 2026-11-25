@@ -210,6 +210,7 @@
 //! | [`a_group_after_a_redelivery_is_named_by_its_first_landed_row`](write_group_rules::a_group_after_a_redelivery_is_named_by_its_first_landed_row) | SY-39, SY-11 | a store that names a group by the first position it allocated, not the first row it wrote |
 //! | [`a_read_never_cuts_a_group`](write_group_rules::a_read_never_cuts_a_group) | SY-39 | a page filled by event, a first group skipped for being too large, and a resume above a row position |
 //! | [`pages_chain_on_first_and_end_with_nothing`](write_group_rules::pages_chain_on_first_and_end_with_nothing) | SY-39, SY-37 | a page its budget cut that says nothing is waiting |
+//! | [`wire_condition_with_after_is_refused`](write_group_rules::wire_condition_with_after_is_refused) | SY-6, ES-29 | a store that evaluates a foreign guard's `after` and drops the fact, and one that keeps a position-relative guard as evidence |
 //!
 //! Each wrong store lives in `tests/wrong_write_group_stores.rs`, where a test
 //! runs the whole family against it and asserts the exact set it fails.

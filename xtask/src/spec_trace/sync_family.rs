@@ -71,19 +71,14 @@ const OWED_BY_458: &str = "#458's second half: written into `happenstance-sync-t
 ///
 /// The count in the type is written twice on purpose, as the parent table's is:
 /// a change to it is a change a reviewer should be made to see.
-pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 19] = [
+pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 18] = [
     // ---- Scheduled: nothing has written them -----------------------------
     // SY-3's `compensation_is_idempotent_under_redelivery` left this table at
     // ADR-0108, which repointed SY-3's line to SY-12's
     // `dedupe_reaches_identity_without_decoding`: it delivers the same batch
     // twice and refuses a second compensation, SY-3's stated assertion.
-    (
-        // ES-29 cites the same name from the store side and is declared with
-        // the phase that lands the wire condition; this is the ingest side.
-        "SY-6",
-        "wire_condition_with_after_is_refused",
-        Unresolvable::Scheduled(OWED_BY_458),
-    ),
+    // SY-6's `wire_condition_with_after_is_refused` left at #536 (ADR-0114
+    // (i)), in the write-group family, where check 4 resolves it.
     (
         "SY-9",
         "one_adapter_serves_both_roles",

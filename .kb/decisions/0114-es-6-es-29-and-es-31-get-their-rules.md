@@ -128,11 +128,11 @@ condition carrying a position-relative boundary … MUST be refused as ingest in
 refuses one today:
 
 - `EventGroup::guard` travels on the wire. Its rustdoc still says "Phase 13 builds the refusal"
-  (`crates/happenstance-sync/src/peer.rs:227-243`).
+  (`crates/happenstance-sync/src/peer.rs:227-244`).
 - The crate root says "Nothing here enforces it yet" (`crates/happenstance-sync/src/lib.rs:121`).
 - Every ingest stores the guard verbatim as evidence.
 
-Local appends record no guard (`crates/happenstance-sync/src/memory_ingest.rs:424-430`), so only a
+Local appends record no guard (`crates/happenstance-sync/src/memory_ingest.rs:425-431`), so only a
 wrong or foreign peer can send one. No rule in the sync testkit builds a guard with `after`. The
 ingest-side declaration is `xtask/src/spec_trace/sync_family.rs:86-92`, owed by #458's second half.
 

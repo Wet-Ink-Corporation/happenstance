@@ -275,6 +275,25 @@ impl<'a> IngestGroup<'a> {
         self.guard = guard;
         self
     }
+
+    /// The guard a store keeps with this group: the origin's
+    /// [`guard`](Self::guard) when it is **position-free**, and none when any
+    /// of its clauses carries an `after`.
+    ///
+    /// SY-6 refuses a condition carrying a position-relative boundary as ingest
+    /// input, and ADR-0114 (i) says what *refused* means: not kept. An `after`
+    /// names a position in the origin's numbering, which means nothing in the
+    /// receiver's, so a relay that forwarded it would hand the next store a
+    /// boundary that is wrong there too (ES-29). The events still land — ingest
+    /// never refuses a fact (SY-1) — and the group is recorded with no guard, so
+    /// [`read_groups`](crate::WriteGroupStore::read_groups) hands back `None`
+    /// for it. Every [`IngestStore`] in this workspace records what this
+    /// returns, never [`guard`](Self::guard) itself.
+    #[must_use]
+    pub fn kept_guard(&self) -> Option<&'a AppendCondition> {
+        self.guard
+            .filter(|guard| guard.guards().iter().all(|clause| clause.after.is_none()))
+    }
 }
 
 /// What one [`ingest`](IngestStore::ingest) did, summed across its groups.
@@ -321,5 +340,30 @@ mod tests {
 
         assert_eq!(bare.guard, None);
         assert_eq!(guarded.guard, Some(&guard));
+    }
+
+    #[test]
+    fn a_position_free_guard_is_kept_and_one_carrying_after_is_not() {
+        let item = || QueryItem::of_types(["Shipped"]).expect("a valid item");
+        let free = AppendCondition::new(Query::from_item(item()));
+        let relative = AppendCondition::new(Query::from_item(item())).and_guard(
+            Query::from_item(item()),
+            happenstance_core::SequencePosition::new(3),
+        );
+
+        assert_eq!(IngestGroup::new(&[], &[]).kept_guard(), None);
+        assert_eq!(
+            IngestGroup::new(&[], &[])
+                .with_guard(Some(&free))
+                .kept_guard(),
+            Some(&free)
+        );
+        // One clause carrying `after` is enough: the condition is refused whole.
+        assert_eq!(
+            IngestGroup::new(&[], &[])
+                .with_guard(Some(&relative))
+                .kept_guard(),
+            None
+        );
     }
 }

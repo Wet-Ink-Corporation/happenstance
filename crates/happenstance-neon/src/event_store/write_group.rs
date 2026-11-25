@@ -97,7 +97,8 @@ impl<T> NeonEventStore<T> {
         let guards = groups
             .iter()
             .enumerate()
-            .map(|(group, ingested)| match ingested.guard {
+            // `kept_guard`: a guard carrying `after` is refused, not kept (SY-6).
+            .map(|(group, ingested)| match ingested.kept_guard() {
                 Some(guard) => encode_guard(guard)
                     .map(|stored| serde_json::Value::String(BASE64.encode(stored)))
                     .map_err(|source| NeonError::UnstorableGuard { group, source }),

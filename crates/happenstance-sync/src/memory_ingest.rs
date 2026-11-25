@@ -263,13 +263,14 @@ impl State {
             }
             // A group that landed something is one write group, compensation
             // included; a full re-delivery writes no group (SY-11). The guard is
-            // cloned once, because the store keeps it.
+            // cloned once, because the store keeps it, and only when it is
+            // position-free: one carrying `after` is refused, not kept (SY-6).
             let landed = staged.len() - group_start;
             if landed > 0 {
                 staged_groups.push(StagedGroup {
                     first: self.next_position(group_start),
                     rows: landed,
-                    guard: group.guard.cloned(),
+                    guard: group.kept_guard().cloned(),
                 });
             }
         }

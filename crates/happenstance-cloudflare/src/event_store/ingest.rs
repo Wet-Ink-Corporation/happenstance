@@ -673,7 +673,9 @@ impl<'a> TryFrom<&IngestGroup<'a>> for GroupPlan<'a> {
         Ok(Self {
             events,
             compensation: group.compensation,
-            guard: group.guard,
+            // Only a position-free guard is kept: one carrying `after` is
+            // refused, not kept (SY-6, ADR-0114 (i)).
+            guard: group.kept_guard(),
         })
     }
 }
