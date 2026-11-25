@@ -1281,7 +1281,7 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 71] = [
     (
         "ES-31",
         "checkpoint_lag_is_not_a_position_difference",
-        Unresolvable::Scheduled("the phase that lands checkpoint lag"),
+        Unresolvable::Elsewhere("crates/happenstance/tests/projection_runner.rs"),
     ),
     // ES-38's `positions_are_not_reused_after_removal` left this table at
     // #151, in the change that wrote it against `Fixture::REMOVAL`: a name

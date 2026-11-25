@@ -4546,10 +4546,10 @@ events.
 
 **[FROZEN]**
 
-- **Rule:** `checkpoint_lag_is_not_a_position_difference` **(new)**, in the
-  projection suite — run a projection to completion against a sparsely-allocating
-  fixture and assert it reports "caught up" when `checkpoint == head`, whatever
-  the numeric distance from the previous position.
+- **Rule:** `checkpoint_lag_is_not_a_position_difference`, beside the typed runner,
+  in `crates/happenstance/tests/projection_runner.rs` (§4.11) — run a projection to
+  completion against a sparsely-allocating fixture and assert it reports "caught up" when
+  `checkpoint == head`, whatever the numeric distance from the previous position.
 - **Cases:** E2E-13, E2E-23, E2E-25.
 - **Rejects:** a runner or a dashboard computing `head - checkpoint` as an event
   lag. It reads plausibly on a dense store, and on a store with gaps — every
@@ -6955,7 +6955,7 @@ and a domain (PS-16's typed half is in `examples/rebuilding-read-models/tests/`)
 `failure_policy_is_per_projection`, `skip_and_record_is_atomic`,
 `pump_reports_the_failing_position`, `one_poisoned_projection_does_not_stall_the_others`,
 `panicking_apply_rolls_back`, `changed_query_starts_a_new_checkpoint`, and
-`checkpoint_lag_is_not_a_position_difference` — the last unwritten, and ES-31's, which states
+`checkpoint_lag_is_not_a_position_difference` — ES-31's, written at #532, which states
 it from the event-store side and names this suite as its home. CF-36 is why they are listed
 apart: a clause backed only by integration-level cases must not name an adapter conformance rule.
 
