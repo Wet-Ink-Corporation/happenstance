@@ -2,7 +2,7 @@
 id: kb-open-question-es-6-unwritable-rule-001
 title: ES-6 is frozen and names a rule that cannot be written
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   ES-6 is FROZEN and names store_error_crosses_a_join_handle as its rule, marked (new) and
@@ -70,7 +70,7 @@ source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/prose-guard-retired-and-what-it-owes.md
   - .kb/_intake/remediation-2026-09-04-briefs/stated-only-defects-and-the-reopen-must.md
   - .kb/_intake/remediation-2026-09-04-briefs/adapter-driver-reexport-policy.md
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-25
 ---
 
 # ES-6 is frozen and names a rule that cannot be written
@@ -281,3 +281,7 @@ test that declares the marker as a downstream crate would and spawns `append` un
 negative is a `compile_fail,E0277` probe beside `SendStoreWithLocalError`. Phase 20 owns it.
 Sub-questions 2 and 3: an unresolvable entry must name an owner a reader can find. Review holds
 that, not a lint. This atom stays open until the owner accepts and the rule lands.
+
+## Closed — 2026-11-25
+
+`kb-decision-0114` (ADR-0114, accepted 2026-11-20) answers this, and its build lands with this closure (#533). Sub-question 1: the rule is writable once its bound is ADR-0009's marker rather than `SendEventStore`. `crates/happenstance-core/tests/thread_safe_marker.rs` declares the marker as a downstream crate would, spawns `append` on a `MemoryEventStore` in `tokio::spawn` and awaits the `JoinHandle` for the `AppendError`; with the marker's `Error: Send + Sync` removed it fails with `E0277`. Its negative is a `compile_fail,E0277` doctest in `crates/happenstance-cloudflare/src/send_shape.rs`: the marker refuses `SendStoreWithLocalError`, and a marker without the bound makes that doctest compile and fail. Sub-questions 2 and 3: an `UNRESOLVABLE_RULE_NAMES` entry names an owner a reader can find, a phase or an issue, enforced by review.

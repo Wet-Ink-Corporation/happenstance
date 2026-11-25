@@ -1268,10 +1268,10 @@ const UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 71] = [
     (
         "ES-6",
         "store_error_crosses_a_join_handle",
-        Unresolvable::Scheduled(
-            "nothing, yet: `crates/happenstance-cloudflare/src/send_shape.rs` argues it is \
-             unwritable against today's port, which is a finding rather than a schedule",
-        ),
+        // Written at #533 (ADR-0114 option A), bound by ADR-0009's marker; its
+        // negative is the `compile_fail` probe in the Cloudflare crate's
+        // `send_shape.rs`. Seven lines for seven, so nothing below moves.
+        Unresolvable::Elsewhere("crates/happenstance-core/tests/thread_safe_marker.rs"),
     ),
     (
         "ES-29",

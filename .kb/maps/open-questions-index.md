@@ -206,7 +206,7 @@ what the question is, not its evidence. The last two were added by the
   2026-08-15 by ADR-0030 (`kb-decision-0030`): PS-19 keeps its post-reset
   scope and the never-seen-id obligation becomes PS-38's second sentence;
   sub-question 2's 2026-08-13 "isolated" verdict stands untouched.
-- **Open** — [`es-6-names-an-unwritable-rule.md`](../open-questions/es-6-names-an-unwritable-rule.md)
+- **Superseded** — [`es-6-names-an-unwritable-rule.md`](../open-questions/es-6-names-an-unwritable-rule.md)
   (`kb-open-question-es-6-unwritable-rule-001`) — ES-6 is `[FROZEN]` and
   names a conformance rule that cannot be written against today's port.
   Amended 2026-08-10: ADR-0008 and ADR-0009 (`kb-decision-0008`,
