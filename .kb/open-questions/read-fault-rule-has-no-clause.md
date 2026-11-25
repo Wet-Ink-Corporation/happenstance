@@ -2,7 +2,7 @@
 id: kb-open-question-read-fault-rule-no-clause-001
 title: The read-fault rule checks a real hazard and belongs to no clause
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   arming_a_read_fault_makes_the_stream_yield_an_error is a live conformance rule -- arm a fault
@@ -28,7 +28,7 @@ source_paths:
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
   - crates/happenstance-testkit/src/suite.rs
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-25
 ---
 
 # The read-fault rule checks a real hazard and belongs to no clause
@@ -81,3 +81,7 @@ batching. Option A, extended. It mints ES-44 for the store's `Err` item and CF-4
 `READ_FAULT` promise, CF-39's read-side twin, both frozen on landing on the Postgres and Neon
 evidence above. Sub-question 2: no index. Sub-question 3: `LogError::ReadFailed` stays test
 support. This atom stays open until the owner accepts the record and the clauses land.
+
+## Closed — 2026-11-25
+
+`kb-decision-0111` (ADR-0111, accepted 2026-11-20) answers this, and its build lands with this closure (#531). ES-44 is minted `[FROZEN]` for the store and CF-44 for the fixture, both claiming `arming_a_read_fault_makes_the_stream_yield_an_error`; `NoopReadFaultFixture` is CF-44's wrong fixture in the testkit's own `tests/`. `arm_read_fault` keeps taking no index, and `LogError::ReadFailed` stays a test-support convenience.

@@ -668,7 +668,7 @@ pub(crate) fn run(out: &mut impl io::Write, mode: Mode) -> Result<()> {
     // been named by any clause, and check 6 was structurally unable to notice,
     // including the one that pins the central DCB proposition. Four were
     // attribution errors and are claimed as of this commit, by ES-18, ES-19,
-    // ES-25 and VT-11. The other two are in [`UNCLAIMED_PENDING_ADR`].
+    // ES-25 and VT-11. The other two were claimed by ADR-0111 (ES-25, CF-45).
     let known_rules = all_rules(&root)?;
 
     // Two sets, not one, and which check gets which is load-bearing (ADR-0016
@@ -3080,64 +3080,14 @@ fn collect_cases(doc: &str) -> BTreeSet<String> {
 /// is not an allowlist in the usual sense, because it cannot be used to make a
 /// problem go away quietly: every entry is printed on every green run, and an
 /// entry whose rule *becomes* claimed is itself a failure, so the list can only
-/// shrink. Deleting the last entry deletes the mechanism.
+/// shrink. The array is empty and stays, so a new unclaimed rule must be written
+/// in: ADR-0111 claimed the last three (ES-44, CF-45 and ES-25's Rule line), and
+/// kept the mechanism at length zero rather than deleting it.
 ///
 /// Per the drift allowlist that came before it (`3712c9b`), the count is
 /// computed and printed rather than written here, so this comment cannot come to
 /// disagree with the array beneath it.
-const UNCLAIMED_PENDING_ADR: [(&str, &str); 3] = [
-    (
-        "k_disjoint_boundaries_never_conflict",
-        "the central DCB independence proposition — that commands sharing no \
-         consistency boundary do not conflict — is enforced by this rule and \
-         stated by no clause. No clause's normative text uses the word \
-         \"disjoint\"; ES-43's rationale does, and binds nothing. ES-25's \
-         *only if* half forbids the false-positive direction and does not \
-         say this, so claiming it there would assert \
-         that a FROZEN clause contains a proposition it does not. Since \
-         ADR-0077 the rule enforces it narrowed: disjoint contenders are never \
-         told ConditionViolated and at least one commits, but a Busy refusal \
-         (ES-43) passes, and the owner ruled at phase 17 that independence is a \
-         promise about conflict, not liveness (wi-2ab1f3). Owed: an ADR, either \
-         widening ES-25 or minting a clause, in that form",
-    ),
-    (
-        "ops_agree_with_the_model",
-        "the model family's single rule enforces no single clause's sentence. \
-         It replays a generated sequence of appends, conditional appends and \
-         reads against a model and compares every answer, so what it checks is \
-         the *composition* of ES-8, ES-9, ES-11, ES-14, ES-15, ES-16, ES-18 and \n         ES-25 \
-         over inputs no clause enumerates — which is the whole reason the \
-         family exists, since the named rules are worked examples and this is \
-         not. §6.4 names it, but only as CF-22's illustration of a per-family \
-         enumeration, and CF-22's MUST is where the rule list lives rather than \
-         what any rule asserts. Claiming it under any one of the clauses it \
-         exercises would say that clause is what it checks. Owed: an ADR, \
-         either minting the clause the model family has never had — a store \
-         agrees with the contract over arbitrary operation sequences, not only \
-         over the examples the suite enumerates — or deciding that check 6's \
-         bar is per-clause and a cross-clause rule is disposed of some other \
-         way",
-    ),
-    (
-        "arming_a_read_fault_makes_the_stream_yield_an_error",
-        "`EventStore::read` yields `Result<SequencedEvent, Self::Error>` per \
-         item, and **no clause requires a rule to induce a read fault** — the \
-         absence is the finding, not an attribution error. ES-2 governs the \
-         signature and says nothing about the coverage of its `Err` arm; every \
-         clause that could claim this rule would have to acquire a sentence it \
-         does not have, which is an edit to the specification rather than a \
-         reading of it. The rule was landed by the lane remediating L3-01, \
-         which is explicitly not the specification owner: §7.4 is where a rule \
-         no clause names is disposed of, and CF-24's discipline is that a rule \
-         with no clause is as much a problem as a clause with no rule. Owed: an \
-         ADR, either minting the clause — a store MUST surface a failure part \
-         way through a read as an `Err` item and MUST NOT report it as the end \
-         of the stream — or widening ES-2 to say what its error arm obliges. \
-         The argument is in \
-         `.kb/_intake/remediation-2026-09-04-briefs/read-fault-clause-and-capability.md`",
-    ),
-];
+const UNCLAIMED_PENDING_ADR: [(&str, &str); 0] = [];
 
 /// A citation whose file name is not a path in this repository.
 ///

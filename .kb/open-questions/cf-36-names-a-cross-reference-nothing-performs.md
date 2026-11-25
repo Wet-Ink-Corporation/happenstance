@@ -47,7 +47,7 @@ last_reviewed: 2026-09-29
 
 ## What changed
 
-CF-36 (`spec/SPECIFICATION.md:9672-9683`) is `[FROZEN]` and its `Rule:` line
+CF-36 (`spec/SPECIFICATION.md:9710-9721`) is `[FROZEN]` and its `Rule:` line
 claims `cargo xtask spec-trace` cross-references each case's level marker
 (`E2E-CASES.md:19-28`). It did not: at `9b06836`, `grep -c "Level"
 xtask/src/spec_trace.rs` returned `0` against 58 `- **Level:**` markers, so a
