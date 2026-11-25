@@ -31,6 +31,12 @@ not the same as what a user needed to be told.
   gated the typed **runner** until `0.5.0` removed it too; see `[0.5.0]`
   and [`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) §4.
 
+**What semver covers, from `1.0.0`** (ADR-0066 §5, mirrored in [`SECURITY.md`](SECURITY.md)):
+every public item of the nine crates and the behaviour every `[FROZEN]` clause promises, except
+`#[doc(hidden)]` items, `Display` and `Debug` text, rustdoc prose, and `happenstance-postgres`'s
+naive arm, a `--cfg happenstance_naive_arm` and never API. A new conformance rule is a testkit
+minor (CF-29, CF-31).
+
 ## [Unreleased]
 
 ### Changed
