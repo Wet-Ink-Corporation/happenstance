@@ -161,7 +161,7 @@ order and explains why each matters; the sources themselves hold the detail.
 
 Every entry above assumes you know why an append re-checks what its decision
 read. If that is not yet clear, read
-[why an append re-reads its condition](append-conditions.md#no-such-anchor-probe) first.
+[why an append re-reads its condition](no-such-page-probe.md) first.
 
 When your store implements the contract,
 [pass the conformance suite](pass-conformance-suite.md) takes you from there to
