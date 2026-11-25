@@ -71,7 +71,7 @@ const OWED_BY_458: &str = "#458's second half: written into `happenstance-sync-t
 ///
 /// The count in the type is written twice on purpose, as the parent table's is:
 /// a change to it is a change a reviewer should be made to see.
-pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 20] = [
+pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 19] = [
     // ---- Scheduled: nothing has written them -----------------------------
     // SY-3's `compensation_is_idempotent_under_redelivery` left this table at
     // ADR-0108, which repointed SY-3's line to SY-12's
@@ -92,11 +92,6 @@ pub(super) const SYNC_UNRESOLVABLE_RULE_NAMES: [(&str, &str, Unresolvable); 20] 
     (
         "SY-13",
         "identity_survives_a_tag_reordering_peer",
-        Unresolvable::Scheduled(OWED_BY_458),
-    ),
-    (
-        "SY-16",
-        "resume_survives_a_dropped_peer_handle",
         Unresolvable::Scheduled(OWED_BY_458),
     ),
     (

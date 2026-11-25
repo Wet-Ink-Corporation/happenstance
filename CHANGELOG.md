@@ -33,6 +33,14 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Added
+
+- **`happenstance-sync-testkit`: SY-16's rule, `resume_survives_a_dropped_peer_handle`**, in the
+  sync peer family (#535). It drops the handle that issued a resume token, connects a new one
+  and resumes from the token, and fails a peer that keeps a reader's place in the handle rather
+  than in the token, which hands a reconnecting runner the whole log again. A new rule is a
+  minor for this crate; pin it exactly.
+
 ### Changed
 
 - **`happenstance-testkit`: a declined capability's `SKIP` line reaches a plain `cargo test`**
@@ -45,7 +53,6 @@ not the same as what a user needed to be told.
   stated reason. `happenstance-cloudflare`'s said its fixture declined nothing; it declines
   `READ_FAULT` and `HELD_ABOVE_FRONTIER`, and its publish-readiness test now checks every
   capability `Fixture` declares rather than three.
-
 
 ## [0.8.0] — 2026-11-20
 
