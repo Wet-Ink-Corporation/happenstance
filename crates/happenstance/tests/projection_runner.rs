@@ -628,6 +628,96 @@ async fn tolerates_gapped_positions() {
     assert_eq!(progress.through, Some(third));
 }
 
+/// The wrong implementation ES-31 names: a backlog sized by subtracting
+/// positions.
+///
+/// A runner, or a caller's "is this view current?" check, that reads the
+/// store's head and its checkpoint and takes the difference as the number of
+/// events still to apply. It is right on a dense log, which is why it is
+/// plausible, and wrong on every store that gaps: the specification permits
+/// gaps (ES-10), and Postgres leaves one at every rolled-back `nextval`.
+fn backlog_by_position_difference(head: SequencePosition, checkpoint: SequencePosition) -> u64 {
+    head.get() - checkpoint.get()
+}
+
+/// ES-31. Whether a consumer is current is decided by reading, never by
+/// subtracting positions.
+///
+/// Over a stride-seven store: seed, run to completion, append exactly one
+/// event, run again. The numeric distance between the checkpoint and the head
+/// is seven and the backlog is one. Three facts are asserted, the two ES-31
+/// names and the count between them: the second run applies exactly one event,
+/// its checkpoint equals `head()`, and a third run is idle.
+///
+/// **Rejects:** [`backlog_by_position_difference`] — a runner that sized its
+/// work as `head - checkpoint` would expect seven events where one exists, and
+/// either fail to finish or report a backlog that does not exist. The anchor
+/// below asserts the difference really is seven, so the rule cannot pass on a
+/// store whose gap happened to be one.
+#[tokio::test]
+async fn checkpoint_lag_is_not_a_position_difference() {
+    let stride = NonZeroU64::new(7).expect("seven is not zero");
+    let events = GappyMemoryStore::with_stride(stride);
+    for event in [delivered("d7", 3), delivered("d7", 4)] {
+        EventStore::append(&events, &[landed(&event)], None)
+            .await
+            .expect("the gappy fixture seeds");
+    }
+
+    let models = MemoryProjectionStore::new();
+    let source = Source::new(&events, events.store_id());
+    let mut first = VanStock::for_depot("d7");
+    let caught_up = run_projection(source, &models, &mut first, &Json, chunk(1))
+        .await
+        .expect("the first run completes");
+    let checkpoint = caught_up.through.expect("the first run applied events");
+
+    let appended = EventStore::append(&events, &[landed(&dispatched("d7", 2))], None)
+        .await
+        .expect("the gappy fixture appends");
+    let head = EventStore::head(&events)
+        .await
+        .expect("head reads")
+        .expect("the store holds events");
+    assert_eq!(head, appended);
+
+    // The anchor: the wrong arithmetic really does disagree here.
+    assert_eq!(
+        backlog_by_position_difference(head, checkpoint),
+        7,
+        "the stride is seven, so the checkpoint and the head are seven apart"
+    );
+
+    let mut second = VanStock::for_depot("d7");
+    let resumed = run_projection(source, &models, &mut second, &Json, chunk(1))
+        .await
+        .expect("the resumed run completes");
+    assert_eq!(
+        resumed.applied, 1,
+        "one event was appended, so one is the backlog — not the seven a position \
+         difference reports"
+    );
+    assert_eq!(resumed.through, Some(head), "the run reached the head");
+    assert_eq!(
+        models
+            .checkpoint(&checkpoint_id(&second).expect("a derivable id"))
+            .await
+            .unwrap(),
+        Checkpoint::Live { through: head },
+        "the stored checkpoint equals `head()`"
+    );
+
+    let mut third = VanStock::for_depot("d7");
+    let idle = run_projection(source, &models, &mut third, &Json, chunk(1))
+        .await
+        .expect("the idle run completes");
+    assert_eq!(
+        (idle.applied, idle.through),
+        (0, None),
+        "caught up means a run finds nothing, whatever the numeric distance was"
+    );
+}
+
 /// EC-005 — the resume point has no successor.
 ///
 /// [`SequencePosition::next`] is `checked_add` rather than `saturating_add`

@@ -1445,7 +1445,19 @@ pub mod ingest_rules {
     /// writes. A reader in the same task cannot be scheduled into a gap the
     /// store never opens, and a reader on another thread is not something
     /// every emitter has. SY-30's rule owns that shape, through the fault its
-    /// fixture arms.
+    /// fixture arms. That includes a store that writes the loser and its
+    /// compensation as **two synchronous autocommit statements** with no await
+    /// between them: it passes here, and the gap between the two commits is
+    /// still SY-30's armed fault to find (#527).
+    ///
+    /// # What the fixture must allow
+    ///
+    /// The reader runs in the ingest's own task, so a read on a second handle
+    /// must make progress while an ingest is suspended. A store that holds a
+    /// synchronous lock (a `RefCell` borrow, a `std::sync::Mutex` guard) across
+    /// an await in its ingest makes the rule hang or panic rather than report
+    /// a [`Violation`]; it is a fixture obligation, because the rule has no
+    /// runtime to bound the read with.
     ///
     /// # Errors
     ///

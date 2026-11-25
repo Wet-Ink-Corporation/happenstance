@@ -4546,10 +4546,10 @@ events.
 
 **[FROZEN]**
 
-- **Rule:** `checkpoint_lag_is_not_a_position_difference` **(new)**, in the
-  projection suite — run a projection to completion against a sparsely-allocating
-  fixture and assert it reports "caught up" when `checkpoint == head`, whatever
-  the numeric distance from the previous position.
+- **Rule:** `checkpoint_lag_is_not_a_position_difference`, beside the typed runner,
+  in `crates/happenstance/tests/projection_runner.rs` (§4.11) — run a projection to
+  completion against a sparsely-allocating fixture and assert it reports "caught up" when
+  `checkpoint == head`, whatever the numeric distance from the previous position.
 - **Cases:** E2E-13, E2E-23, E2E-25.
 - **Rejects:** a runner or a dashboard computing `head - checkpoint` as an event
   lag. It reads plausibly on a dense store, and on a store with gaps — every
@@ -5945,7 +5945,7 @@ store's pool and rolls back on drop (PS-7), and every adapter except
 `MemoryProjectionStore` also refuses it through its own error. Making that
 normative needs a clause of its own, carrying a rule (begin on one store, roll back
 on the other, assert both unchanged) and a mutant that mutates a store on a foreign
-rollback; it is not part of this clause's promise. The falsifier this clause carried — *a
+rollback; it is not part of this clause's promise. The reopening trigger and its rule are [ADR-0112](../.kb/decisions/0112-foreign-rollback-stays-non-normative-for-1-0.md)'s. The falsifier this clause carried — *a
 zero-cost type-level construction that names an instance, composes with `async
 fn`, and permits a batch to be held in a collection keyed by store* — would change
 `begin` and `commit` if it fired, so it cannot be renewed past 1.0, and no phase
@@ -6955,7 +6955,7 @@ and a domain (PS-16's typed half is in `examples/rebuilding-read-models/tests/`)
 `failure_policy_is_per_projection`, `skip_and_record_is_atomic`,
 `pump_reports_the_failing_position`, `one_poisoned_projection_does_not_stall_the_others`,
 `panicking_apply_rolls_back`, `changed_query_starts_a_new_checkpoint`, and
-`checkpoint_lag_is_not_a_position_difference` — the last unwritten, and ES-31's, which states
+`checkpoint_lag_is_not_a_position_difference` — ES-31's, written at #532, which states
 it from the event-store side and names this suite as its home. CF-36 is why they are listed
 apart: a clause backed only by integration-level cases must not name an adapter conformance rule.
 
@@ -10852,7 +10852,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-13 | FROZEN | `identity_survives_a_tag_reordering_peer` † | E2E-33, E2E-34 |
 | SY-14 | FROZEN | `bulk_ingest_is_idempotent_in_bounded_round_trips`, `rotors_ingest_is_one_requ… | E2E-36, E2E-35 |
 | SY-15 | FROZEN | `peer_conformance!` is invoked against a fixture peer whose transport asserts … | E2E-35, E2E-36 |
-| SY-16 | FROZEN | `resume_survives_a_dropped_peer_handle` † | E2E-35, E2E-36, E2E-44 |
+| SY-16 | FROZEN | `resume_survives_a_dropped_peer_handle` | E2E-35, E2E-36, E2E-44 |
 | SY-17 | FROZEN | the existing CLAUDE.md rule 4, checked by `happenstance-sync-testkit` compilin… | E2E-52, E2E-30 |
 | SY-18 | FROZEN | `peer_declares_its_own_limits`, `ingest_validates_every_event_not_the_head`, `… | E2E-35 |
 | SY-19 | FROZEN | `two_peers_disagree_on_total_order` † | E2E-41, E2E-42 |
