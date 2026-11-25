@@ -373,9 +373,9 @@
 //! [`send_shape::send_flavour::SendStoreWithLocalError`] implements
 //! `SendEventStore` — `Send` store, `Send` stream, `Send` future — with a
 //! `!Send` `Error`, and compiles. So ES-6's named rule
-//! `store_error_crosses_a_join_handle` is unwritable against today's port for
-//! *every* adapter, not merely for this one. See [`send_shape`] for the probe
-//! that separates "the future is `Send`" from "the error is `Send`".
+//! `store_error_crosses_a_join_handle` is bound by ADR-0009's marker, not the
+//! port, for *every* adapter (ADR-0114). See [`send_shape`] for the probe and
+//! for the `compile_fail` half that pins the marker against this store.
 //!
 //! # The ES-6 verdict
 //!
