@@ -79,26 +79,26 @@ and its correctness bar, unchanged.
 - [x] `.github/workflows/pages.yml` — build on a pull request, deploy from
       `main`; SHA-pinned and read-only at the top level, as `cargo xtask
       lint-workflows` requires. `site/` is inert to `cargo xtask affected`.
-- [ ] #174 · Repoint the two crate-doc links into `docs/` at the site, **after the
+- [x] #174 · Repoint the two crate-doc links into `docs/` at the site, **after the
       first deploy** — `crates/happenstance/src/lib.rs`'s front-door sentence and
       `crates/happenstance/src/domain.rs`'s bridge link. Both point at GitHub
       today, which always resolves; a link to a site that is not yet up would
       ship broken on the next docs.rs render. Same sentence, same link text: the
       pointer policy (`xtask/src/pointers.rs`) allows one front door, and a
       second sentence is the defect it names.
-- [ ] #175 · The first how-to pages in `docs/`, under `standards/pages/`, each
+- [x] #175 · The first how-to pages in `docs/`, under `standards/pages/`, each
       registered in `xtask/src/narrative.rs` and `site.rs`'s reading order:
       `choose-a-store`, `rebuild-a-read-model`, `retry-a-command`,
       `pass-conformance-suite`, `run-on-a-durable-object`. On a follow-up
       branch, after the site merges (`wi-269e5a`).
-- [ ] #176 · `boundary-not-aggregate.md` (the issue's name is over `PATH_BUDGET`), the
+- [x] #176 · `boundary-not-aggregate.md` (the issue's name is over `PATH_BUDGET`), the
       prior-model bridge. It argues against the DDD aggregate, matching the landing
       page's second beat (`wi-3c4f18`, the owner, 2026-09-29).
 - [x] #178 · Search. Zola builds the index (`search_index.en.js`); elasticlunr
       0.9.5, the release that index format declares, is vendored verbatim with its
       MIT licence under `site/static/js/elasticlunr/`. A box in the header and the
       drawer leads to `/search/`, which alone loads the index.
-- [ ] #168 · The owner sets the repository's Pages source to *GitHub Actions*.
+- [x] #168 · The owner sets the repository's Pages source to *GitHub Actions*.
 
 ## Exit criteria
 
