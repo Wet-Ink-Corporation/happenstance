@@ -47,6 +47,7 @@
 //! | [`nothing_waiting_means_the_next_pull_is_empty`](rules::nothing_waiting_means_the_next_pull_is_empty) | SY-37 | a peer that says nothing is waiting when its page ran out, not its log |
 //! | [`ack_never_confirms_a_non_durable_event`](rules::ack_never_confirms_a_non_durable_event) | SY-31 | a peer that confirms an event before it is durable |
 //! | [`round_trip_preserves_the_whole_log`](rules::round_trip_preserves_the_whole_log) | SY-28, SY-27 | a peer that withholds from its counterpart the events a type or tag filter matches, among those the rule's log carries |
+//! | [`resume_survives_a_dropped_peer_handle`](rules::resume_survives_a_dropped_peer_handle) | SY-16 | a peer that keeps a reader's place in the handle, so a token honoured on the handle that issued it is ignored by a new one, which starts again from the beginning |
 //! | [`retention_gap_is_reported_not_silent`](rules::retention_gap_is_reported_not_silent) | SY-32 | a peer that compacts and answers a token below its floor, or the start, with a strict subset in silence, or refuses it as anything but `Reseed`; skipped unless the fixture declares [`COMPACTION`](SyncFixture::COMPACTION) |
 //!
 //! Each rule names a wrong implementation, and that implementation lives in

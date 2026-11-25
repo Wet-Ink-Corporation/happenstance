@@ -10851,7 +10851,7 @@ between them because its *shape* does not wait on a transport but its
 | SY-13 | FROZEN | `identity_survives_a_tag_reordering_peer` † | E2E-33, E2E-34 |
 | SY-14 | FROZEN | `bulk_ingest_is_idempotent_in_bounded_round_trips`, `rotors_ingest_is_one_requ… | E2E-36, E2E-35 |
 | SY-15 | FROZEN | `peer_conformance!` is invoked against a fixture peer whose transport asserts … | E2E-35, E2E-36 |
-| SY-16 | FROZEN | `resume_survives_a_dropped_peer_handle` † | E2E-35, E2E-36, E2E-44 |
+| SY-16 | FROZEN | `resume_survives_a_dropped_peer_handle` | E2E-35, E2E-36, E2E-44 |
 | SY-17 | FROZEN | the existing CLAUDE.md rule 4, checked by `happenstance-sync-testkit` compilin… | E2E-52, E2E-30 |
 | SY-18 | FROZEN | `peer_declares_its_own_limits`, `ingest_validates_every_event_not_the_head`, `… | E2E-35 |
 | SY-19 | FROZEN | `two_peers_disagree_on_total_order` † | E2E-41, E2E-42 |
