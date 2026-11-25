@@ -33,23 +33,15 @@ The nine crates this repository publishes, at their published versions:
 - `happenstance-sync`
 - `happenstance-sync-testkit`
 
-The last two joined this list at `0.4.4`, their first release. Before that the
-only thing under either name on crates.io was a `0.0.0` placeholder.
+**A report against a `0.0.0` placeholder is a report against nothing**: each name
+was reserved with an empty `0.0.0` before its first real release.
 
-`happenstance-postgres` and `happenstance-neon` joined this list at `0.2.0`.
-Before that the only thing under either name on crates.io was a `0.0.0`
-placeholder with no functionality and no dependencies — it never linked a driver
-and never put anything in front of a consumer. **A report against a `0.0.0`
-placeholder is a report against nothing**; if you are looking at one, you are
-looking at a version that predates the crate.
-
-Two notes on `happenstance-cloudflare`, because it is the member of that list
-whose evidence is thinnest and you should know that before you weigh a finding
-against it. It passes the conformance suite under a `node:sqlite`-backed shim
-rather than under `workerd` itself — `.kb/open-questions/no-workerd-class-runner-in-the-gate.md`
-is the standing record of what that does and does not establish — and it is
-`wasm32`-only, so nothing in the host test matrix exercises it. Findings there
-are especially welcome for exactly that reason.
+One note on `happenstance-cloudflare`, because it is `wasm32`-only and nothing in
+the host test matrix exercises it. Its conformance runs under a `node:sqlite`-backed
+shim in the gate and under `workerd` itself in a sibling CI job, `harness/workerd`,
+which mounts every event-store rule and the ingest, write-group and sync peer
+families in a real Durable Object (ADR-0066 §6). Findings there are especially
+welcome for exactly that reason.
 
 Things worth reporting, because they are what this library is *for*:
 
@@ -80,40 +72,42 @@ Things worth reporting, because they are what this library is *for*:
 
 ## Supported versions
 
-Pre-1.0, and honestly so. There is no long-term support branch and no
-backporting: a fix lands in the next release, and the release before it is not
-patched. Pin an exact version and read [`CHANGELOG.md`](CHANGELOG.md) at each
-upgrade.
-
-`0.2.0` was the first stable release and `0.8.0` is current; what each promises
-is worth being exact about. The `EventStore` clauses marked `[FROZEN]` in
-[`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) are semver-binding from
-`0.2.0`. `ProjectionStore` was **not** at `0.2.0` — it shipped behind an
-off-by-default `unstable-projection` feature with a documented semver exemption
-— and **is from `0.3.0`**: adapters at both ends of its batch-shape axis passed
-its conformance suite and ADR-0063 lifted the gate. The typed projection
-*runner* was exempt behind `happenstance`'s feature of the same name through
-`0.4.x`, and **is not from `0.5.0`**, which removed that feature: a breaking
-change to the runner is now a violation of this table like any other.
+**The latest `1.x` minor is supported.** A fix lands in the next `1.x` release; an older
+`1.x` minor is not patched separately, because a `1.x` minor never breaks what an
+earlier one promised and moving to it is a `cargo update`. When a `2.0.0` ships, the
+last `1.x` minor gets **security fixes for six months**, and then none (ADR-0066 §8).
+An adapter's major follows its re-exported driver's breaking version (ADR-0044), and
+this window is what lets you move on your own schedule.
 
 | Version | Supported |
 |---|---|
-| `0.8.0` | ✅ current |
-| `0.7.0` | ❌ superseded by `0.8.0`, a breaking release: a typed projection's checkpoint is pinned to its source store, so `run_projection` and `run_fan_out` take a `Source` and stop with `ProjectionError::SourceChanged` against another store; ingest skips an event its store recorded as removed (SY-40), which moves `happenstance-sqlite` to schema version 3 and adds a migration 4 to `happenstance-postgres` and `happenstance-neon`; and `sync_peer_conformance!` requires a stated `COMPACTION` declension; [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md) |
-| `0.6.0` | ❌ superseded by `0.7.0`, a breaking release: `happenstance-sync` gains the adjudication hook and reports a retention gap as the fifth failure class, `Reseed`, which `SyncError::BelowRetentionFloor` now carries instead of `Stop`; `RemoteSyncPeer` refuses an over-limit push before sending it; and both testkits gain rules, the sync-testkit failing a fixture that leaves `REOPEN` at its default declension; the `0.7.0` section of [`CHANGELOG.md`](CHANGELOG.md) and its trace are the way across |
-| `0.5.1` | ❌ superseded by `0.6.0`, a breaking release: `happenstance-sync` gains its runner and network peers, the sync wire format is version 3 (every peer upgrades together), and each event store's schema moves for write groups (`happenstance-postgres` and `happenstance-neon`: migrate, then deploy); [`docs/upgrading-to-0-6.md`](docs/upgrading-to-0-6.md) is the way across |
-| `0.5.0` | ❌ superseded by `0.5.1`, a documentation and tooling release with no API change: rustdoc that builds again (`happenstance-testkit` under its default features, `happenstance-neon` with `--no-default-features`), stale feature comments corrected, and a rebuild how-to that drives the runner |
-| `0.4.6` | ❌ superseded by `0.5.0`, a breaking release: the typed projection runner leaves `happenstance`'s `unstable-projection` feature, which is removed, with an `async` `apply`, its own `type Error`, a `Chunk` and a derived checkpoint id; [`docs/upgrading-to-0-5.md`](docs/upgrading-to-0-5.md) is the way across |
-| `0.4.5` | ❌ superseded by `0.4.6`, an additive release with one narrowing: `happenstance-core` gains `StoreLimit::TagsPerBatch` and `MIN_SUPPORTED_TAGS_PER_BATCH`, `happenstance-testkit` gains `Fixture::settle_frontier` and `Fixture::MAX_TAGS_PER_BATCH`, and `happenstance-cloudflare` now refuses a call carrying more than 262,144 tags |
-| `0.4.4` | ❌ superseded by `0.4.5`, an additive release: `happenstance-sqlite` gains `SqliteEventStore::open_on` and `remint_identity_on` for a caller-configured connection, and an ingest that lands nothing no longer advances positions |
-| `0.4.3` | ❌ superseded by `0.4.4`, an additive release: the first of `happenstance-sync` and `happenstance-sync-testkit`, and a `sync` feature on every adapter |
-| `0.4.2` | ❌ superseded by `0.4.3`, an additive release adding `CloudflareEventStore::remint_identity`; `happenstance-cloudflare` now reads its `StoreId` on every append |
-| `0.4.1` | ❌ superseded by `0.4.2`, an additive release; it deprecates `AppendCondition::after` and `after_opt`, which are kept through 1.x, and `happenstance-cloudflare` now refuses metadata over 512 KiB |
-| `0.4.0` | ❌ superseded by `0.4.1`, a patch release with no API change |
-| `0.3.x` | ❌ superseded by `0.4.0`, a breaking release; [`docs/upgrading-to-0-4.md`](docs/upgrading-to-0-4.md) is the way across |
-| `0.2.0` | ❌ superseded by `0.3.0`; its `unstable-projection` surface was exempt and has moved |
-| `0.2.0-alpha.*` | ❌ yanked at the `0.2.0` release |
-| anything earlier | ❌ |
+| latest `1.x` minor | ✅ |
+| an earlier `1.x` minor | ⬆ move to the latest `1.x`; nothing in it breaks you |
+| `0.x` | ❌ superseded by `1.0.0`; the `0.x` sections of [`CHANGELOG.md`](CHANGELOG.md) and the `docs/upgrading-to-0-*.md` guides are the way across |
+
+### What semver covers
+
+Every public item of the nine crates, and every `[FROZEN]` clause of
+[`spec/SPECIFICATION.md`](spec/SPECIFICATION.md) in the behaviour it promises.
+`conformance` and `ProjectionProbe` are inside the promise (ADR-0063), and so are
+driver error payloads an adapter re-exports, under the driver-major limit above.
+**The exemptions are these, and only these** (ADR-0066 §5):
+
+- `#[doc(hidden)]` items;
+- the text of a `Display` or `Debug` implementation;
+- rustdoc prose;
+- `happenstance-postgres`'s naive arm, which is not a feature but a `--cfg
+  happenstance_naive_arm` a build sets for itself, and never API.
+
+A new conformance rule that detects a violation of a clause already `[FROZEN]` is a
+**minor** release of `happenstance-testkit` or `happenstance-sync-testkit`: it finds a
+defect and breaks nothing that was conformant, but it can turn an adapter's CI red, so
+pin a testkit exactly (CF-29, CF-31).
+
+### Licence
+
+The nine crates above stay **`MIT OR Apache-2.0` for all of 1.x** (ADR-0066 §8). A
+crate added later may be licensed otherwise; these nine may not.
 
 ## Disclosure
 
