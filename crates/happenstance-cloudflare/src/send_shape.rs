@@ -92,10 +92,25 @@ where
 /// binding constraint; two would make every method call `error[E0034]`).
 ///
 /// If this compiles — and it does — then the *derived* flavour does not imply a
-/// `Send` error either, and `store_error_crosses_a_join_handle` cannot be
-/// written against today's port for **any** adapter, not merely for the `!Send`
-/// one. That is a stronger statement than ES-6 makes and it is what ADR-0009
-/// has to answer.
+/// `Send` error either, so `store_error_crosses_a_join_handle` is bound by
+/// ADR-0009's marker rather than the port, for **any** adapter (ADR-0114). The
+/// rule is `crates/happenstance-core/tests/thread_safe_marker.rs`; its negative
+/// half is the probe below, which a marker without its `Error` bound would pass.
+///
+/// The marker refuses this store, so this does not compile:
+///
+/// ```compile_fail,E0277
+/// use happenstance_cloudflare::send_shape::send_flavour::SendStoreWithLocalError;
+/// use happenstance_core::SendEventStore;
+///
+/// // ADR-0009's marker, declared as a downstream crate declares it.
+/// trait ThreadSafeEventStore: SendEventStore<Error: Send + Sync> {}
+/// impl<S> ThreadSafeEventStore for S where S: SendEventStore<Error: Send + Sync> {}
+///
+/// fn requires_thread_safe<S: ThreadSafeEventStore>() {}
+///
+/// requires_thread_safe::<SendStoreWithLocalError>();
+/// ```
 pub mod send_flavour {
     use core::pin::Pin;
     use core::task::{Context, Poll};

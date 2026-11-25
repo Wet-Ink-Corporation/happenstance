@@ -194,7 +194,7 @@ has to carry an adapter's error, in a crate that never touched this file.
 
 **Evidence.** `crates/happenstance-cloudflare/src/send_shape.rs:75 (compile_fail,E0277)` ·
 `crates/happenstance-cloudflare/src/send_shape.rs:68 (assert_future_is_send)` ·
-`crates/happenstance-cloudflare/src/send_shape.rs:123 (SendStoreWithLocalError)` ·
+`crates/happenstance-cloudflare/src/send_shape.rs:138 (SendStoreWithLocalError)` ·
 [SPECIFICATION ES-6](../../spec/SPECIFICATION.md) *(`[FROZEN]`: the
 obligation, and why it is asserted on the `Output`)* ·
 [ADR-0009](../../.kb/decisions/0009-error-send-sync.md)
