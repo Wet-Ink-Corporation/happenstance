@@ -121,11 +121,13 @@ renews them with the disposition phase 16 gave.
       **Built 2026-11-07** as `happenstance::run_fan_out`, catching nothing by the
       owner's call (ADR-0101, accepted at #127), with PS-26/29/30's rules. The polling-cost
       fan-out passes 002/003 are #400, a follow-up, not a freeze condition (#127, Q4).
-- [ ] #115 · **Optional: a foreign-`rollback` clause.** ADR-0075 left `rollback` outside
+- [x] #115 · **Optional: a foreign-`rollback` clause.** ADR-0075 left `rollback` outside
       PS-15's MUST, and the specification's sentence about it is non-normative. If
       this phase makes it normative, it does so as a new clause with its rule
       (begin on one store, `rollback` on another, assert both unchanged) and a
       mutant that mutates a store on a foreign rollback, in the same change.
+      **Declined for 1.0 by ADR-0112**, renewed against a store whose rollback acts on
+      store-side state (#534).
 - [x] #118 · A refusable reset implemented by at least one adapter (PS-18,
       `refused_reset_changes_nothing`).
 - [x] #120 · **ADR-0070's `Chunk`.** `run_projection`'s `chunk: NonZeroUsize`

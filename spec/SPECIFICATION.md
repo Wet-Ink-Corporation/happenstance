@@ -5945,7 +5945,7 @@ store's pool and rolls back on drop (PS-7), and every adapter except
 `MemoryProjectionStore` also refuses it through its own error. Making that
 normative needs a clause of its own, carrying a rule (begin on one store, roll back
 on the other, assert both unchanged) and a mutant that mutates a store on a foreign
-rollback; it is not part of this clause's promise. The falsifier this clause carried — *a
+rollback; it is not part of this clause's promise. The reopening trigger and its rule are [ADR-0112](../.kb/decisions/0112-foreign-rollback-stays-non-normative-for-1-0.md)'s. The falsifier this clause carried — *a
 zero-cost type-level construction that names an instance, composes with `async
 fn`, and permits a batch to be held in a collection keyed by store* — would change
 `begin` and `commit` if it fired, so it cannot be renewed past 1.0, and no phase
