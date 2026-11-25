@@ -2147,6 +2147,23 @@ const REGISTRY: &[Declared] = &[
         )],
     },
     Declared {
+        name: "NoopReadFaultFixture",
+        kind: Kind::Mutant,
+        fails: &["arming_a_read_fault_makes_the_stream_yield_an_error"],
+        provenance: "`NoopFaultFixture`'s author on the read path (CF-44, ADR-0111): a \
+             fixture that declares `READ_FAULT` supported and overrides `arm_read_fault` \
+             with an EMPTY BODY, over a completely correct store. A forgotten override \
+             reaches the trait's provided body, which panics and names the mistake; this \
+             one is the author who means to wire a fault into the paged read later and \
+             stubs the arm meanwhile. The armed read returns every event and no error, \
+             so ES-44 would be certified on a store nothing faulted.",
+        mode: FailureMode::Assertion,
+        expect: &[(
+            "arming_a_read_fault_makes_the_stream_yield_an_error",
+            "MUST cause the next read's stream to yield an `Err` ITEM",
+        )],
+    },
+    Declared {
         name: "UnarmedFrontierFixture",
         kind: Kind::Mutant,
         fails: &["contains_event_id_reports_a_held_row_above_the_frontier"],
@@ -3040,6 +3057,7 @@ macro_rules! for_each_mutant {
             crate::mutants::NoTransactionFixture,
             crate::mutants::YieldingRowAtATimeFixture,
             crate::mutants::NoopFaultFixture,
+            crate::mutants::NoopReadFaultFixture,
             crate::mutants::UnarmedFrontierFixture,
             crate::mutants::EmptyArmFrontierFixture,
 
@@ -3349,9 +3367,9 @@ fn model_reports() -> Vec<(&'static str, ModelOutcome, String)> {
 /// # What it does not catch is a handful of shapes, not a list
 ///
 /// **Count the table rather than this sentence** — and something now does.
-/// Seventy-two rows below are marked [`ModelOutcome::Agreed`] at this commit;
+/// Seventy-three rows below are marked [`ModelOutcome::Agreed`] at this commit;
 /// four of them are the conformant controls and *must* be, which leaves
-/// **sixty-eight misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
+/// **sixty-nine misses**. `the_model_coverage_heading_counts_the_table` asserts both numbers
 /// against the table, and the count of controls it subtracts is derived from
 /// [`REGISTRY`]'s [`Kind::ConformantVariant`] rows rather than written a second
 /// time.
@@ -3547,6 +3565,7 @@ const MODEL_COVERAGE: &[(&str, ModelOutcome)] = &[
     ("NoTransactionStore", ModelOutcome::Agreed),
     ("YieldingRowAtATimeStore", ModelOutcome::Agreed),
     ("NoopFaultFixture", ModelOutcome::Agreed),
+    ("NoopReadFaultFixture", ModelOutcome::Agreed),
     ("UnarmedFrontierFixture", ModelOutcome::Agreed),
     ("EmptyArmFrontierFixture", ModelOutcome::Agreed),
     // The removal capability's four (#147): the model never removes, so each
@@ -4376,15 +4395,15 @@ mod mutation_coverage {
             .count();
 
         assert_eq!(
-            agreed, 72,
-            "`MODEL_COVERAGE`'s heading says seventy-two rows are `Agreed` and the \
+            agreed, 73,
+            "`MODEL_COVERAGE`'s heading says seventy-three rows are `Agreed` and the \
              table holds {agreed}. The heading is prose and this is what \
              makes it a claim, so correct the two together"
         );
         assert_eq!(
             agreed - controls,
-            68,
-            "`MODEL_COVERAGE`'s heading says sixty-eight misses and the table \
+            69,
+            "`MODEL_COVERAGE`'s heading says sixty-nine misses and the table \
              holds {}. Every one of them is a defect the model cannot \
              express, and the heading's shape bullets are what say why",
             agreed - controls

@@ -179,7 +179,7 @@ Phases 10b and 11 added two instances, and they are not repetitions of the two a
 VT-9's conditions had already occurred harmlessly; these two name conditions that nothing the port
 admits can meet at all.
 
-**PS-4** (`spec/SPECIFICATION.md:5514-5523`) is `[PROVISIONAL]` and its falsifier has two limbs.
+**PS-4** (`spec/SPECIFICATION.md:5552-5561`) is `[PROVISIONAL]` and its falsifier has two limbs.
 The Cypher-level limb — graph mutations that cannot be expressed as a replayable statement list —
 did not fire against LadybugDB, which is an ordinary negative result: a transaction gives
 read-your-own-writes within itself, so a deferred write set answers it. The Rust-level limb — a
@@ -258,7 +258,7 @@ and the typed layer's axis, not this port's.
 
 **What this section does not change.** ES-7 and VT-9 are untouched — neither record names them,
 and their falsifiers are as decorative as they were. Both records are staged from a lane: at this
-worktree's `86a410c`, `spec/SPECIFICATION.md:5549` still reads *"`begin` MUST be neither `async`
+worktree's `86a410c`, `spec/SPECIFICATION.md:5587` still reads *"`begin` MUST be neither `async`
 nor fallible"* and the census still reads 138/46/12/5, so this section states what the lane binds
 when it lands rather than what `HEAD` shows.
 

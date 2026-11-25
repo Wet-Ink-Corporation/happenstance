@@ -86,7 +86,7 @@ CF-33 is `[FROZEN]`: no conformance rule may read a clock, measure elapsed time,
 watchdog. That constraint exists so a rule's outcome is a message about the store, not a timing
 artefact — but its cost is that a genuine hang inside the suite produces a stopped CI job that
 names no rule at all, because nothing in the design is permitted to say "this took too long."
-`spec/SPECIFICATION.md:4613-4633` already documents one mechanism with exactly that signature: an
+`spec/SPECIFICATION.md:4651-4671` already documents one mechanism with exactly that signature: an
 adapter holding an exclusive resource across its `append`'s suspension point, so a concurrent
 `read` blocks on what the suspended `append` still holds and the executor parks forever. This atom
 records a second mechanism with the same observable shape — a hung run, no rule named — except
