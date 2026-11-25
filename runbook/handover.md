@@ -12,7 +12,7 @@ to read in one screen; link out for anything longer.
 
 ## As of
 
-`claude/0.8.0-release`, cut from `origin/phase-21-prep` after #523. 2026-11-20.
+`claude/v1-main-green`, cut from `origin/main` at `a58384c1` (`v0.8.0`). 2026-11-24.
 
 **GitHub Issues is the tracker** ([ADR-0088](../.kb/decisions/0088-github-issues-is-the-tracker.md)).
 Per-item progress is in the issues. This file, the status table and the phase files
@@ -20,31 +20,35 @@ are the plan of record. Unattended sessions follow [`afk.md`](afk.md).
 
 ## Where things are
 
-**`0.8.0` is the release on this branch**, breaking from `0.7.x`: the checkpoint pinned
-to its source store (PS-40, ADR-0109), the removal record with SY-40 minted and frozen
-(ADR-0110, ADR-0115), `Projection::scopes` (PS-41), and new sync-testkit rules and the
-stated `COMPACTION` declension. The trace has hand rows H1–H8; semver-checks against
-`0.7.0` fires no lint. ADR-0111..0114 are accepted, and their follow-ups belong to phase 20.
+**`0.8.0` is published** (all nine crates) and tagged on `main`. Phases 13–18 and 17b are
+done; phase 20 (#66) and phase 22 (#67) are in progress; phase 21 (`1.0.0`, #68) waits on 20.
+Phase 19 is off the 1.0 path.
 
-The release PR merges into `phase-21-prep`, `phase-21-prep` merges into `main` with a merge
-commit, and `v0.8.0` is tagged on that merge commit (`git tag -a`), which `release.yml`
-publishes.
+The audit this record is drawn from is `runbook/v1-readiness-2026-11-24.md` (owner's working
+copy, not committed). What it found that changes the plan:
 
-What remains is sequenced in [`roadmap.md`](roadmap.md): phase 20 (with #188's three rules,
-ES-44/CF-44/CF-45 under ADR-0111, and ADR-0113's stderr SKIP line and Cloudflare README
-correction), 22, then `1.0.0` (21, #68). `CF36_UNDISCHARGED` holds PS-29, PS-30 and SY-34,
-owned by phase 21.
+- Three accepted ADRs were never built: ADR-0111 (ES-44, CF-44, CF-45;
+  `UNCLAIMED_PENDING_ADR` still holds three), ADR-0112 (PS-15's pointer, the #115 box) and
+  ADR-0113 (the SKIP line still goes to stdout; the Cloudflare README says it declines nothing).
+- ADR-0114's three rules: ES-6 and ES-31 are test-only; **ES-29 / SY-6, the refusal of a wire
+  condition carrying `after`, is breaking and ships as `0.9.0`**, the last breaking release.
+- Seven `[FROZEN]` SY clauses — SY-6, SY-9, SY-13, SY-16, SY-19, SY-26, SY-35 — name rules
+  that exist nowhere: `Scheduled(OWED_BY_458)` in `xtask/src/spec_trace/sync_family.rs`, and
+  #458 is closed.
+- Decisions phase 21 was handed belong in phase 20's window: CF-36's last three (#100),
+  release tooling (#195), and PS-40/41, ES-18 and #209 need records.
 
 ## In flight
 
-Nothing past the release itself.
+The v1 AFK run (2026-11-24), one PR per leaf, in this order: `main` green (#528); ADR-0113;
+ADR-0111; ES-31 and ES-6; ADR-0112; #458's seven SY rules; #527; ES-29 / SY-6 as `0.9.0`;
+phase 22's broken-link probe; `proposed` ADRs for the owner; `SECURITY.md` for 1.x (#207).
 
 ## Next action
 
-1. After the tag: close #483, #484, #485, #379, #497, #174, #500, #487, #465, #517, #148,
-   #480, #320, #185, #115, #145 and #188's ADR half, whose PRs merged into
-   `phase-21-prep` and so closed nothing. #100 closes when its last three entries go.
-2. Phase 20: ADR-0114's three rules, ADR-0111's clauses, ADR-0113's SKIP line.
+1. Work the queue above. Each leaf's issue carries `source:audit` and milestone `1.0.0-rc.1`.
+2. Then phase 20's documentation (#164, #165, #180–#184, #190), whose artefacts land in
+   `references/evaluation/phase-20/`, never `.bklg/`.
 
 ```
 repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-agent no:assignee -label:door:one-way
@@ -52,12 +56,16 @@ repo:wet-ink-corporation/happenstance is:issue is:open label:status:ready-for-ag
 
 ## Waiting on the owner
 
+- **The outside reader (#166) is the critical path to 1.0**, not code. Phase 20 cannot
+  close until a non-insider has read the docs, and the soak needs that reader again.
+- Tagging and publishing `0.9.0` once the ES-29 / SY-6 PR lands on `main`.
+- The `proposed` ADRs: PS-40/41 freeze, CF-36 scope (#100), ES-18 narrowing, release
+  tooling (#195), phase 22 gating (#209).
+- #71: `happenstance-ladybug` 0.0.0 still 404s on crates.io.
 - The deployed `workerd` leg runs only on a manual dispatch (#515). Never dispatch it
   without asking.
-- Defaults recorded in the weigh-in ledger, still unreviewed: an empty `scopes()` is
-  refused as `Boundary(NoItems)`; #379 extended VT-24/VT-36 as a repair, with no ADR.
-- #522 treated adding a second rule and a case to SY-2's frozen `Rule:`/`Cases:` lines
-  as a repair under the playbook, not a record.
+- `.kb/decision/` (untracked) holds three weigh-in atoms from 2026-11-21 that belong in
+  `.kb/decisions/` with map rows.
 
 ## Do not re-open
 
@@ -87,9 +95,12 @@ record, and the owner.
 - `[Unreleased]` ships in `0.4.0`; there is no `0.3.3` — `wi-052920`.
 - An accepted decision's body is checked by `cargo xtask lint-kb` —
   `wi-38373d`.
+- ADR-0111 – ADR-0115 are accepted; their follow-ups are builds, not decisions.
+- Phase 19 (SQLite on `wasm32`) is off the 1.0 path — phase 21's dependency row.
 
 ## Traps
 
+- **Bump to `0.9.0` in the ES-29 / SY-6 PR, and nowhere else.** It is the one breaking change left before `1.0.0-rc.1` (ADR-0114 (i)); the non-breaking leaves land before it so none is caught behind the bump.
 - **Memory is tight on this machine.** Run cargo with `CARGO_BUILD_JOBS=2`. Background gate runs get stopped when the session idles, so run the temper gate in the foreground. Never stop a gate mid-run: `cargo hack --no-dev-deps` strips dev-dependencies, so restore with `git checkout -- '*Cargo.toml' Cargo.lock`.
 - **`happenstance-cloudflare`'s wasm32 tests need Node 24.** The shim opens `node:sqlite` with `limits`, which Node 22 lacks, and refuses to open without it (ADR-0079).
 - **The `workerd` harness runs whatever is in `harness/workerd/build/`.** Re-run
@@ -103,15 +114,6 @@ record, and the owner.
 - **Git Bash mangles `rev:path`.** Set `MSYS_NO_PATHCONV=1` for `git show REV:path`.
 - **A hook refuses shell edits whose command text mentions a `.rs` path,** even in markdown. Use the Edit tool.
 - **Live Neon is a required check again** (#75, 2026-10-10, ADR-0087 D8). A Neon outage or an expired `NEON_*` secret now blocks merges; fix the endpoint or secret rather than dropping the check, which would need the owner.
-- **The CI base-commit semver step is advisory** while `0.4.0` is unpublished (a crates.io probe). The release trace comes from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`.
-
-- **At `0.4.0` the semver tool skips every lint.** The trace table must come from `cargo semver-checks check-release --workspace --baseline-version 0.3.2 --release-type minor`, plus hand rows for core's feature removal, the hidden emitter renames, and `happenstance-cloudflare`'s `planned_statement_count` values (ADR-0079).
-
-- **17b is not a breaking window.** An item whose answer turns out to break a
-  published crate goes back to phase 17 (ADR-0072's rule), not into a `0.5.0`.
-- **Bump to `0.4.0` at the first breaking PR** (lane L4), or the semver job goes
-  red against `0.3.2` on every intermediate PR. Leave the CHANGELOG heading at
-  `[Unreleased]` until the release PR.
 - **Never touch `Fixture::arm_mid_batch_fault` or its *k*.** CF-39 is frozen
   (ADR-0066), and `Busy`, CF-23 and the `workerd` fixture all edit the testkit.
 - **The gate's `tests` step is the memory hog.** Verify in slices with

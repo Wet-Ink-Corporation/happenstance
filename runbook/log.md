@@ -10,6 +10,15 @@ monolith, `RUNBOOK.md`, and in `git log`.
 
 ---
 
+## 2026-11-24 — `main` green, and the record current
+
+*Committed on `claude/v1-main-green`, cut from `origin/main` at `a58384c1`.* The first leaf of
+the v1 AFK run (#528). `url` bumped to 2.5.9 lock-only for RUSTSEC-2026-0592, in the root lockfile
+and four under `experiments/`; the handover rewritten from the 2026-11-24 readiness audit; the
+ledger's next-free ADR (0116) and PS-25's open-decision row (frozen by ADR-0102) corrected; and
+phase 22's Work boxes for the closed #168, #174, #175 and #176 ticked. No exit criterion moved.
+Verified: `cargo deny check advisories`, `spec-trace`, `lints`, `lint-kb`.
+
 ## 2026-11-20 — `0.8.0`, batch 10 closed out
 
 *Committed on `claude/0.8.0-release`, cut from `origin/phase-21-prep` after #523.* The owner
