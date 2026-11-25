@@ -151,19 +151,24 @@ Cloudflare's timing. What a local eviction does not reach is state in the
 isolate's globals, because it tears down the object and leaves the wasm instance
 standing.
 
-**The fixture declines nothing, so the conformance run prints no `SKIP` line.** A
-rule whose capability a fixture declines still runs and reports the fixture's
-stated reason rather than vanishing from the binary; there is nothing here for
-that channel to report. The two `SKIP` lines the gate *does* print for this crate
-come from a deliberately declining fixture in `tests/fixture_contract.rs`, which
-exists so that the reporting channel has something that fails when it breaks —
-they are a control, not this adapter's result.
+**What its conformance fixture declines.** A rule whose capability a fixture declines still runs and reports the fixture's
+stated reason as a `SKIP` line rather than vanishing from the binary (CF-18).
+`CloudflareFixture` declines two capabilities, so the conformance run prints a
+`SKIP` line for each rule that needs one. Every reason below is the fixture's own
+words, and `tests/publish_readiness.rs` holds each of them to the constant in
+`tests/support/mod.rs`. The `SKIP` lines from `tests/fixture_contract.rs` come from
+a deliberately declining fixture, a control for the reporting channel, and are not
+this adapter's result.
 
-| Capability | This fixture | What it buys the run |
+| Capability | This fixture | Why, or what it buys the run |
 | --- | --- | --- |
 | `SECOND_HANDLE` | supported | two handles onto one object, so the multi-connection rules are real rather than skipped |
 | `REOPEN` | supported | a second binding taken off the same `state`, so an acknowledged write is observed surviving one |
 | `MID_BATCH_FAULT` | supported | a trigger on the object's own `event` table, so atomicity is checked against a fault inside the store's write path |
+| `READ_YOUR_OWN_WRITES` | supported | an append is visible to the next read on any handle, so the read-back rules run without waiting on a frontier |
+| `REMOVAL` | supported | events removed outside the port are recorded, so ES-38's and ES-40's rules run |
+| `READ_FAULT` | declined | by scope, not by incapacity. This adapter's read does not fetch a page at a time across an await, so there is no fetch between two pages to fail; the injection a paged read would need is the one MID_BATCH_FAULT already uses here, a trigger installed through the object's own SQL, and declaring the capability before that read exists would report a green result about a read nothing had faulted |
+| `HELD_ABOVE_FRONTIER` | declined | this fixture has not said whether it can hold a committed row above ES-10's visibility frontier; a store that shows a row from the moment it commits it has no such row to stage, and this is that answer given by default rather than by its author |
 
 **The concurrency family is not invoked, and that is a reason rather than a
 silence.** `happenstance_testkit::event_store_concurrency_conformance!` binds

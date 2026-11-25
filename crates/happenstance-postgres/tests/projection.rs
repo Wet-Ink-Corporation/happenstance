@@ -30,8 +30,8 @@
 //! ```
 //!
 //! `--list` first, so "no rule is absent from the run" is proven rather than
-//! assumed. `--show-output` because a declined capability's reason is printed
-//! only under it, and this adapter declines two things on purpose.
+//! assumed. A declined capability's reason reaches stderr past libtest's capture
+//! (ADR-0113), and this adapter declines two things on purpose.
 //!
 //! # What this adapter reports rather than passes
 //!
@@ -45,7 +45,7 @@
 //!   `false` — a `PostgresProjectionBatch` has been sent to the server exactly
 //!   never, and answering from committed state is what PS-12 forbids by name.
 //!
-//! Both print their reason under `--show-output`. Neither is omitted from the
+//! Both print their reason in a plain run (ADR-0113). Neither is omitted from the
 //! binary, which is the distinction CF-18 exists to hold.
 
 #![cfg(all(

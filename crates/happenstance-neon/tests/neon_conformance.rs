@@ -41,8 +41,8 @@
 //! ```
 //!
 //! `--list` first, so "no rule is absent from the run" is proven rather than
-//! assumed. `--show-output` because a declined capability's reason is printed only
-//! under it, and an unread reason is a trade nobody recorded.
+//! assumed. A declined capability's reason reaches stderr past libtest's capture
+//! (ADR-0113), so the run shows it; an unread reason is a trade nobody recorded.
 //!
 //! # What this adapter reports rather than passes
 //!

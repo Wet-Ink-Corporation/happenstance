@@ -40,7 +40,7 @@
 //!   `probe_read_through` is synchronous and infallible, and every answer this
 //!   adapter could give costs an HTTPS round trip.
 //!
-//! All three print their reason under `--show-output`. None is omitted from the
+//! All three print their reason in a plain run (ADR-0113). None is omitted from the
 //! binary, which is the distinction CF-18 exists to hold.
 
 #![cfg(all(

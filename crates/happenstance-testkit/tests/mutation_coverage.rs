@@ -3943,7 +3943,7 @@ const RACERS: &[Racer] = &[
     // `mutant_registry_is_exhaustive` rejects a `Declared` whose `fails` list is
     // empty, and a probe-then-insert store fails *no* sequential rule — that is
     // the entire content of the defect. A concurrency rule's wrong store belongs
-    // here, in `RACERS`, and `crates/happenstance-testkit/README.md:237-240` says
+    // here, in `RACERS`, and `crates/happenstance-testkit/README.md:236-239` says
     // so in prose where the harness says it in code
     // (`mutant_registry_is_exhaustive`, below). Recorded on the row rather than
     // in a commit message because "add a `BEGIN DEFERRED` row to `REGISTRY`" is
@@ -4209,6 +4209,7 @@ mod mutation_coverage {
         MODEL_COVERAGE, ModelOutcome, TRAILING_MODEL_COVERAGE, WEAKENING_COSTS, declined_reports,
         model_reports, trailing_reports, trailing_subject_names,
     };
+    use happenstance_testkit::RuleOutcome;
     use happenstance_testkit::fixtures::MemoryProjectionFixture;
 
     use crate::harness::{run_projection_subject, run_subject};
@@ -4256,45 +4257,61 @@ mod mutation_coverage {
         );
     }
 
-    /// Every surface that promises a printed skip names the flag that prints it.
+    /// `RuleOutcome::report_to` writes exactly the skip line, and nothing for a
+    /// rule that ran.
     ///
-    /// L1-3. CF-18 requires a rule whose capability is unmet to be emitted as a
-    /// test that **reports** the skip with the fixture's stated reason, and the
-    /// clause's own `Rejects:` turns on that landing *in the adapter's CI log
-    /// where a reviewer and a user of the adapter can both see it*. A rule that
-    /// skips is a test that **passes**, and libtest discards a passing test's
-    /// stdout. `RuleOutcome::report`'s own documentation measured this and says
-    /// so exactly; three reader-facing surfaces said the opposite, and they are
-    /// the only three a stranger reads.
+    /// ADR-0113's seam. `report` writes through a locked stderr handle so that
+    /// libtest's capture does not swallow the line (verified by hand: a plain
+    /// `cargo test -p happenstance-sqlite --test conformance` printed no `SKIP`
+    /// line before the change and one per declined rule after it). That
+    /// property is about a stream no test inside libtest can read back, so what
+    /// is checked here is the text the seam writes.
     ///
-    /// Measured against a fixture already in the tree, before this test was
-    /// written: `cargo test -p happenstance-sqlite --test conformance` prints
-    /// **zero** `SKIP` lines, and the same command with `-- --show-output`
-    /// prints **three**. Exactly one CI in the world passes that flag.
+    /// **Rejects: a report that writes a line for a rule that ran, or a skip
+    /// line other than the one `skip_line` renders.**
+    #[test]
+    fn report_to_writes_the_skip_line_and_nothing_for_a_ran_rule() {
+        let mut out = Vec::new();
+        RuleOutcome::Ran.report_to(&mut out, "some_rule");
+        assert!(out.is_empty(), "a rule that ran reports nothing");
+
+        let skipped = RuleOutcome::Skipped {
+            capability: "REOPEN",
+            reason: "the store is in memory",
+        };
+        let mut out = Vec::new();
+        skipped.report_to(&mut out, "some_rule");
+        let expected = format!(
+            "{}\n",
+            skipped.skip_line("some_rule").expect("a skip has a line")
+        );
+        assert_eq!(String::from_utf8(out).expect("utf-8"), expected);
+    }
+
+    /// No reader-facing surface tells a stranger to pass a flag the `SKIP`
+    /// line no longer needs.
     ///
-    /// **Rejects: a promise about an adapter author's CI log that is true only
-    /// in this repository.**
+    /// L1-3, inverted by ADR-0113. CF-18 requires a rule whose capability is
+    /// unmet to be emitted as a test that **reports** the skip with the
+    /// fixture's stated reason. Until ADR-0113 the line went to stdout, which
+    /// libtest discards for a passing test, and this test required every
+    /// promise of a printed skip to name `--show-output`. The line now goes to
+    /// the stderr handle, past the capture, so that caveat has become the false
+    /// sentence: it sends an adapter author after a flag, and tells a user that
+    /// a plain run hides what it shows.
+    ///
+    /// **Rejects: a surface that still says a default `cargo test` hides the
+    /// `SKIP` line.**
     ///
     /// # What this does not verify
     ///
-    /// That the caveat is *correct*, only that it is present near the promise.
-    /// It reads three files by path and would not notice a fourth surface
-    /// making the same claim. Its trigger is the narrow one — printing within
-    /// 120 characters of the words *stated reason* — so a promise phrased
-    /// without them escapes, and the wider trigger this started with fired on
-    /// `RuleOutcome`'s own prose about `#[must_use]`, which is a false positive
-    /// rather than a find. Its window is a character count rather than a
-    /// paragraph, so a promise and its caveat separated by more than 900
-    /// characters read as a violation here even where a human would not.
-    ///
-    /// The mechanism half of the finding — whether CF-18's obligation should be
-    /// discharged by something a stranger's default `cargo test` can observe,
-    /// or whether the clause is narrowed to what libtest permits — is a
-    /// decision this test does not take and must not be read as taking. CF-18
-    /// is `[FROZEN]`; the decision is an ADR's, and the argument is staged in
-    /// `.kb/_intake/remediation-2026-09-04-briefs/`.
+    /// It reads two files by path and would not notice a third surface making
+    /// the same claim. Its trigger is the narrow one — printing within 120
+    /// characters of the words *stated reason* — so a passage phrased without
+    /// them escapes. `contract.rs` is not read: its rustdoc records the old
+    /// mechanism by name, as history.
     #[test]
-    fn a_promised_skip_line_names_the_flag_it_needs() {
+    fn a_promised_skip_line_does_not_name_a_flag_it_no_longer_needs() {
         /// The reader-facing surfaces, by the path a citation would use.
         const SURFACES: &[(&str, &str)] = &[
             (
@@ -4304,10 +4321,6 @@ mod mutation_coverage {
             (
                 "crates/happenstance-testkit/src/lib.rs",
                 include_str!("../src/lib.rs"),
-            ),
-            (
-                "crates/happenstance-testkit/src/contract.rs",
-                include_str!("../src/contract.rs"),
             ),
         ];
 
@@ -4337,12 +4350,12 @@ mod mutation_coverage {
                 }
                 let window: String = chars[at..(at + 900).min(chars.len())].iter().collect();
                 assert!(
-                    window.contains("--show-output"),
-                    "{name} promises a printed skip and does not name \
-                     `--show-output` within the same passage. A skipped rule is \
-                     a test that passes, and libtest discards a passing test's \
-                     stdout, so this sentence is true in this repository and \
-                     nowhere else. The passage: {window:.400}"
+                    !window.contains("--show-output"),
+                    "{name} promises a printed skip and still names \
+                     `--show-output` within the same passage. Since ADR-0113 the \
+                     `SKIP` line goes to the stderr handle, past libtest's \
+                     capture, so a plain `cargo test` shows it. The passage: \
+                     {window:.400}"
                 );
             }
         }

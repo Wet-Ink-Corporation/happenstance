@@ -185,10 +185,10 @@ const REQUIRED: &[Step] = &[
     Step {
         // `--show-output` is not noise. A capability-gated conformance rule that
         // a fixture declines still runs as a test, *passes*, and prints one
-        // `SKIP <rule>: …` line naming the fixture's stated reason (CF-18).
-        // libtest suppresses a passing test's stdout by default, so without this
-        // flag `RuleOutcome::report` writes into a void and the trade an adapter
-        // author made by declining a capability leaves no record anywhere.
+        // `SKIP <rule>: …` line naming the fixture's stated reason (CF-18). That
+        // line goes to stderr past libtest's capture since ADR-0113, so it shows
+        // with or without this flag; the flag keeps the passing tests' own stdout
+        // (the benchmarks' one-line summaries among it) in the log beside it.
         //
         // The honest limit of it: this makes the line *reachable* by a human, and
         // nothing here makes anyone read it. The machine-checked half of CF-18 is
