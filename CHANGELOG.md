@@ -74,7 +74,9 @@ break is labelled in place and traced at the end of this section. The workspace 
 
 Every break `0.9.0` carries, each with the decision that caused it. Begun on 2026-11-25
 against `main` with #536 applied. **Run:** `cargo semver-checks check-release --workspace
---baseline-version 0.8.0 --release-type minor` (0.50.0) — see the PR for its output.
+--baseline-version 0.8.0 --release-type minor` (0.50.0) on 2026-11-25: 196 checks pass in
+each of the nine crates and no lint fires, so there are no **T** rows. The break is a
+behaviour, which no lint sees, so H1 is a hand row; `kept_guard` is additive.
 
 | # | Crate | Break | Source | Decided by | Entry above |
 |---|---|---|---|---|---|
