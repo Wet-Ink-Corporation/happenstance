@@ -1569,6 +1569,14 @@ const FROZEN_DOC_MUSTS: &[DocumentationMust] = &[
                      its store's, not the contract's own documentation",
         },
     },
+    DocumentationMust {
+        clause: "CF-44",
+        disposition: Disposition::Excluded {
+            reason: "as CF-39, and the sentence is CF-39's verbatim — `The fixture MUST state \
+                     the mechanism` — for `READ_FAULT` (ADR-0111): the mechanism a fixture \
+                     states is its store's, not the contract's own documentation",
+        },
+    },
 ];
 
 /// One phrase an accepted decision put into the contract's documentation, and
@@ -4150,8 +4158,15 @@ One writer at a time.
             .iter()
             .filter(|entry| matches!(entry.disposition, Disposition::Pinned { .. }))
             .count();
+        // A numeral inside a clause id (`ES-26`) or a citation
+        // (`path.rs:12-14`) is not a count, so those characters do
+        // not split a token. Without that, adding CF-44's row made the array's
+        // excluded half twenty-six, and `ES-26` in the prose read as a count.
         let tokens: Vec<&str> = comment
-            .split(|character: char| !character.is_ascii_alphanumeric())
+            .split(|character: char| {
+                !(character.is_ascii_alphanumeric() || "-:._/`".contains(character))
+            })
+            .map(|token| token.trim_matches('`'))
             .collect();
 
         for total in [all, held, all - held] {

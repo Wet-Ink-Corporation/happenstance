@@ -2,7 +2,7 @@
 id: kb-open-question-disjoint-boundaries-no-clause-001
 title: The DCB independence proposition is enforced by a rule and stated by no clause
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   k_disjoint_boundaries_never_conflict is a live conformance rule enforcing the
@@ -35,7 +35,7 @@ source_paths:
   - crates/happenstance-testkit/src/concurrency.rs
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-25
 ---
 
 # The DCB independence proposition is enforced by a rule and stated by no clause
@@ -142,3 +142,7 @@ asserts ES-25's *if and only if* under contention plus a progress anchor. ES-25 
 anchor through `exactly_one_of_n_contenders_commits`. So the record proposes a Rule-line repair and
 one rationale paragraph that puts the word "disjoint" into ES-25, with no new clause. This atom
 stays open until the owner accepts.
+
+## Closed — 2026-11-25
+
+`kb-decision-0111` (ADR-0111, accepted 2026-11-20) answers this, and its build lands with this closure (#531). ES-25 claims `k_disjoint_boundaries_never_conflict` by a Rule-line repair, with one paragraph naming the independence proposition as its *only if* under contention, a promise about conflict and not liveness (ES-43). ES-25's MUST and marker did not move.

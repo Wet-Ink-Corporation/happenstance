@@ -75,7 +75,7 @@ supplies that argument.
   (`crates/happenstance-core/src/projection.rs:829-835`).
 - `Checkpoint::Live` and `Checkpoint::Rebuilding` each carry one `through: SequencePosition`
   (`projection.rs:516-529`).
-- PS-17 fixes a checkpoint per `(store, ProjectionId)` (`spec/SPECIFICATION.md:6008-6010`), and
+- PS-17 fixes a checkpoint per `(store, ProjectionId)` (`spec/SPECIFICATION.md:6046-6048`), and
   PS-20 resumes strictly after that one position (`:5702-5705`). Both are `[FROZEN]`.
 - ADR-0063 put the whole port under semver, `Checkpoint` included
   (`references/adr/0063-the-projection-port-is-frozen.md:25-37`).
@@ -87,7 +87,7 @@ Three reasons stand without citing ES-10.
 
 1. **ES-30's reason is about cost, not visibility.** `head()` is unscoped because "a narrow
    projection's problem is that it cannot advance past events it examined and did not match; the
-   global head is what lets it checkpoint past them" (`spec/SPECIFICATION.md:4510-4513`). That
+   global head is what lets it checkpoint past them" (`spec/SPECIFICATION.md:4548-4551`). That
    sentence is about polling cost. It would be just as true under a per-boundary invariant, and it
    is what makes one global resume point the natural shape.
 2. **A per-boundary checkpoint is an open-ended set.** A projection reading one event type across

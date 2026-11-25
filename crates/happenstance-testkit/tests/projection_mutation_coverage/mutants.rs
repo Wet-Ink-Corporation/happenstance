@@ -40,7 +40,7 @@ use crate::harness::ProjectionSubject;
 
 /// Commits the checkpoint and discards the write set.
 ///
-/// The store `spec/SPECIFICATION.md:6079-6086` names, and the natural shape for
+/// The store `spec/SPECIFICATION.md:6117-6124` names, and the natural shape for
 /// any adapter whose read model lives somewhere other than its checkpoint table:
 /// the checkpoint write goes through the adapter's own connection and the read
 /// model's writes were handed to something else — a second pool, a queue, a
@@ -83,7 +83,7 @@ impl Defect for CheckpointOnlyStore {
 /// write — which is why every rule in this family reads back through a fresh
 /// handle.
 ///
-/// It is the store `spec/SPECIFICATION.md:6060` leaves an em-dash for.
+/// It is the store `spec/SPECIFICATION.md:6098` leaves an em-dash for.
 /// `commit_advances_the_checkpoint` is the only rule that rejects it, and that is
 /// the interesting part: PS-1's MUST is a **coupling** rather than a progress
 /// obligation, so "neither" satisfies the clause through its "or not at all" arm
@@ -182,7 +182,7 @@ impl Defect for UnrolledBackStore {
 /// A batch whose `Drop` returns its pooled connection to nothing.
 ///
 /// The defect a reviewer's probe actually found
-/// (`spec/SPECIFICATION.md:5264-5276`): `begin` checks a connection out of the
+/// (`spec/SPECIFICATION.md:5302-5314`): `begin` checks a connection out of the
 /// pool, `commit` and `rollback` both return it, and the path nobody wrote a test
 /// for — dropping the batch bare — leaks it. The store answers `Busy` from then
 /// on. It is the store that makes PS-7's *second* half enforceable, because it
@@ -223,7 +223,7 @@ impl Defect for TypeStampedBatchStore {
 /// A `commit` that validates `position` against what the batch wrote.
 ///
 /// Named by the specification for this rule
-/// (`spec/SPECIFICATION.md:6081-6086`), and the reason it is worth registering is
+/// (`spec/SPECIFICATION.md:6119-6124`), and the reason it is worth registering is
 /// that it is **reasonable**: "advances `id`'s checkpoint to `position`" reads
 /// like a claim about applied work, and without PS-21's rule an adapter that
 /// enforced it would be exactly as conformant as one that did not. Two stores
@@ -447,7 +447,7 @@ impl Defect for RefusalAfterTheFactStore {
 /// A missing checkpoint row resolved as `Live { through: FIRST }`.
 ///
 /// The specification names this shape itself, and names it as the *natural* one
-/// rather than a contrivance (`spec/SPECIFICATION.md:5666-5682`): an adapter
+/// rather than a contrivance (`spec/SPECIFICATION.md:5704-5720`): an adapter
 /// whose `reset` records an explicit `NeverRun` and whose `checkpoint` resolves a
 /// missing row with `.unwrap_or(…)` has to put *something* in the `unwrap_or`,
 /// and `Live { through: FIRST }` is what an author writes when the checkpoint
@@ -467,7 +467,7 @@ impl Defect for RefusalAfterTheFactStore {
 /// the direction a mutant registry cannot see. What brought it back is a clause,
 /// not a re-reading — ADR-0030 minted PS-38, whose second sentence is *"a
 /// `ProjectionId` no successful `commit` has named MUST read as
-/// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5831-5847`). This store
+/// `Checkpoint::NeverRun`"* (`spec/SPECIFICATION.md:5869-5885`). This store
 /// answers `Live { through: FIRST }` for exactly such an id, so it is
 /// non-conformant against a `MUST` that exists rather than against a rule that
 /// reached past one. Its conformant neighbour on the same seam is

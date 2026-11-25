@@ -40,7 +40,7 @@ changes" has been applied. This atom is the whole record.
 
 ## Context
 
-PS-15 (`spec/SPECIFICATION.md:5931`) is `[FROZEN]`, narrowed by ADR-0075 to `commit` and `reset`.
+PS-15 (`spec/SPECIFICATION.md:5969`) is `[FROZEN]`, narrowed by ADR-0075 to `commit` and `reset`.
 `rollback` returns `Result<(), Self::Error>` (`crates/happenstance-core/src/projection.rs:867`),
 so it cannot carry the port-level `ForeignBatch` variant, and no rule checked that leg
 (`.kb/decisions/0075-the-projection-ports-1-0-clauses.md:64-70`). What PS-15 now says about rollback

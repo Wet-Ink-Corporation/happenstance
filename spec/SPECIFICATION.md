@@ -225,8 +225,8 @@ is stated there and is worth repeating: a provisional marker with no falsifier i
 indistinguishable from a decision nobody wanted to make, and by the time anyone
 notices it has been load-bearing for a year.
 
-As assembled, this document carries 215 clause IDs, of which 208 are normative:
-**195 `[FROZEN]`**, **11 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
+As assembled, this document carries 218 clause IDs, of which 211 are normative:
+**198 `[FROZEN]`**, **11 `[PROVISIONAL]`**, **2 `[DEFERRED]`** and **seven
 `[NON-NORMATIVE]`** (CF-30; VT-12, a retained pointer to ES-10; PS-32, PS-33
 and PS-35, the three §4 clauses whose subject was this document's own work list
 and which left the clause space at the typed layer's phase exit; and PS-3 and
@@ -4115,6 +4115,14 @@ reported as `AppendError::ConditionViolated`, never as `AppendError::Store`. A
   neither a winner nor a loser, and the winner is still exactly one, now as two
   assertions: at most one, which `RacingProbeStore` fails, and at least one,
   which `BusyAfterWriteStore` fails.
+  Plus `k_disjoint_boundaries_never_conflict`, claimed by
+  [ADR-0111](../.kb/decisions/0111-the-three-unclaimed-rules-are-claimed.md). The DCB
+  independence proposition, that appends whose conditions match nothing the others write
+  never conflict, is this clause's *only if* seen under contention. It is a promise about
+  conflict, not about liveness (ES-43): the rule asserts that a boundary with no winner told
+  nobody `ConditionViolated`, and that a boundary has at most one winner holding exactly what
+  it acknowledged, with the same progress anchor as
+  `exactly_one_of_n_contenders_commits`.
 - **Cases:** E2E-08, E2E-55, E2E-39.
 - **Rejects:** an adapter that folds the violation into its own error type, which
   destroys the caller's only means of telling "retry the decision" from "something
@@ -4129,7 +4137,11 @@ reported as `AppendError::ConditionViolated`, never as `AppendError::Store`. A
   contention. That last one is `UncorrelatedProbeStore` in the mutant registry,
   and it is the reason the new rule exists rather than the other way round:
   `condition_after_ignores_non_matching_events` reaches the same shape only with
-  the matching set *empty*, where the two probes agree.
+  the matching set *empty*, where the two probes agree. And, from the disjoint rule, a
+  spurious conflict: `GlobalVersionStore`, which evaluates the condition correctly and then
+  commits only if a single global version has not moved, so that contenders sharing no
+  query are told `ConditionViolated` — the steady state of a busy store with many
+  independent entities, reported to each of them as contention.
 
 `ConditionViolated::conflicting_position` (`error.rs:136-147`) is informational.
 An adapter that detects the conflict without learning which event caused it — a
@@ -4261,6 +4273,32 @@ a changelog entry; after 1.0 it would be a major for three adapters. The retry a
 `Busy` answer invites is the caller's. The typed layer's command loop takes it,
 inside the same `Retry` bound as a violated condition, by reading and deciding
 again (ADR-0077); the port itself retries nothing.
+
+#### ES-44 — A failure part way through a read is an `Err` item, not the end of the stream
+
+Once `read` has returned its stream, a store that cannot produce an event the read owes MUST
+yield an `Err` item carrying that failure. It MUST NOT end the stream as though the log had
+ended there.
+
+**[FROZEN]**
+
+Minted and frozen on landing by
+[ADR-0111](../.kb/decisions/0111-the-three-unclaimed-rules-are-claimed.md), on the evidence
+ES-43 was frozen on: the rule below runs against real media. `happenstance-postgres` and
+`happenstance-neon` declare `READ_FAULT` supported and arm a real fault inside their paged
+reads, and both pass it; `happenstance-sqlite` declines the capability as an incapacity and
+`happenstance-cloudflare` by scope, each with its stated reason. `arm_read_fault` takes no
+index, because paging belongs to the adapter, and `LogError::ReadFailed` stays a
+test-support convenience: the contract gains nothing.
+
+- **Rule:** `arming_a_read_fault_makes_the_stream_yield_an_error` — seed four events, read
+  them once unarmed as the anchor, arm the fault through the fixture (CF-44) on a handle
+  already connected, and require the next read to yield an `Err` item.
+- **Cases:** E2E-25, E2E-22.
+- **Rejects:** `SwallowedReadFaultStore`, that is,
+  `let Ok(page) = fetch().await else { return Poll::Ready(None) };` — a fetch failure
+  reported as the end of the log, which a projection runner reads as `Ok`, replaying a
+  short prefix and checkpointing at the truncation point.
 
 #### ES-26 — The AC3 boundary: `after` is exclusive, `from` is inclusive
 
@@ -9707,6 +9745,35 @@ Also rejected: a protection held per handle, which a reset through another
 connection bypasses. The rule resets through a handle opened before the
 protection, and `happenstance-sqlite`'s fixture protects through a fresh one.
 
+**CF-44.** A fixture declaring `READ_FAULT` supported MUST, when armed, cause the next read on
+a handle it has already connected to fail inside the store's own read path, so that the stream
+yields an `Err` item. The fixture MUST state the mechanism. A fixture whose store can absorb
+every read fault it is able to arm MUST decline the capability with that as its stated reason.
+`[FROZEN]` — minted and frozen on landing by
+[ADR-0111](../.kb/decisions/0111-the-three-unclaimed-rules-are-claimed.md), as CF-39's twin on
+the read path, on the Postgres and Neon fixtures' real faults.
+Rule: `arming_a_read_fault_makes_the_stream_yield_an_error`.
+Cases: none; this constrains the fixture, not an adapter.
+Rejects: `NoopReadFaultFixture` in the testkit's own `tests/`, which declares the capability
+supported and overrides `arm_read_fault` with an empty body. The armed read returns every event
+and no error, and the rule fails it. A *forgotten* override is a different mistake and is
+already handled: the trait's provided body panics.
+
+**CF-45.** The suite MUST carry a generative family: a rule that draws sequences of appends,
+conditional appends and reads, replays each against the store under test and against a model
+of this specification kept in the testkit, and fails at the first answer on which they
+disagree. The clauses it composes are the ones its generator reaches, and those are stated on
+the rule, not here. A run checks only the sequences it draws.
+`[FROZEN]` — minted and frozen on landing by
+[ADR-0111](../.kb/decisions/0111-the-three-unclaimed-rules-are-claimed.md). It obliges the
+suite, not a store, so its truth is read off the testkit and does not depend on
+`PROPTEST_CASES`. It does not claim the trailing model's assumption that visibility never moves
+backward, which no clause states.
+Rule: `ops_agree_with_the_model`.
+Cases: none; this constrains the suite, not an adapter.
+Rejects: a suite of worked examples only, against which a store can pass every named rule and
+fail a composition no example enumerates.
+
 **CF-19.** A rule MUST assert that an append made through one handle is visible
 to an append condition evaluated through a second handle onto the same backing
 store. `[FROZEN]`
@@ -9833,7 +9900,8 @@ paragraph above rather than a plan for one. Its enumeration is
 lives beside the single rule it names, `ops_agree_with_the_model` at
 `crates/happenstance-testkit/src/model.rs:775`. `event_store_model_conformance!`
 is built by invoking it exactly as `event_store_conformance!` is built by
-invoking `for_each_event_store_rule!`. Two things it settles, and both were
+invoking `for_each_event_store_rule!`. CF-45 is the clause that obliges the suite
+to carry this family. Two things it settles, and both were
 open:
 
 * **The emitters are duplicated, not parameterised.** An emitter is invoked as
@@ -10672,11 +10740,11 @@ between them because its *shape* does not wait on a transport but its
 |---|---|---|---|---|---|---|
 | §2.1–§2.6 value types | `VT` | 36 | 33 | 2 | 0 | 1 |
 | §2.7 wire format | `WF` | 12 | 10 | 1 | 1 | 0 |
-| §3 `EventStore` | `ES` | 43 | 41 | 2 | 0 | 0 |
+| §3 `EventStore` | `ES` | 44 | 42 | 2 | 0 | 0 |
 | §4 `ProjectionStore` | `PS` | 41 | 33 | 3 | 0 | 5 |
 | §5 `SyncPeer` | `SY` | 40 | 39 | 1 | 0 | 0 |
-| §6 conformance | `CF` | 43 | 39 | 2 | 1 | 1 |
-| **Total** | | **215** | **195** | **11** | **2** | **7** |
+| §6 conformance | `CF` | 45 | 41 | 2 | 1 | 1 |
+| **Total** | | **218** | **198** | **11** | **2** | **7** |
 
 ### 7.2 The table
 
@@ -10785,6 +10853,7 @@ between them because its *shape* does not wait on a transport but its
 | ES-41 | FROZEN | `contains_event_id_reports_membership`, `contains_event_id_reports_a_held_row_… | E2E-32, E2E-34, E2E-36 |
 | ES-42 | FROZEN | compile-level — the erasure wrapper of ADR-0011's E11 compiles and round-trips… | *(none — see clause)* |
 | ES-43 | FROZEN | `a_busy_append_left_nothing_behind`, `positions_are_unique_under_concurrent_ap… | E2E-08, E2E-07 |
+| ES-44 | FROZEN | `arming_a_read_fault_makes_the_stream_yield_an_error` | E2E-25, E2E-22 |
 
 #### `PS` — the `ProjectionStore` port (§4)
 
@@ -10924,6 +10993,8 @@ between them because its *shape* does not wait on a transport but its
 | CF-41 | FROZEN | `the_promised_emitters_are_exactly_the_pinned_list`, a meta-test in `crates/ha… | *(none — see clause)* |
 | CF-42 | FROZEN | `an_unsettling_lag_skips_exactly_the_read_back_rules` and `the_read_back_inven… | *(none — see clause)* |
 | CF-43 | FROZEN | `refused_reset_changes_nothing` | *(none — see clause)* |
+| CF-44 | FROZEN | `arming_a_read_fault_makes_the_stream_yield_an_error` | *(none — see clause)* |
+| CF-45 | FROZEN | `ops_agree_with_the_model` | *(none — see clause)* |
 
 <!-- END GENERATED -->
 
