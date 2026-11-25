@@ -49,13 +49,13 @@
 //! stated reason. `#[cfg]`-ing it out instead would make a skipped rule
 //! indistinguishable in CI output from a passing one.
 //!
-//! **Pass `-- --show-output` to see those lines.** A skipped rule is a test
-//! that *passes*, and libtest discards a passing test's stdout, so a default
-//! `cargo test` reports `N passed` and no `SKIP` line whatever your fixture
-//! declined. The emitted test is what makes the skip *reachable*; the flag is
-//! what makes it *read*. A green run over a fixture that declines the optional
-//! capabilities is not evidence that every rule ran, and
-//! [`RuleOutcome::report`] says the same thing where the mechanism is.
+//! **A plain `cargo test` shows those lines.** A skipped rule is a test that
+//! *passes*, and libtest discards a passing test's captured output, so the
+//! `SKIP` line is written to the stderr handle itself, which libtest does not
+//! capture (ADR-0113). It interleaves with libtest's progress lines. A green
+//! run over a fixture that declines the optional capabilities is still not
+//! evidence that every rule ran: read the `SKIP` lines, and
+//! [`RuleOutcome::report`] says why where the mechanism is.
 //!
 //! [`fixtures::MemoryFixture`] is the reference implementation and the one to
 //! read before writing your own.

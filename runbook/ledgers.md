@@ -17,7 +17,7 @@ queue as it was written — is in the archived monolith, `RUNBOOK.md:348-797` at
 
 ## The ADR queue
 
-**The next free number is 0097; 0085 is an unused gap (`wi-dea8db`), and 0090 – 0096 are each taken, on `main` or by a pull request in flight.** `ls .kb/decisions/` is the answer that cannot go
+**The next free number is 0116; 0085 is an unused gap (`wi-dea8db`).** `ls .kb/decisions/` is the answer that cannot go
 stale, and `references/adr/` holds the long-form records; not every atom has one.
 Phase 16 wrote 0066 – 0071: the charter (0066, `what-1-0-promises`), the MSRV after
 1.0 (0067), ADR-0022's §§8 and 16, with §9 left to phase 17 (0068), `QueryItem`'s total constructor (0069),
@@ -82,7 +82,7 @@ table when an ADR or a clause settles it, and the archive keeps it either way.
 | ~~Does a peer declare its own limits~~ | 13 | **settled at 13 — [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md)**: yes, before the push; SY-18 is frozen |
 | ~~Where a per-peer watermark lives transactionally~~ | 13 | **settled at 13 — [ADR-0107](../.kb/decisions/0107-phase-13s-clauses-are-frozen.md)**: through `ProjectionStore`, in the caller's batch; SY-31 is frozen |
 | ~~What is a store permitted to forget, and how does it say so~~ | 17 → 14 | **settled at 17 — ADR-0028**: the written refusal, with a provided-method reservation. Phase 14 builds CF-27's instrument and freezes ES-39, ES-40, SY-32 and CF-27 against it |
-| A projection's `Query` changed under its checkpoint | 18 | provisional — PS-25 |
+| ~~A projection's `Query` changed under its checkpoint~~ | 18 | **settled at 18 — [ADR-0102](../.kb/decisions/0102-phase-18s-clauses-are-frozen.md)**: PS-25 is frozen |
 | Snapshotting decision-model state | after 1.0 | deferred — DCB queries are narrow by construction; revisit if replay cost is measured |
 | `tracing` spans and metrics | after 1.0 | deferred — purely additive, no port change |
 

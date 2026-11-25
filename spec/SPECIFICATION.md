@@ -2921,9 +2921,9 @@ workspace does **not** re-export is in the public signature just the same:
 so a `tokio` release that changed either would force an adapter major too.
 `tokio` is `1.x`, so that happens only at its own major.
 
-- **Rule:** `store_error_crosses_a_join_handle` **(new)**, in a rule group whose
-  bound is the marker rather than `SendEventStore` — the bare flavour cannot be
-  spawned by construction, and the derived one does not imply a `Send` error. It
+- **Rule:** `store_error_crosses_a_join_handle`, in `crates/happenstance-core/tests/thread_safe_marker.rs`,
+  bound by ADR-0009's marker declared as a downstream crate declares it, with its negative a compile-fail
+  probe in the Cloudflare crate's `send_shape.rs` — the bare flavour cannot be spawned, and the derived one does not imply a `Send` error. It
   asserts on the future's `Output`, not on the future: `Send` on a future is a
   property of what it holds across a suspension point, so a future with no
   suspension point is `Send` whatever it returns, and a rule that spawns `append`
@@ -2933,7 +2933,7 @@ so a `tokio` release that changed either would force an adapter major too.
 - **Rejects:** deciding it by argument. Both prior documents did, in opposite
   directions, from the same file. The implementation the rule rejects is already
   in the tree: `SendStoreWithLocalError`
-  (`crates/happenstance-cloudflare/src/send_shape.rs:137`) satisfies every `Send`
+  (`crates/happenstance-cloudflare/src/send_shape.rs:152`) satisfies every `Send`
   obligation the derived flavour states and carries a `!Send` error, and compiles.
 
 #### ES-7 — A downstream crate may implement the bare flavour directly
@@ -4542,7 +4542,7 @@ impls meant to be conformant. Three more exist and are excluded on that
 criterion: `BorrowHoldingStore` and `AwaitAcrossBorrowStore`, the two mutants in
 `crates/happenstance-testkit/tests/local_conformance.rs`'s `mutants` module,
 which are written to fail, and `SendStoreWithLocalError`
-(`crates/happenstance-cloudflare/src/send_shape.rs:137`), which exists to be
+(`crates/happenstance-cloudflare/src/send_shape.rs:152`), which exists to be
 rejected by a bound.
 
 `head` is deliberately **not** parameterised by a query. A narrow projection's
@@ -5175,10 +5175,10 @@ paragraph's point is the *policy* — the rule and the store that fails it land
 together — and one discharged example is the only evidence that the policy is
 survivable.
 
-**Blocked on machinery the suite does not have yet:**
-`store_error_crosses_a_join_handle` (ES-6) needs the opt-in rule group whose
-bound is ADR-0009's marker trait; the decision it waited on is taken, and what is
-left is the group.
+**Blocked on machinery the suite does not have yet:** nothing, now.
+~~store_error_crosses_a_join_handle~~ (ES-6) stood here until ADR-0114, and is written: a test
+bound by ADR-0009's marker in `happenstance-core`'s own `tests/`, not an opt-in rule group, since
+the property is type-level and one compiling instance is the whole proof.
 
 `append_is_atomic_under_a_mid_batch_fault` (ES-18) stood here until stage 6 and
 is now written. The machinery it needed turned out **not** to be the
@@ -9536,10 +9536,10 @@ and a user of the adapter can both see it.
 clause is unchanged by it.** The MUST above is untouched and stays `[FROZEN]`;
 what changed is that something now enforces it in the place it was always about.
 `capability_skips_are_reported` is a meta-test in this repository's own `tests/`
-and never runs in an adapter's CI, and `RuleOutcome::report` writes to a stdout
-libtest discards unless `--show-output` is passed — which exactly one CI in the
-world passes. So the obligation as written had never been met outside this
-repository.
+and never runs in an adapter's CI, and until ADR-0113 `RuleOutcome::report` wrote
+to a stdout libtest discards unless `--show-output` is passed, so the obligation
+as written had never been met outside this repository. It now writes the `SKIP`
+line through a locked stderr handle, past libtest's capture (ADR-0113).
 
 `event_store_conformance!` and `projection_store_conformance!` now emit
 `every_declined_capability_is_stated_by_this_fixture` into the adapter's own

@@ -2,7 +2,7 @@
 id: kb-open-question-cf-18-residuals-after-declension-001
 title: What declension by inheritance leaves open under CF-18
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   kb-decision-0051 discharged the costed half of CF-18's B3 brief — a rule that fails when a
@@ -24,7 +24,7 @@ related:
 source_paths:
   - .kb/_intake/remediation-2026-09-04-briefs/cf-18-observable-skip-reporting.md
   - .kb/_intake/2026-09-07-ratifications-discharged-and-what-execution-changed.md
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-25
 ---
 
 # What declension by inheritance leaves open under CF-18
@@ -118,3 +118,15 @@ published adapter's README lists its fixtures' declined capabilities. The four i
 already do, on the proposing branch. Cloudflare's README had said its fixture "declines nothing"
 while `CloudflareFixture` declines `READ_FAULT`, which is residual 3's hazard in this repository.
 This atom stays open until the owner accepts and the testkit change lands.
+
+## Closed — 2026-11-25
+
+`kb-decision-0113` (ADR-0113, accepted 2026-11-20) answers residuals 1 and 3, and its build lands
+with this closure (#530). `RuleOutcome::report` writes the `SKIP` line through a locked `stderr`
+handle, which libtest's capture does not intercept: a plain `cargo test -p happenstance-sqlite
+--test conformance` printed no `SKIP` line before the change and four after it, verified red
+first. Each published adapter's README lists what its conformance fixtures decline, with the
+fixture's reason, and `docs/adapter-reading-order.md` states the convention; Cloudflare's table,
+which had said its fixture declines nothing, now lists `READ_FAULT` and `HELD_ABOVE_FRONTIER`,
+held to the fixture's constants by `tests/publish_readiness.rs`. ES-35 stays `renew-past-1.0`
+(`kb-decision-0066`). CF-18's MUST, marker and `Rejects:` did not move.

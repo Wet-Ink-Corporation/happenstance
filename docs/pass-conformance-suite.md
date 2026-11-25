@@ -370,10 +370,10 @@ It passes, and prints one line naming the capability and your reason
 The suite never removes a rule from the test binary instead. In CI, a missing
 test looks exactly like a passing one, so removing it would hide the gap.
 
-You have to ask to see those lines. Rust's test runner hides what a passing test
-prints, so a plain `cargo test` shows only the pass count. Run it with
-`-- --show-output` to read them, and do that in CI if you want anyone else to
-see them. `RuleOutcome::report` notes this limit where it is implemented.
+A plain `cargo test` shows those lines. Rust's test runner hides what a passing
+test prints through `println!`, so the suite writes each `SKIP` line to stderr
+directly, where the runner does not capture it. Your CI log carries them with no
+flag. `RuleOutcome::report` says how, where it is implemented.
 
 Each declined capability is a trade-off, and your reason is the only record of
 it. Write it for someone deciding whether to use your adapter, not for yourself.

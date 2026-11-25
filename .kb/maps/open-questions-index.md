@@ -206,7 +206,7 @@ what the question is, not its evidence. The last two were added by the
   2026-08-15 by ADR-0030 (`kb-decision-0030`): PS-19 keeps its post-reset
   scope and the never-seen-id obligation becomes PS-38's second sentence;
   sub-question 2's 2026-08-13 "isolated" verdict stands untouched.
-- **Open** — [`es-6-names-an-unwritable-rule.md`](../open-questions/es-6-names-an-unwritable-rule.md)
+- **Superseded** — [`es-6-names-an-unwritable-rule.md`](../open-questions/es-6-names-an-unwritable-rule.md)
   (`kb-open-question-es-6-unwritable-rule-001`) — ES-6 is `[FROZEN]` and
   names a conformance rule that cannot be written against today's port.
   Amended 2026-08-10: ADR-0008 and ADR-0009 (`kb-decision-0008`,
@@ -675,12 +675,12 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `kb-open-question-model-family-rule-no-clause-001`: `arming_a_read_fault_makes_the_stream_yield_an_error`
   is a live, measured rule (`SwallowedReadFaultStore`: 0/89 unarmed, 22/89 armed) with no owning
   clause. Added 2026-09-07.
-- **Open** — [`cf-18-residuals-after-declension-by-inheritance.md`](../open-questions/cf-18-residuals-after-declension-by-inheritance.md)
+- **Superseded** — [`cf-18-residuals-after-declension-by-inheritance.md`](../open-questions/cf-18-residuals-after-declension-by-inheritance.md)
   (`kb-open-question-cf-18-residuals-after-declension-001`) — what ADR-0051's declension-by-inheritance
   does not discharge: a stranger's default `cargo test` still prints no SKIP line for a declined
   capability, ES-35's `[PROVISIONAL]` marker rests on the same unread mechanism, and whether an
   adapter README must disclose declines is unowned. CF-18 itself stays `[FROZEN]` and untouched.
-  Added 2026-09-07.
+  Added 2026-09-07; closed 2026-11-25 by `kb-decision-0113` (#530).
 - **Superseded** — [`cf-23-emitter-names-mandatory-and-marked-unstable.md`](../open-questions/cf-23-emitter-names-mandatory-and-marked-unstable.md)
   (`kb-open-question-cf-23-emitter-names-unstable-001`) — CF-23 requires named emitters while the
   shipped surface marks them `doc(hidden)`; the documentation contradiction already has a fix, the

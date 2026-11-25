@@ -549,6 +549,11 @@ fn the_conformance_claim_carries_every_qualifier_the_run_produces() {
         );
     }
 
+    // Every capability `Fixture` declares, not a chosen few. This list held
+    // three until ADR-0113: the README said the fixture declined nothing while
+    // it declined `READ_FAULT`, and the check that guarded the sentence had the
+    // same blind spot as the sentence. A capability added to `Fixture` belongs
+    // here in the same change.
     let capabilities = [
         (
             "SECOND_HANDLE",
@@ -556,9 +561,19 @@ fn the_conformance_claim_carries_every_qualifier_the_run_produces() {
         ),
         ("REOPEN", <CloudflareFixture as Fixture>::REOPEN),
         (
+            "READ_YOUR_OWN_WRITES",
+            <CloudflareFixture as Fixture>::READ_YOUR_OWN_WRITES,
+        ),
+        (
             "MID_BATCH_FAULT",
             <CloudflareFixture as Fixture>::MID_BATCH_FAULT,
         ),
+        ("READ_FAULT", <CloudflareFixture as Fixture>::READ_FAULT),
+        (
+            "HELD_ABOVE_FRONTIER",
+            <CloudflareFixture as Fixture>::HELD_ABOVE_FRONTIER,
+        ),
+        ("REMOVAL", <CloudflareFixture as Fixture>::REMOVAL),
     ];
 
     for (name, capability) in capabilities {

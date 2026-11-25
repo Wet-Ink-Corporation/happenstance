@@ -33,6 +33,20 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+### Changed
+
+- **`happenstance-testkit`: a declined capability's `SKIP` line reaches a plain `cargo test`**
+  (ADR-0113, #530). `RuleOutcome::report` writes it through a locked `stderr` handle, which
+  libtest's capture does not intercept, instead of `println!`, which libtest discarded for a
+  passing test unless `--show-output` was passed. `RuleOutcome::report_to` is the new seam it
+  writes through. A CI step that greps a run's stdout for `SKIP` lines must now redirect stderr
+  (`2>&1`) as well; this repository's `live-postgres` and `live-neon` jobs do.
+- **Each adapter README lists what its conformance fixtures decline**, with each fixture's
+  stated reason. `happenstance-cloudflare`'s said its fixture declined nothing; it declines
+  `READ_FAULT` and `HELD_ABOVE_FRONTIER`, and its publish-readiness test now checks every
+  capability `Fixture` declares rather than three.
+
+
 ## [0.8.0] — 2026-11-20
 
 **Breaking from `0.7.x`**: read [`docs/upgrading-to-0-8.md`](docs/upgrading-to-0-8.md)

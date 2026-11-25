@@ -608,12 +608,13 @@ jobs:
       # which is exactly the variable it claimed to measure. The connection
       # arithmetic above needs no measurement and does not depend on it.
       #
-      # `--show-output` because a declined capability's reason is printed only
-      # under it, and a trade nobody can read is a trade nobody recorded (CF-18).
+      # `2>&1` because a declined capability's `SKIP` line goes to stderr, past
+      # libtest's capture (ADR-0113), and the steps below grep `run.txt` for it:
+      # without it their skip guards would read nothing and pass (CF-18).
       - name: The conformance suite against a live Postgres
         run: |
           set -o pipefail
-          cargo test -p happenstance-postgres --all-features             --test postgres_conformance -- --ignored --show-output --test-threads=1             | tee run.txt
+          cargo test -p happenstance-postgres --all-features             --test postgres_conformance -- --ignored --show-output --test-threads=1 2>&1             | tee run.txt
 
       # The vacuity guard, and the reason this job cannot be green having done
       # nothing. The same flag that keeps the default gate green with no server
@@ -1282,16 +1283,16 @@ jobs:
       # and 3 of 105 serially. The frontier's cost is stated in the crate root and
       # this is where the suite pays it.
       #
-      # `--show-output` because a declined capability's reason is printed only
-      # under it, and a trade nobody can read is a trade nobody recorded (CF-18).
-      # This adapter reports three, all in the projection family.
+      # `2>&1` because a declined capability's `SKIP` line goes to stderr, past
+      # libtest's capture (ADR-0113), and the guards below grep the run files
+      # for it (CF-18). This adapter reports three, all in the projection family.
       - name: The conformance suites against a live Neon endpoint
         if: env.NEON_CONNECTION != ''
         run: |
           cargo test -p happenstance-neon --all-features --test neon_conformance \
-            -- --ignored --show-output --test-threads=1 | tee run-events.txt
+            -- --ignored --show-output --test-threads=1 2>&1 | tee run-events.txt
           cargo test -p happenstance-neon --all-features --test neon_projection \
-            -- --ignored --show-output --test-threads=1 | tee run-projection.txt
+            -- --ignored --show-output --test-threads=1 2>&1 | tee run-projection.txt
 
       # The vacuity guard, and the reason this job cannot be green having done
       # nothing. The same flag that keeps the default gate green with no endpoint

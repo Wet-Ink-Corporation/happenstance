@@ -1380,12 +1380,11 @@ impl Capability {
     /// and a user of the adapter can read it. Write the real one: *why* this
     /// store cannot do it, not *that* it cannot.
     ///
-    /// **"Printed" means printed under `--show-output`.** A skipped rule is a
-    /// test that *passes*, and libtest discards a passing test's stdout, so a
-    /// default `cargo test` in an adapter's own CI shows none of these lines —
-    /// see [`RuleOutcome::report`], which measures exactly that. Write the
-    /// reason for the reader who runs the flag, and configure your CI to pass
-    /// it if you want the reason in front of anyone else.
+    /// **"Printed" means printed by a plain `cargo test`.** A skipped rule is a
+    /// test that *passes*, and libtest discards a passing test's captured
+    /// output, so [`RuleOutcome::report`] writes the line to the stderr handle
+    /// itself, which libtest does not capture (ADR-0113). An adapter's own CI
+    /// log carries it with no flag. Write the reason for that reader.
     ///
     /// # Panics
     ///
@@ -1598,32 +1597,56 @@ impl RuleOutcome {
         }
     }
 
-    /// Reports this outcome to stdout, under the name of the rule that produced
+    /// Reports this outcome to stderr, under the name of the rule that produced
     /// it.
     ///
     /// Prints nothing for [`Ran`](Self::Ran) — libtest already reports a test
     /// that passed — and one `SKIP` line for a skip.
     ///
-    /// # Two honest limitations, one per target
+    /// # Why a locked `Stderr` handle and not `println!` (ADR-0113)
     ///
-    /// Natively, libtest suppresses a *passing* test's stdout unless it is run
-    /// with `--show-output` (or `--nocapture`), which is why the gate passes it.
-    /// That makes the line reachable by a human; it does not make anyone read
-    /// it. The machine-checked half of the obligation is the
+    /// libtest captures a test's output through the hook that the `print!` and
+    /// `eprint!` macro family consult, and discards it for a test that
+    /// *passes* — which every skipped rule does. A write to the
+    /// [`io::Stderr`](std::io::Stderr) handle itself does not consult that hook,
+    /// so the line reaches a plain `cargo test` run with no `--show-output`.
+    /// This was verified red first: the same `cargo test` on
+    /// `happenstance-sqlite`'s conformance target printed no `SKIP` line before
+    /// this change and prints one per declined rule after it. The lines
+    /// interleave with libtest's own progress output; that is cosmetic.
+    ///
+    /// The machine-checked half of the obligation is still the
     /// `mutation_coverage::capability_skips_are_reported` meta-test in
     /// `crates/happenstance-testkit/tests/mutation_coverage.rs`, which asserts on
-    /// [`RuleOutcome`] *values* rather than on stdout — and not this function.
+    /// [`RuleOutcome`] *values* rather than on a stream, and the line's text is
+    /// checked through [`report_to`](Self::report_to).
+    ///
+    /// # The other target
     ///
     /// On `wasm32-unknown-unknown` this function is a **no-op**, measured rather
     /// than assumed: the suite was run under `wasm-bindgen-test-runner` with
     /// `--nocapture` and no `SKIP` line appeared. That target's `std` has no
     /// host stdio to write to and declares no import that would give it one, and
-    /// `wasm-bindgen-test` hooks `console.*` rather than `println!`. So the wasm
+    /// `wasm-bindgen-test` hooks `console.*` rather than stdio. So the wasm
     /// emitter does not call this; it calls [`skip_line`](Self::skip_line) and
     /// hands the result to `console_log!`, which the runner does capture.
     pub fn report(self, rule: &str) {
+        self.report_to(&mut std::io::stderr().lock(), rule);
+    }
+
+    /// Writes this outcome's `SKIP` line, if it has one, to `out`.
+    ///
+    /// The seam [`report`](Self::report) goes through, so that the line's text
+    /// can be checked without stdio. A report must never fail a rule that
+    /// passed, so a failed write is ignored when the reader has gone away
+    /// ([`BrokenPipe`](std::io::ErrorKind::BrokenPipe)), and otherwise as well:
+    /// there is nowhere left to report a failure to report.
+    pub fn report_to<W: std::io::Write>(self, out: &mut W, rule: &str) {
         if let Some(line) = self.skip_line(rule) {
-            println!("{line}");
+            // Ignored on purpose (H-10): a closed pipe or a full disk is not a
+            // reason to fail a passing rule, and the outcome itself is checked
+            // by value in `capability_skips_are_reported`.
+            let _ignored = writeln!(out, "{line}");
         }
     }
 }
@@ -1642,9 +1665,10 @@ impl RuleOutcome {
 /// reviewer and a user of the adapter can both see it."*
 ///
 /// A skipped rule is a test that **passes**, and libtest discards a passing
-/// test's stdout. So [`RuleOutcome::report`] writes into a void unless somebody
-/// passes `--show-output`, which exactly one CI in the world does — this
-/// repository's. The named victim was never the adapter author: it is the
+/// test's captured output. Until ADR-0113, [`RuleOutcome::report`] wrote into
+/// that void unless somebody passed `--show-output`, which exactly one CI in
+/// the world did — this repository's; it now writes past the capture, to the
+/// stderr handle. The named victim was never the adapter author: it is the
 /// person who chose an adapter on the strength of a README saying it passes the
 /// happenstance conformance suite, over a fixture that legally declined
 /// [`REOPEN`](Fixture::REOPEN) and [`MID_BATCH_FAULT`](Fixture::MID_BATCH_FAULT),

@@ -295,10 +295,10 @@ branches, not this crate, so put the statement in the tooling that does.
 ## What its conformance fixtures decline
 
 A rule whose capability a fixture declines still runs, and reports the fixture's stated
-reason as a `SKIP` line rather than vanishing from the binary (CF-18). A default
-`cargo test` does not show that line; `--show-output` does. So the declines are listed
-here, where a reader choosing this adapter will see them. Every capability the table does
-not name is supported.
+reason as a `SKIP` line rather than vanishing from the binary (CF-18). A plain
+`cargo test` prints that line (ADR-0113), but only to whoever runs it, so the declines
+are listed here too, where a reader choosing this adapter will see them. Every capability
+the table does not name is supported.
 
 | Fixture | Capability | Why it is declined |
 | --- | --- | --- |

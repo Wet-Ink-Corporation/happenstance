@@ -69,7 +69,7 @@ No runbook file mentions ES-29 or ES-31. Phase 21 settles nothing (`runbook/phas
 
 ## ES-6, writable once the bound is right
 
-`SendStoreWithLocalError` (`crates/happenstance-cloudflare/src/send_shape.rs:99-123`) shows that
+`SendStoreWithLocalError` (`crates/happenstance-cloudflare/src/send_shape.rs:114-138`) shows that
 `SendEventStore` admits a `!Send` error. So a rule bound by `SendEventStore` cannot prove that an
 error crosses a `JoinHandle`, and that is all `crates/happenstance-cloudflare/src/lib.rs:371-378`
 shows. ADR-0009 put the strength in a marker declared downstream,
