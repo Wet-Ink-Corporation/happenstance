@@ -166,3 +166,11 @@ read. If that is not yet clear, read
 When your store implements the contract,
 [pass the conformance suite](pass-conformance-suite.md) takes you from there to
 a passing test run.
+
+When it passes, list in your README every capability your fixtures decline,
+with each fixture's stated reason word for word. The run prints a `SKIP` line
+for each declined rule, but only to whoever runs it; the README is where someone
+choosing your adapter will read it. The table in
+[`happenstance-cloudflare`'s README](../crates/happenstance-cloudflare/README.md)
+is the model, and its publish-readiness test holds each reason to the fixture's
+constant (ADR-0113).

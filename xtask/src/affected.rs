@@ -262,9 +262,9 @@ pub(crate) fn run(
 
     let mut test = vec!["test".to_owned(), "--locked".to_owned()];
     test.extend(selection.iter().cloned());
-    // `--show-output` for the same reason the full gate passes it: a capability
-    // a fixture declines still runs as a passing test, and its one `SKIP <rule>`
-    // line is suppressed by libtest without this (CF-18).
+    // `--show-output` for the same reason the full gate passes it: a passing
+    // test's own stdout stays in the log beside the `SKIP <rule>` lines, which
+    // reach stderr past libtest's capture either way (CF-18, ADR-0113).
     test.extend(
         ["--all-features", "--", "--show-output"]
             .iter()

@@ -9498,10 +9498,10 @@ and a user of the adapter can both see it.
 clause is unchanged by it.** The MUST above is untouched and stays `[FROZEN]`;
 what changed is that something now enforces it in the place it was always about.
 `capability_skips_are_reported` is a meta-test in this repository's own `tests/`
-and never runs in an adapter's CI, and `RuleOutcome::report` writes to a stdout
-libtest discards unless `--show-output` is passed — which exactly one CI in the
-world passes. So the obligation as written had never been met outside this
-repository.
+and never runs in an adapter's CI, and until ADR-0113 `RuleOutcome::report` wrote
+to a stdout libtest discards unless `--show-output` is passed, so the obligation
+as written had never been met outside this repository. It now writes the `SKIP`
+line through a locked stderr handle, past libtest's capture (ADR-0113).
 
 `event_store_conformance!` and `projection_store_conformance!` now emit
 `every_declined_capability_is_stated_by_this_fixture` into the adapter's own
