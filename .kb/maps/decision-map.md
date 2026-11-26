@@ -1083,3 +1083,22 @@ Durable Object (host and `workerd`), Postgres and Neon, with the Neon leg agains
 | ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
 | --- | --- | --- | --- | --- | --- |
 | ADR-0115 | [`kb-decision-0115`](../decisions/0115-sy-40-is-frozen.md) | SY-40 is frozen, on its rule green on all five adapters that implement ingest | accepted | 20 | — |
+
+## 2026-11-25: the v1 run's drafts for the owner
+
+ADR-0116 to ADR-0120 are written straight here by the unattended v1 run, as `proposed`, each saying
+what acceptance changes. The owner accepted ADR-0117, ADR-0118 and ADR-0119 the same day, and
+ADR-0117's and ADR-0118's changes are applied with them; ADR-0119's tooling is phase 21's. ADR-0116
+and ADR-0120 stay `proposed`. ADR-0116 freezes PS-40 and PS-41 on the `0.8.0`
+evidence. ADR-0117 scopes CF-36 to the clauses an adapter implements, which empties
+`CF36_UNDISCHARGED` (#100). ADR-0118 narrows ES-18 to "unchanged as observed through the port;
+consumed positions excepted". ADR-0119 picks `release-plz` for versioning after 1.0 (#195).
+ADR-0120 keeps phase 22 off the 1.0 gate (#209). None supersedes anything.
+
+| ADR | Atom | Title | Status | Phase | Supersedes / superseded by |
+| --- | --- | --- | --- | --- | --- |
+| ADR-0116 | [`kb-decision-0116`](../decisions/0116-ps-40-and-ps-41-are-frozen.md) | PS-40 and PS-41 are frozen on the 0.8.0 evidence | proposed | 20 | — |
+| ADR-0117 | [`kb-decision-0117`](../decisions/0117-cf-36-binds-clauses-an-adapter-implements.md) | CF-36 binds the clauses an adapter implements, which empties CF36_UNDISCHARGED | accepted | 20 | — |
+| ADR-0118 | [`kb-decision-0118`](../decisions/0118-es-18-is-unchanged-through-the-port.md) | ES-18's rejected append is unchanged as observed through the port, consumed positions excepted | accepted | 20 | — |
+| ADR-0119 | [`kb-decision-0119`](../decisions/0119-release-plz-versions-the-crates-after-1-0.md) | After 1.0.0 the nine crates version independently, prepared by release-plz and published by the tag | accepted | 21 | — |
+| ADR-0120 | [`kb-decision-0120`](../decisions/0120-phase-22-does-not-gate-1-0.md) | Phase 22, the documentation site, does not gate 1.0.0 | proposed | 21 | — |

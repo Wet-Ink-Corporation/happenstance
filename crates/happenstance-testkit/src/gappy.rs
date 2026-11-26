@@ -220,7 +220,7 @@ impl SendEventStore for GappyMemoryStore {
 
             if let Some(conflict) = conflict {
                 // Returning without touching `stored` is what "a rejected append
-                // leaves the store byte-identical" means.
+                // leaves the store unchanged through the port" means (ES-18).
                 return Err(AppendError::ConditionViolated(ConditionViolated::at(
                     conflict.position,
                 )));

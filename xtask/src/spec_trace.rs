@@ -763,7 +763,6 @@ pub(crate) fn run(out: &mut impl io::Write, mode: Mode) -> Result<()> {
     //     and nothing has ever read them.
     let levels = collect_case_levels(&cases_doc);
     check_case_levels(&clauses, &levels, &mut problems);
-    let cf36 = reconcile_cf36(&clauses, &levels, &mut problems);
 
     // 6. Every conformance rule is claimed by a clause, or disposed of by one,
     //    or listed in [`UNCLAIMED_PENDING_ADR`] as owing a decision.
@@ -805,7 +804,6 @@ pub(crate) fn run(out: &mut impl io::Write, mode: Mode) -> Result<()> {
         &Coverage {
             citations: citation_coverage,
             unresolvable,
-            cf36,
             orphaned,
         },
         &unclaimed_pending,
@@ -1545,15 +1543,25 @@ const KNOWN_LEVELS: [&str; 3] = ["contract", "integration", "scenario"];
 /// Two failures. A case with no `Level:` marker at all is one, because CF-36's
 /// own `Rule:` line cites the marker's definition (`E2E-CASES.md:19-28`) and a
 /// missing marker makes the cross-reference vacuous for that case rather than
-/// wrong. And a clause that violates CF-36 and is not in
-/// [`CF36_UNDISCHARGED`] is the other.
+/// wrong. And a clause that violates CF-36 is the other.
+///
+/// CF-36 binds the clauses an adapter implements (ADR-0117). A rule registered
+/// [`Unresolvable::Elsewhere`] runs against library code this workspace ships,
+/// in that crate's own tests, and is not a conformance rule an adapter author
+/// mounts, so it does not count towards a breach. PS-29, PS-30 and SY-34 were
+/// the three clauses that scope settled, recorded until then as undischarged.
 fn check_case_levels(
     clauses: &[Clause],
     levels: &BTreeMap<String, String>,
     problems: &mut Vec<String>,
 ) {
     for c in clauses {
-        if c.rules.is_empty() || c.cases.is_empty() {
+        let bound = c
+            .rules
+            .iter()
+            .filter(|rule| !runs_elsewhere(&c.id, rule))
+            .count();
+        if bound == 0 || c.cases.is_empty() {
             continue;
         }
         let mut contract_level = false;
@@ -1574,123 +1582,25 @@ fn check_case_levels(
                 }
             }
         }
-        if contract_level || CF36_UNDISCHARGED.iter().any(|(id, _)| *id == c.id) {
+        if contract_level {
             continue;
         }
         problems.push(format!(
             "{}:{} — {} names {} conformance rule(s) and every case it cites is \
              integration- or scenario-level. CF-36 forbids that: such a rule cannot be run \
              by an adapter author against their own crate. Give the clause a contract-level \
-             case, move the rule to the e2e crate, or record it in `CF36_UNDISCHARGED`.",
-            SPEC,
-            c.line,
-            c.id,
-            c.rules.len()
+             case, move the rule to the e2e crate, or, if it runs against library code \
+             this workspace ships, register it `Elsewhere` (ADR-0117).",
+            SPEC, c.line, c.id, bound
         ));
     }
 }
 
-/// The clauses that violate CF-36 today, and why each is recorded rather than
-/// repaired here.
-///
-/// # This list is a finding, not an exemption
-///
-/// CF-36 is `[FROZEN]` and has never been checked — its own accepted open
-/// question, `kb-open-question-cf-36-unperformed-cross-reference-001`, says so
-/// and dates the gap to 2026-08-17. Running the check for the first time found
-/// thirteen clauses in breach. None of them can be repaired from `xtask/`: the
-/// repair is either a contract-level case, a moved rule name, or a superseding
-/// clause, and all three are edits to `spec/SPECIFICATION.md`.
-///
-/// So the choice was between leaving CF-36 unimplemented for another phase and
-/// landing it with the thirteen written down. Written down, they are counted on
-/// every green run and a fourteenth fails the gate; unimplemented, the
-/// fourteenth is as invisible as these thirteen were. The entries are what
-/// `spec-trace` measured on its first run, at the commit that added the check.
-///
-/// Nine of the thirteen were one fact: the `SY` family names rules for
-/// `happenstance-sync-testkit`, which CF-36's own `Rejects` paragraph points at
-/// and which did not exist then. That was not thirteen independent oversights.
-///
-/// # What #100 discharged, and what is left
-///
-/// Nine went under #100. VT-21 and WF-9 cite E2E-61, a contract-level case
-/// written for their single-store rules, in place of the mesh case E2E-42.
-/// E2E-42 is itself `contract (sync)` now, because `sync_model_conformance!`
-/// generates its chains from one adapter's fixture, and that discharges SY-4,
-/// SY-5, SY-7, SY-9, SY-10, SY-24 and SY-25, all of which cite it. SY-9's rule
-/// is still unwritten; that is `SYNC_UNRESOLVABLE_RULE_NAMES`'s to count, not
-/// CF-36's.
-///
-/// The three left are one fact, and it is not a missing case: PS-29,
-/// PS-30 and SY-34 oblige a runner this workspace ships — the typed layer's
-/// fan-out runner, and `happenstance-sync`'s `Edge` — not an adapter. Their
-/// rules run against that runner in its own crate's tests, so there is no case
-/// an adapter author could run to cite, and calling E2E-28 or E2E-45
-/// contract-level would be false. CF-36 was written for adapter-obliging
-/// clauses. The route is a decision, owned by phase 21 (#68, under #100):
-/// whether a clause that obliges shipped library code is outside CF-36's
-/// reach, or its rules move into a family an adapter mounts. SY-2 left under
-/// #320, which gave it a contract-level case, E2E-62, for its store-side rule.
-const CF36_UNDISCHARGED: [(&str, &str); 3] = [
-    (
-        "PS-29",
-        "obliges the typed layer's fan-out runner, not an adapter. Its rule, \
-         `one_poisoned_projection_does_not_stall_the_others`, runs against that runner in \
-         `crates/happenstance/tests/fan_out/rules.rs` (#112), and E2E-28 is honestly \
-         integration-level. Route: phase 21 decides whether runner-obliging clauses are \
-         outside CF-36 (#68, #100)",
-    ),
-    (
-        "PS-30",
-        "the same shape as PS-29, against the same case and the same runner",
-    ),
-    (
-        "SY-34",
-        "obliges `happenstance-sync`'s shipped `Edge`, not a peer adapter: its rule runs \
-         in `crates/happenstance-sync/tests/runner/main.rs`, and its only case, E2E-45, is \
-         a spoke refused by its hub, which is integration-level. The same route as PS-29",
-    ),
-];
-
-/// Check 11's other direction — a recorded CF-36 breach that is no longer one.
-///
-/// [`CF36_UNDISCHARGED`] can only shrink, for the same reason
-/// [`UNRESOLVABLE_RULE_NAMES`] can: an entry that outlives its breach turns a
-/// record of a defect into an exemption nobody re-reads. Returns the entries
-/// still in force, for the summary.
-fn reconcile_cf36(
-    clauses: &[Clause],
-    levels: &BTreeMap<String, String>,
-    problems: &mut Vec<String>,
-) -> Vec<&'static str> {
-    let mut live = Vec::new();
-    for (id, why) in &CF36_UNDISCHARGED {
-        let Some(c) = clauses.iter().find(|c| c.id == *id) else {
-            problems.push(format!(
-                "`CF36_UNDISCHARGED` records {id}, which {SPEC} no longer declares. Delete \
-                 the entry: it was recorded because it {why}",
-            ));
-            continue;
-        };
-        let breached = !c.rules.is_empty()
-            && !c.cases.is_empty()
-            && c.cases.iter().all(|case| {
-                levels
-                    .get(case)
-                    .is_some_and(|l| NOT_CONTRACT_LEVEL.contains(&l.as_str()))
-            });
-        if breached {
-            live.push(*id);
-        } else {
-            problems.push(format!(
-                "{id} no longer breaches CF-36, and `CF36_UNDISCHARGED` still records it. \
-                 The list can only shrink; delete the entry, which was recorded because it \
-                 {why}",
-            ));
-        }
-    }
-    live
+/// Whether `clause`'s `rule` is declared to live outside the conformance suites,
+/// in a file of this workspace's own tests: the scope ADR-0117 gives CF-36.
+fn runs_elsewhere(clause: &str, rule: &str) -> bool {
+    sync_family::all_declarations()
+        .any(|(c, r, why)| *c == clause && *r == rule && matches!(why, Unresolvable::Elsewhere(_)))
 }
 
 /// Check 6 — every conformance rule is owned by a clause, retired by one, or on
@@ -1919,8 +1829,6 @@ struct Coverage {
     citations: (usize, usize, usize),
     /// [`reconcile_unresolvable`]'s per-kind census.
     unresolvable: [usize; 3],
-    /// The clauses [`reconcile_cf36`] found still in breach of CF-36.
-    cf36: Vec<&'static str>,
     /// How many cases check 10 found claimed by no clause. Printed even when it
     /// is zero, because a check whose green says nothing is a check a reader
     /// cannot tell from an absent one — which is the defect this one repairs.
@@ -2005,16 +1913,6 @@ fn report(
         elsewhere + not_a_rule + scheduled
     )
     .context(REPORTING)?;
-
-    if !coverage.cf36.is_empty() {
-        writeln!(
-            out,
-            "{} clause(s) name a conformance rule and cite no contract-level case (CF-36), each recorded in `CF36_UNDISCHARGED`: {}",
-            coverage.cf36.len(),
-            coverage.cf36.join(", ")
-        )
-        .context(REPORTING)?;
-    }
 
     // Printed on a green run, on purpose. An open question that only shows up
     // when something else is already broken is an open question nobody reads.
@@ -3484,7 +3382,6 @@ mod tests {
         Coverage {
             citations: (0, 0, 0),
             unresolvable: [0; 3],
-            cf36: Vec::new(),
             orphaned: 0,
         }
     }
@@ -4078,43 +3975,54 @@ mod tests {
         assert_eq!(levels.get("E2E-07").map(String::as_str), Some("contract"));
     }
 
-    /// `CF36_UNDISCHARGED` records defects, so it can only shrink. A clause that
-    /// stops breaching CF-36 — because it gained a contract-level case, or
-    /// dropped the rule — must take its entry with it.
+    /// ADR-0117's scope: a rule registered `Elsewhere` runs against library code
+    /// this workspace ships, so a clause naming only such a rule is outside CF-36
+    /// however its cases are levelled. SY-34 is the real shape: the shipped
+    /// `Edge`'s rule, in `happenstance-sync`'s own runner tests, and an
+    /// integration-level case.
     #[test]
-    fn a_cf36_record_that_outlives_its_breach_is_reported() {
-        let levels: BTreeMap<String, String> = [("E2E-01".to_owned(), "contract".to_owned())]
+    fn a_rule_registered_elsewhere_does_not_breach_cf36() {
+        let levels: BTreeMap<String, String> = [("E2E-45".to_owned(), "integration".to_owned())]
             .into_iter()
             .collect();
 
         let mut problems = Vec::new();
-        let live = reconcile_cf36(
+        check_case_levels(
             &one_clause_with(
                 "SY-34",
                 "`a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class`",
-                "E2E-01",
+                "E2E-45",
             ),
             &levels,
             &mut problems,
         );
+        assert!(problems.is_empty(), "got {problems:?}");
+    }
 
-        assert!(live.is_empty());
+    /// The scope is the registration, not the clause: the same clause naming a
+    /// rule that is not registered `Elsewhere` beside it still breaches, so the
+    /// exclusion cannot become a clause-wide exemption.
+    #[test]
+    fn a_suite_rule_beside_an_elsewhere_one_still_breaches_cf36() {
+        let levels: BTreeMap<String, String> = [("E2E-45".to_owned(), "integration".to_owned())]
+            .into_iter()
+            .collect();
+
+        let mut problems = Vec::new();
+        check_case_levels(
+            &one_clause_with(
+                "SY-34",
+                "`a_refused_push_keeps_the_log_and_the_watermark_and_records_the_class`, \
+                 `a_rule_of_its_own`",
+                "E2E-45",
+            ),
+            &levels,
+            &mut problems,
+        );
         assert!(
             problems
                 .iter()
-                .any(|p| p.contains("SY-34") && p.contains("can only shrink")),
-            "got {problems:?}"
-        );
-    }
-
-    /// A recorded clause the document has stopped declaring is the other stale
-    /// direction, and it must not be mistaken for a discharged breach.
-    #[test]
-    fn a_cf36_record_naming_no_clause_at_all_is_reported() {
-        let mut problems = Vec::new();
-        reconcile_cf36(&[], &BTreeMap::new(), &mut problems);
-        assert!(
-            problems.iter().any(|p| p.contains("no longer declares")),
+                .any(|p| p.contains("SY-34") && p.contains("1 conformance rule")),
             "got {problems:?}"
         );
     }
@@ -4135,10 +4043,10 @@ mod tests {
         assert!(problems.is_empty(), "{problems:#?}");
     }
 
-    /// Check 11 against the real documents, both directions. Every case carries
-    /// a level, and the breaches are exactly the recorded ones.
+    /// Check 11 against the real documents. Every case carries a level, and no
+    /// clause breaches CF-36 (ADR-0117 settled the last three).
     #[test]
-    fn the_real_documents_breach_cf36_exactly_where_recorded() {
+    fn the_real_documents_do_not_breach_cf36() {
         let root = workspace_root().unwrap();
         let clauses = parse_clauses(&read(&root, SPEC).unwrap());
         let cases_doc = read(&root, CASES).unwrap();
@@ -4150,15 +4058,9 @@ mod tests {
         );
 
         let mut problems = Vec::new();
-        let live = reconcile_cf36(&clauses, &levels, &mut problems);
         check_case_levels(&clauses, &levels, &mut problems);
 
         assert!(problems.is_empty(), "{problems:#?}");
-        assert_eq!(
-            live.len(),
-            CF36_UNDISCHARGED.len(),
-            "every recorded breach is still one; got {live:?}"
-        );
     }
 
     // ---- S-5: a prose word may not switch off a clause's rule-name check ----

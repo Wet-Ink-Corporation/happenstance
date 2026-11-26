@@ -2,7 +2,7 @@
 id: kb-open-question-es-18-byte-identical-conformance-001
 title: ES-18 says byte-identical; no adapter restores it, and its own rules ask something weaker
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   ES-18 [FROZEN] second sentence reads "A rejected append MUST leave the

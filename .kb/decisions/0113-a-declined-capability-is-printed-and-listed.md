@@ -46,7 +46,7 @@ Nothing else has been applied. This atom is the whole record.
 
 ## Context
 
-CF-18 (`spec/SPECIFICATION.md:9457`) is `[FROZEN]`. It requires an unmet capability's rule to be
+CF-18 (`spec/SPECIFICATION.md:9459`) is `[FROZEN]`. It requires an unmet capability's rule to be
 emitted as a test that **reports** the skip with the fixture's reason. Its `Rejects:` paragraph
 turns on the reason landing "in the adapter's CI log where a reviewer and a user of the adapter can
 both see it" (`:9427-9432`). Two residuals remain (`.kb/open-questions/cf-18-residuals-after-declension-by-inheritance.md`).

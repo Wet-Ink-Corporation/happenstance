@@ -3124,7 +3124,7 @@ pub mod rules {
             assert_eq!(
                 snapshot_of(&after),
                 snapshot_of(&before),
-                "a refused append must leave the store byte-identical (ES-18); a \
+                "a refused append must leave the store unchanged through the port (ES-18); a \
                  per-row INSERT loop with no transaction around it leaves the \
                  rows it managed to write. Got {:?}",
                 types_of(&after)
@@ -3693,8 +3693,8 @@ pub mod rules {
             assert_eq!(
                 snapshot_of(&after),
                 snapshot_of(&before),
-                "and \"unchanged\" means byte-identical, not merely the same \
-                 number of rows"
+                "and \"unchanged\" means the same events through the port, not merely \
+                 the same number of rows"
             );
         } else {
             // Membership rather than order. Slice order within a batch is

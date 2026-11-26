@@ -2,7 +2,7 @@
 id: kb-open-question-cf-36-unperformed-cross-reference-001
 title: CF-36's cross-reference now exists, and the thirteen breaches it found take three different repairs
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   CF-36 is FROZEN and its Rule line claims cargo xtask spec-trace
@@ -47,7 +47,7 @@ last_reviewed: 2026-09-29
 
 ## What changed
 
-CF-36 (`spec/SPECIFICATION.md:9710-9721`) is `[FROZEN]` and its `Rule:` line
+CF-36 (`spec/SPECIFICATION.md:9712-9723`) is `[FROZEN]` and its `Rule:` line
 claims `cargo xtask spec-trace` cross-references each case's level marker
 (`E2E-CASES.md:19-28`). It did not: at `9b06836`, `grep -c "Level"
 xtask/src/spec_trace.rs` returned `0` against 58 `- **Level:**` markers, so a
@@ -138,7 +138,7 @@ discount buys, and it is the case `kb-decision-0045` and
 ## Phase 16 — 2026-09-29
 
 **Classification: additive** — specification text and `xtask`; no signature. `CF36_UNDISCHARGED`
-(`xtask/src/spec_trace.rs:1553`) still holds the thirteen: VT-21, WF-9, PS-29, PS-30 and nine SY
+(`xtask/src/spec_trace.rs:1556`) still holds the thirteen: VT-21, WF-9, PS-29, PS-30 and nine SY
 clauses. Each group now has an owner, per `runbook/ledgers.md`, *The 1.0 dispositions* and `kb-decision-0066`:
 
 - **The nine SY clauses → phase 13**, which builds `happenstance-sync-testkit`

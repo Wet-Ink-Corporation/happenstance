@@ -264,11 +264,13 @@ what the question is, not its evidence. The last two were added by the
   **Resolved 2026-09-29**, by process rather than a tool: step 6 of the session protocol in
   `runbook/README.md` and a reconciliation line in every open phase's exit criteria answer
   sub-questions 1 and 5; the mechanised half (2 to 4) is declined.
-- **Open** — [`cf-36-names-a-cross-reference-nothing-performs.md`](../open-questions/cf-36-names-a-cross-reference-nothing-performs.md)
+- **Superseded** — [`cf-36-names-a-cross-reference-nothing-performs.md`](../open-questions/cf-36-names-a-cross-reference-nothing-performs.md)
   (`kb-open-question-cf-36-unperformed-cross-reference-001`) — CF-36 is
   `[FROZEN]` and its `Rule:` line claims `cargo xtask spec-trace`
   cross-references each case's level marker; it does not, and no other check
   performs the comparison under another name. Added 2026-08-17; forced by
+  Superseded 2026-11-25 by ADR-0117 (`kb-decision-0117`): CF-36 binds the clauses an adapter
+  implements, and `CF36_UNDISCHARGED` is gone. Originally forced by
   the next reader who cites a green `spec-trace` as evidence for a level
   marker, and by phase 12.
 - **Superseded** — [`no-ps-rule-name-is-resolved.md`](../open-questions/no-ps-rule-name-is-resolved.md)
@@ -744,7 +746,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `ops/host/preflight.sh` (`kb-decision-0064`) — an environment assertion made before any sample
   exists, unreachable from `xtask`'s step table, the `verify:` block or CI the same way `ops/` sits on
   the `INERT` list — joins the sqlite check and the benchmark panic; CF-33 and CF-34 re-anchored to
-  their live lines (`spec/SPECIFICATION.md:9724-9778`, `:9029-9042`), both stale as previously cited.
+  their live lines (`spec/SPECIFICATION.md:9726-9780`, `:9029-9042`), both stale as previously cited.
 - **Superseded** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
   (`kb-open-question-es-23-adapter-half-001`) — `FROZEN_DOC_MUSTS` has no recorded disposition for
   ES-23's adapter-side `MUST`, a gap two named instruments (ADR-0012's proposed gate step, the
@@ -753,12 +755,14 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   **Resolved 2026-10-11** on issue #149, without a decision atom: a third disposition,
   `AdapterOwned`, points at the four per-adapter `cancellation_statement.rs` targets as ES-23's
   second row, checked to exist and never run, and the adapter-author pages point at it.
-- **Open** — [`es-18-byte-identical-versus-conformance-reading.md`](../open-questions/es-18-byte-identical-versus-conformance-reading.md)
+- **Superseded** — [`es-18-byte-identical-versus-conformance-reading.md`](../open-questions/es-18-byte-identical-versus-conformance-reading.md)
   (`kb-open-question-es-18-byte-identical-conformance-001`) — whether ES-18's "byte-identical"
   second sentence is amended to the weaker conformance reading its own rules ask, left with
   contradicting commentary, or narrowed to exclude the position counter; specific to
   `happenstance-cloudflare`'s compensation-based atomicity, since `happenstance-sqlite`'s
   `sqlite_sequence` is under transaction control and a rollback restores it. Added 2026-09-07.
+  Superseded 2026-11-25 by ADR-0118 (`kb-decision-0118`): ES-18 is narrowed to unchanged as
+  observed through the port, consumed positions excepted.
 - **Superseded** — [`probe-read-through-signature-and-live-transaction-seam.md`](../open-questions/probe-read-through-signature-and-live-transaction-seam.md)
   (`kb-open-question-probe-read-through-signature-001`) — whether `ProjectionProbe::probe_read_through`
   moves to `&mut Self::Batch` / async / fallible before phase 10, or the live-transaction adapter is
