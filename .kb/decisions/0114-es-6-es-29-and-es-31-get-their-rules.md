@@ -56,7 +56,7 @@ Nothing else under "What acceptance changes" has been applied. This atom is the 
 ## Context
 
 `UNRESOLVABLE_RULE_NAMES` declares three frozen clauses' rules `Scheduled` with no real owner
-(`xtask/src/spec_trace.rs:1268-1285`):
+(`xtask/src/spec_trace.rs:1266-1283`):
 
 | Clause | Rule | Declared owner |
 | --- | --- | --- |

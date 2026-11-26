@@ -2,7 +2,7 @@
 id: kb-decision-0117
 title: CF-36 binds the clauses an adapter implements, which empties CF36_UNDISCHARGED
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0117
 reversibility: medium
@@ -10,7 +10,7 @@ phase: 20
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed 2026-11-25 by the v1 AFK run for the owner (#100). CF-36 forbids a clause backed only by
+  Accepted 2026-11-25 by the owner; proposed by the v1 AFK run (#100). CF-36 forbids a clause backed only by
   integration- or scenario-level cases from naming a conformance rule, because an adapter author
   cannot run such a rule against their own crate. spec-trace checks a wider thing: every
   backticked name on a Rule line. PS-29, PS-30 and SY-34 are the last three entries in
@@ -32,8 +32,8 @@ last_reviewed: 2026-11-25
 
 # CF-36 binds the clauses an adapter implements, which empties `CF36_UNDISCHARGED`
 
-**Proposed 2026-11-25** by the unattended v1 run, for the owner (#100). Nothing below has been
-applied.
+**Accepted 2026-11-25** by the owner (Weigh-In wi-621f00f7f8); proposed by the unattended v1
+run (#100).
 
 ## Context
 
@@ -74,7 +74,7 @@ workspace ships and tests in its own crate.
 - C. Keep the list, and phase 21's audit reads three recorded breaches as accepted. Leaves a
   standing exception list in a 1.0 audit that says it has none.
 
-## Decision (proposed)
+## Decision
 
 A. On acceptance: CF-36 gains the scoping sentence (a `[FROZEN]` clause edit, made by this record);
 `spec_trace.rs` narrows the check, empties or removes `CF36_UNDISCHARGED`, updates its summary line

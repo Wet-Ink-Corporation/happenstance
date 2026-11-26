@@ -3710,7 +3710,9 @@ under by-value; the typed loop rebuilds its batch per attempt (`command.rs:468`)
 #### ES-18 — Atomicity
 
 Either every event in the batch lands or none does. A rejected append MUST leave
-the store byte-identical.
+the store unchanged as observed through the port: reads, `head` and append
+conditions. Positions it consumed are excepted, and may appear as gaps (ES-9).
+Narrowed from "byte-identical" by ADR-0118.
 
 **[FROZEN]**
 
@@ -10524,7 +10526,11 @@ specification clauses, and this document's own form rules exist to make the
 violation visible at authoring time rather than at implementation time.
 
 **CF-36.** A clause backed only by **integration**- or **scenario**-level cases
-MUST NOT name a conformance rule. `[FROZEN]`
+MUST NOT name a conformance rule. `[FROZEN]` This clause binds the clauses an
+adapter implements. A clause whose rule runs against library code this workspace
+ships — the typed runners, `happenstance-sync`'s `Edge` — and is registered
+`Elsewhere` in that crate's own tests names no conformance rule and is outside it
+(ADR-0117).
 Rule: `cargo xtask spec-trace` (CF-38), cross-referencing each case's level
 marker (E2E-CASES.md:19-28).
 Cases: E2E-28, E2E-29, E2E-39, E2E-42 (the integration-level cases most likely to
@@ -10533,8 +10539,7 @@ Rejects: a rule in the conformance suite that needs two adapters, a domain
 vocabulary, or a running deployment. Such a rule cannot be run by an adapter
 author against their own crate, which is the one thing the suite is for; it
 belongs in the e2e crate, or — for a contract-level case that cannot be expressed
-against a single store handle — in `happenstance-sync-testkit`, named at
-`crates/happenstance-sync/src/lib.rs:25-26` and not yet existing.
+against a single store handle — in `happenstance-sync-testkit`.
 
 **CF-37.** Every E2E case MUST name the clause or clauses it exercises. `[FROZEN]`
 Rule: `cargo xtask spec-trace` (CF-38).

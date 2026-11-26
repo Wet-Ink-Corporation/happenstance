@@ -2,7 +2,7 @@
 id: kb-decision-0119
 title: After 1.0.0 the nine crates version independently, prepared by release-plz and published by the tag
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0119
 reversibility: medium
@@ -10,7 +10,7 @@ phase: 21
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed 2026-11-25 by the v1 AFK run for the owner (#195). ADR-0066 ships the nine crates at
+  Accepted 2026-11-25 by the owner; proposed by the v1 AFK run (#195). ADR-0066 ships the nine crates at
   1.0.0 in lockstep and versions them independently afterwards, and leaves the tooling to phase 21.
   Recommended: release-plz in its release-PR mode only, which bumps each changed crate by
   cargo-semver-checks and conventional commits and writes the CHANGELOG, while publishing stays
@@ -32,8 +32,8 @@ last_reviewed: 2026-11-25
 
 # After `1.0.0` the nine crates version independently, prepared by `release-plz` and published by the tag
 
-**Proposed 2026-11-25** by the unattended v1 run, for the owner (#195). Nothing below has been
-applied, and no tool has been installed or configured.
+**Accepted 2026-11-25** by the owner (Weigh-In wi-6be1ce5a6c); proposed by the unattended v1 run
+(#195). No tool has been installed or configured yet: that is phase 21's.
 
 ## Context
 
@@ -71,7 +71,7 @@ single tag that names one version for all nine.
   families)."*, the testkit versions it is pinned to exactly in its `dev-dependencies` (CF-32).
 - `release.yml`'s matrix check compares the tag's crate and version, not one version for nine.
 
-## Decision (proposed)
+## Decision
 
 A, to be configured in phase 21 before `1.0.0-rc.1`: a `release-plz.toml` with `publish = false`
 and `git_tag_enable = false` (the tag stays the owner's act), the per-crate tag scheme in

@@ -52,7 +52,7 @@ changes" has been applied: no clause is minted, no `[FROZEN]` text is edited, an
 ## Context
 
 `cargo xtask spec-trace` check 6 requires every conformance rule to be claimed or retired by a
-clause. `UNCLAIMED_PENDING_ADR` (`xtask/src/spec_trace.rs:3052`) holds the three that are neither,
+clause. `UNCLAIMED_PENDING_ADR` (`xtask/src/spec_trace.rs:2954`) holds the three that are neither,
 and every green run prints them:
 
 1. `arming_a_read_fault_makes_the_stream_yield_an_error` (`crates/happenstance-testkit/src/suite.rs:3284`).

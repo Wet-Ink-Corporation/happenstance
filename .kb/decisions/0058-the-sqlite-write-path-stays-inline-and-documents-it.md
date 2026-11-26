@@ -49,7 +49,7 @@ shows the same pattern: 717.545 ms shipped against 41.573 ms through the seam.
 "every statement runs on a blocking task"; only the read path's deferred `spawn_blocking`
 is true today, and the sentence is corrected to say so. And the crate gains the
 `# Cancellation` section ES-23 `[FROZEN]` requires and does not have
-(`spec/SPECIFICATION.md:3817-3843` names "Rule: none," so no gate check catches its
+(`spec/SPECIFICATION.md:3819-3845` names "Rule: none," so no gate check catches its
 absence): today's true answer is that a dropped `append` future provably commits nothing,
 because `append` contains no `.await` anywhere in its body — the same omission that causes
 the stall is this adapter's current ES-23 answer.

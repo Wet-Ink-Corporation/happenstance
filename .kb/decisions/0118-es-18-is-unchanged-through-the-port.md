@@ -2,7 +2,7 @@
 id: kb-decision-0118
 title: ES-18's rejected append is unchanged as observed through the port, consumed positions excepted
 kind: decision
-status: proposed
+status: accepted
 authority_tier: decision
 adr_id: ADR-0118
 reversibility: low
@@ -10,7 +10,7 @@ phase: 20
 supersedes: null
 superseded_by: null
 summary: >-
-  Proposed 2026-11-25 by the v1 AFK run for the owner. ES-18 is FROZEN and says a rejected append
+  Accepted 2026-11-25 by the owner; proposed by the v1 AFK run. ES-18 is FROZEN and says a rejected append
   MUST leave the store byte-identical. No rule checks bytes: every rule compares what reads return
   through the port. Three of the four published adapters can leave residue a read never shows: the
   Cloudflare store documents it, and Postgres and Neon burn sequence values on a Busy refusal; the
@@ -35,7 +35,7 @@ last_reviewed: 2026-11-25
 
 # ES-18's rejected append is unchanged as observed through the port, consumed positions excepted
 
-**Proposed 2026-11-25** by the unattended v1 run, for the owner. Nothing below has been applied.
+**Accepted 2026-11-25** by the owner (Weigh-In wi-c978794167); proposed by the unattended v1 run.
 
 ## Context
 
@@ -69,14 +69,14 @@ control "with a position burned by each refused conditional append, as nextval()
 
 - **A. Narrow the MUST (recommended):** *"A rejected append MUST leave the store unchanged as
   observed through the port — reads, `head` and append conditions. Positions it consumed are
-  excepted, and may appear as gaps (ES-10)."* That is what every rule checks and what every
+  excepted, and may appear as gaps (ES-9)."* That is what every rule checks and what every
   adapter does. Free before 1.0, a major after.
 - B. Keep "byte-identical" and fix the adapters: Postgres and Neon cannot un-draw a sequence value,
   so this means a different allocation scheme, re-opening ADR-0024.
 - C. Keep the text and record a reading. A frozen MUST that three of four adapters do not meet,
   explained elsewhere, is the drift this specification's markers exist to prevent.
 
-## Decision (proposed)
+## Decision
 
 A. On acceptance: ES-18's MUST is reworded by this record; its rules, cases and `Rejects:` stand;
 the open question is superseded. No code changes; the rule's message may say "unchanged through the
