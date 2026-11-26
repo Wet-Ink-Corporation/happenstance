@@ -170,14 +170,14 @@ specification-reconciliation intake wave. Full grounding for each is in the
 what the question is, not its evidence. The last two were added by the
 2026-08-17 wave from the phase-7 contract-defect log.
 
-- **Open** — [`disjoint-boundaries-have-no-clause.md`](../open-questions/disjoint-boundaries-have-no-clause.md)
+- **Superseded** — [`disjoint-boundaries-have-no-clause.md`](../open-questions/disjoint-boundaries-have-no-clause.md)
   (`kb-open-question-disjoint-boundaries-no-clause-001`) — the independence
   proposition DCB exists for is enforced by a live conformance rule and
   stated by no clause. Amended 2026-09-07: the rule citation and the
   `UNCLAIMED_PENDING_ADR` range had both drifted since authoring and are repointed to their live
   lines; the array now holds three entries, not two — the read-fault gap
   (`kb-open-question-read-fault-rule-no-clause-001`) joins this one and the model-family gap below.
-- **Open** — [`model-family-rule-has-no-clause.md`](../open-questions/model-family-rule-has-no-clause.md)
+- **Superseded** — [`model-family-rule-has-no-clause.md`](../open-questions/model-family-rule-has-no-clause.md)
   (`kb-open-question-model-family-rule-no-clause-001`) — the model-based
   rule checks a composition of clauses and belongs to none of them (retitled 2026-09-07: the count
   had already drifted once, exactly the defect `kb-playbook-count-or-index-nobody-re-derives-001`
@@ -669,7 +669,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   **Resolved 2026-09-29**: built at phase 10b (`2ed06b4`) and shipped in `0.2.0` — `PostgresFixture`
   arms `READ_FAULT` with a view that raises part-way through the `FETCH`, and Neon's fixture arms it
   too.
-- **Open** — [`read-fault-rule-has-no-clause.md`](../open-questions/read-fault-rule-has-no-clause.md)
+- **Superseded** — [`read-fault-rule-has-no-clause.md`](../open-questions/read-fault-rule-has-no-clause.md)
   (`kb-open-question-read-fault-rule-no-clause-001`) — the third entry in `UNCLAIMED_PENDING_ADR`,
   mirroring `kb-open-question-disjoint-boundaries-no-clause-001` and
   `kb-open-question-model-family-rule-no-clause-001`: `arming_a_read_fault_makes_the_stream_yield_an_error`
@@ -744,7 +744,7 @@ for the reference, concept, governance and playbook atoms this domain also owns.
   `ops/host/preflight.sh` (`kb-decision-0064`) — an environment assertion made before any sample
   exists, unreachable from `xtask`'s step table, the `verify:` block or CI the same way `ops/` sits on
   the `INERT` list — joins the sqlite check and the benchmark panic; CF-33 and CF-34 re-anchored to
-  their live lines (`spec/SPECIFICATION.md:9685-9710`, `:9029-9042`), both stale as previously cited.
+  their live lines (`spec/SPECIFICATION.md:9724-9778`, `:9029-9042`), both stale as previously cited.
 - **Superseded** — [`es-23-frozen-doc-musts-adapter-half.md`](../open-questions/es-23-frozen-doc-musts-adapter-half.md)
   (`kb-open-question-es-23-adapter-half-001`) — `FROZEN_DOC_MUSTS` has no recorded disposition for
   ES-23's adapter-side `MUST`, a gap two named instruments (ADR-0012's proposed gate step, the

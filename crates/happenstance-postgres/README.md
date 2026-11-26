@@ -58,9 +58,9 @@ with programs you can run.
 ## Features
 
 ```toml
-happenstance-postgres = "0.8"                              # the event store
-happenstance-postgres = { version = "0.8", features = ["projection-store"] }
-happenstance-postgres = { version = "0.8", features = ["sync"] }   # + the ingest port
+happenstance-postgres = "0.9"                              # the event store
+happenstance-postgres = { version = "0.9", features = ["projection-store"] }
+happenstance-postgres = { version = "0.9", features = ["sync"] }   # + the ingest port
 
 sqlx = "0.8"                                               # only for queries of your own
 ```

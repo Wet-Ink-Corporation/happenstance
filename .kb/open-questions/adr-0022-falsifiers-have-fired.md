@@ -209,7 +209,7 @@ remedy.
 **Sections 8 and 16 stand, and the repair is a decision rather than a documentation sweep.** The
 falsifier still cannot fire as written, and the repair path still runs through a `[FROZEN]` clause:
 ES-27's `Rejects:` prose quoting the aggregate's "roughly 200x". That citation has drifted — it now
-reads at `spec/SPECIFICATION.md:4372-4377`, with the figure itself on `:4065`, not the
+reads at `spec/SPECIFICATION.md:4410-4415`, with the figure itself on `:4065`, not the
 `:3902-3905` the paragraph above cites. Repoint by the anchor rather than the offset, which moves
 every wave.
 
@@ -239,7 +239,7 @@ most-selective-first is a 2.0x–2.2x *win* rather than the
 ordering requirement and `tag_cardinality`, and changes the reason for them to the correlation.
 §16's falsifier for §8 goes with those items, and is replaced by one that has an instrument that can
 fire it: a `LIST SUBQUERY` in the multi-tag guard's plan, or least-selective-first measuring
-cheaper on the correlated chain. ES-27's "roughly 200x" (`spec/SPECIFICATION.md:4372-4377`) is a
+cheaper on the correlated chain. ES-27's "roughly 200x" (`spec/SPECIFICATION.md:4410-4415`) is a
 `[FROZEN]` clause's prose, and `kb-decision-0068` authorises its replacement text. Sections 1–7,
 10 and 12–15 are ratified, with each falsifier's state recorded against it.
 
@@ -247,7 +247,7 @@ Two things were owed from that record. The ES-27 edit landed in the same change 
 `kb-decision-0068`, line-neutral, three lines for three. The other is an assertion in the adapter's
 own tests that the guard's plan has no `LIST SUBQUERY`; it is additive, phase 17 owned it, and
 **it is in the tree since 2026-10-07**, so the new falsifier no longer fires only by hand:
-`the_guard_plan_has_no_list_subquery` (`crates/happenstance-sqlite/src/event_store.rs:3622`)
+`the_guard_plan_has_no_list_subquery` (`crates/happenstance-sqlite/src/event_store.rs:3623`)
 plans the exact statements `append` runs, through the private `guard_statements`, over five guard
 shapes on the bundled SQLite, and also asserts each chained seek carries `position=?`;
 `the_guard_plan_instrument_fires_on_the_uncorrelated_chain` keeps the pre-`8c8b215` `IN (SELECT …)`

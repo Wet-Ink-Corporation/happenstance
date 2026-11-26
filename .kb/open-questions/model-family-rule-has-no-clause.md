@@ -2,7 +2,7 @@
 id: kb-open-question-model-family-rule-no-clause-001
 title: The model family's rule checks a composition of clauses and belongs to none
 kind: open_question
-status: accepted
+status: superseded
 authority_tier: note
 summary: >-
   ops_agree_with_the_model is the model family's single conformance rule; it replays generated
@@ -35,7 +35,7 @@ source_paths:
   - .kb/_intake/monotone-visibility-is-unstated.md
   - spec/SPECIFICATION.md
   - xtask/src/spec_trace.rs
-last_reviewed: 2026-11-18
+last_reviewed: 2026-11-25
 ---
 
 # The model family's rule checks a composition of clauses and belongs to none
@@ -140,3 +140,7 @@ composed set to the rule's rustdoc. It obliges no store, so it is true or false 
 not by `PROPTEST_CASES`. The trailing model's monotone-visibility assumption is explicitly not
 claimed by it, and stays `.kb/_intake/monotone-visibility-is-unstated.md`'s. This atom stays open
 until the owner accepts.
+
+## Closed — 2026-11-25
+
+`kb-decision-0111` (ADR-0111, accepted 2026-11-20) answers this, and its build lands with this closure (#531). CF-45 is minted `[FROZEN]`: a suite clause obliging the testkit to carry a generative family, claiming `ops_agree_with_the_model`. It obliges no store, so its truth does not depend on `PROPTEST_CASES`. The trailing model's monotone-visibility assumption stays unstated and unclaimed.

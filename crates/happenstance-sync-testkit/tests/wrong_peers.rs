@@ -769,6 +769,93 @@ impl SyncFixture for PagingFixture {
     }
 }
 
+/// SY-16's wrong implementation: resume state kept in the handle.
+///
+/// A server-side cursor session: the token is honoured only by the handle
+/// that issued it, because what really says where to resume is the session
+/// the handle holds. A handle that has served no pull yet has no session, so
+/// it ignores whatever token it is given and starts from the beginning. On one
+/// handle it is the reference peer exactly; a runner that reconnects after a
+/// dropped connection is handed the whole log again.
+#[derive(Debug)]
+struct CursorInTheHandle {
+    inner: Arc<MemorySyncPeer>,
+    /// Whether this handle has served a pull, and so holds a session in which
+    /// a token means something.
+    session: Mutex<bool>,
+}
+
+impl SendSyncPeer for CursorInTheHandle {
+    type Error = MemoryPeerError;
+    type Resume = MemoryResume;
+
+    async fn pull(&self, from: Option<&Self::Resume>) -> Result<Pulled<Self::Resume>, Self::Error> {
+        let in_session = {
+            let mut session = self.session.lock().expect("one test thread");
+            core::mem::replace(&mut *session, true)
+        };
+        // THE DEFECT: a token from outside this handle's session is dropped.
+        let from = if in_session { from } else { None };
+        self.inner.pull(from).await
+    }
+
+    async fn push(&self, batch: &PushBatch) -> Result<Ack, Self::Error> {
+        self.inner.push(batch).await
+    }
+
+    fn limits(&self) -> PeerLimits {
+        self.inner.limits()
+    }
+}
+
+#[derive(Debug)]
+struct CursorInTheHandleFixture {
+    inner: Arc<MemorySyncPeer>,
+}
+
+impl SyncFixture for CursorInTheHandleFixture {
+    type Peer = CursorInTheHandle;
+
+    async fn connect(&self) -> Self::Peer {
+        CursorInTheHandle {
+            inner: Arc::clone(&self.inner),
+            session: Mutex::new(false),
+        }
+    }
+
+    /// The reference fixture's declaration: the mistake is in how this peer
+    /// reads a token, and its push and its errors are the reference peer's.
+    async fn refusals(&self, peer: &Self::Peer) -> RefusalsOf<Self::Peer> {
+        oversized_push_refusal(peer).await
+    }
+
+    /// The reference peer's compaction, so SY-32's rule runs rather than
+    /// skips: SY-32 drives one handle, inside one session, where this peer is
+    /// the reference peer.
+    const COMPACTION: Capability = Capability::SUPPORTED;
+
+    async fn compact_recorded_before(
+        &self,
+        _peer: &Self::Peer,
+        cutoff: RecordedAt,
+    ) -> Result<(), Violation> {
+        compact(&self.inner, cutoff)
+    }
+}
+
+/// SY-16's rule fails a peer that keeps its place in the handle, and every
+/// other rule passes it, because on one handle it is the reference peer.
+#[test]
+fn resume_survives_a_dropped_peer_handle_fails_a_peer_that_keeps_its_cursor_in_the_handle() {
+    fails_exactly(
+        &verdicts(async || CursorInTheHandleFixture {
+            inner: Arc::new(MemorySyncPeer::new(StoreId::from_bytes([0x7B; 16]))),
+        }),
+        "resume_survives_a_dropped_peer_handle",
+        "SY-16",
+    );
+}
+
 /// Every rule in the enumeration against one fixture, by name, each verdict
 /// reduced to the clause it reports.
 ///

@@ -33,8 +33,37 @@ not the same as what a user needed to be told.
 
 ## [Unreleased]
 
+**Breaking from `0.8.x`**, and the last breaking release before `1.0.0-rc.1`: a store
+ingesting a group whose guard carries `after` no longer keeps that guard (ES-29, SY-6). Each
+break is labelled in place and traced at the end of this section. The workspace version is
+`0.9.0`; the heading stays `[Unreleased]` until the release.
+
+### Added
+
+- **`IngestGroup::kept_guard`** in `happenstance-sync`: the guard a store keeps with a group.
+- **`happenstance-sync-testkit`: SY-6's and ES-29's rule, `wire_condition_with_after_is_refused`**,
+  in the write-group family (#536). It ingests a group whose guard carries an `after` that
+  would reject in the receiver's numbering, and requires the event to land, nothing to be
+  compensated and the group to read back with no guard. It fails a store that evaluates the
+  foreign `after` and drops the fact, and one that keeps the position-relative guard, as every
+  store did before. A new rule is a minor for this crate; pin it exactly.
+- **`happenstance-sync-testkit`: SY-16's rule, `resume_survives_a_dropped_peer_handle`**, in the
+  sync peer family (#535). It drops the handle that issued a resume token, connects a new one
+  and resumes from the token, and fails a peer that keeps a reader's place in the handle rather
+  than in the token, which hands a reconnecting runner the whole log again. A new rule is a
+  minor for this crate; pin it exactly.
+
 ### Changed
 
+- **Every `IngestStore` refuses a guard carrying `after` by not keeping it** (ES-29, SY-6,
+  ADR-0114 branch (i), #536). **Breaking (behaviour).** `IngestGroup::kept_guard` is the
+  group's guard when every clause is position-free, and `None` when any clause carries an
+  `after`; `MemoryIngestStore`, `happenstance-sqlite`, `happenstance-postgres`,
+  `happenstance-neon` and `happenstance-cloudflare` record what it returns. The events still
+  land and nothing is compensated (SY-1), but `WriteGroupStore::read_groups` hands the group
+  back with no guard, so a relay forwards none. An `after` names a position in the origin's
+  numbering and means nothing in the receiver's. Local appends were already recorded with no
+  guard, so only a foreign or wrong peer could have sent one.
 - **`happenstance-testkit`: a declined capability's `SKIP` line reaches a plain `cargo test`**
   (ADR-0113, #530). `RuleOutcome::report` writes it through a locked `stderr` handle, which
   libtest's capture does not intercept, instead of `println!`, which libtest discarded for a
@@ -46,6 +75,18 @@ not the same as what a user needed to be told.
   `READ_FAULT` and `HELD_ABOVE_FRONTIER`, and its publish-readiness test now checks every
   capability `Fixture` declares rather than three.
 
+### `0.9.0` trace
+
+Every break `0.9.0` carries, each with the decision that caused it. Begun on 2026-11-25
+against `main` with #536 applied. **Run:** `cargo semver-checks check-release --workspace
+--baseline-version 0.8.0 --release-type minor` (0.50.0) on 2026-11-25: 196 checks pass in
+each of the nine crates and no lint fires, so there are no **T** rows. The break is a
+behaviour, which no lint sees, so H1 is a hand row; `kept_guard` is additive.
+
+| # | Crate | Break | Source | Decided by | Entry above |
+|---|---|---|---|---|---|
+| H1 | `happenstance-sqlite`, `happenstance-postgres`, `happenstance-neon`, `happenstance-cloudflare`, `happenstance-sync` | an ingested group whose guard carries `after` is recorded with no guard, so `read_groups` returns `None` for it where it returned the guard (behaviour) | hand | ES-29, SY-6, [ADR-0114](.kb/decisions/0114-es-6-es-29-and-es-31-get-their-rules.md) (i) (#536) | Changed |
+| H2 | `happenstance-sync-testkit` | new rules that can turn a passing adapter red: the write-group family's `wire_condition_with_after_is_refused` (SY-6, ES-29; #536), which fails a store that keeps a position-relative guard, and the peer family's `resume_survives_a_dropped_peer_handle` (SY-16; #535). A new rule is a minor for this crate; pin it exactly (behaviour, testkit) | hand | ADR-0114, #458 | Added |
 
 ## [0.8.0] — 2026-11-20
 

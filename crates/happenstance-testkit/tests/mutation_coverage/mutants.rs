@@ -3695,6 +3695,49 @@ impl Subject for NoopFaultFixture {
     }
 }
 
+/// A fixture that declares `READ_FAULT` supported and arms **nothing**, over a
+/// completely correct store.
+///
+/// CF-44's named wrong fixture (ADR-0111), and [`NoopFaultFixture`] one path
+/// over. `Fixture::arm_read_fault`'s provided body panics and names the
+/// mistake, so a forgotten override aborts loudly; the vacuous pass needs an
+/// override that is present and empty, which is what is written below. The
+/// author is the one writing a paged adapter who declares the capability while
+/// the fault seam is still a stub, and gets a green
+/// `arming_a_read_fault_makes_the_stream_yield_an_error` about a read nothing
+/// ever faulted. The rule rejects it because the armed read returns every event
+/// and no `Err` item.
+#[derive(Debug)]
+pub(crate) struct NoopReadFaultFixture(LogStore);
+
+impl Fixture for NoopReadFaultFixture {
+    type Store = LogStore;
+
+    const SECOND_HANDLE: Capability = Capability::SUPPORTED;
+    const REOPEN: Capability = Capability::declined(
+        "a Vec behind an Rc, with no durable medium to reopen over — this \
+         instrument's axis is what a declared read-fault capability actually does",
+    );
+    // THE DEFECT, first half: the claim.
+    const READ_FAULT: Capability = Capability::SUPPORTED;
+
+    async fn connect(&self) -> Self::Store {
+        self.0.clone()
+    }
+
+    // THE DEFECT, second half: an override with an empty body. Not a forgotten
+    // override — that reaches the trait's panic, which is a different mistake.
+    async fn arm_read_fault(&self) {}
+}
+
+impl Subject for NoopReadFaultFixture {
+    const NAME: &'static str = "NoopReadFaultFixture";
+
+    fn open() -> Self {
+        Self(LogStore::new(dense))
+    }
+}
+
 /// A fixture that declares `HELD_ABOVE_FRONTIER` supported and **does not
 /// override** `arm_held_above_frontier`.
 ///

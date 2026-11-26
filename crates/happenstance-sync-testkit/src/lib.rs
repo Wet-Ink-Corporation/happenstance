@@ -47,6 +47,7 @@
 //! | [`nothing_waiting_means_the_next_pull_is_empty`](rules::nothing_waiting_means_the_next_pull_is_empty) | SY-37 | a peer that says nothing is waiting when its page ran out, not its log |
 //! | [`ack_never_confirms_a_non_durable_event`](rules::ack_never_confirms_a_non_durable_event) | SY-31 | a peer that confirms an event before it is durable |
 //! | [`round_trip_preserves_the_whole_log`](rules::round_trip_preserves_the_whole_log) | SY-28, SY-27 | a peer that withholds from its counterpart the events a type or tag filter matches, among those the rule's log carries |
+//! | [`resume_survives_a_dropped_peer_handle`](rules::resume_survives_a_dropped_peer_handle) | SY-16 | a peer that keeps a reader's place in the handle, so a token honoured on the handle that issued it is ignored by a new one, which starts again from the beginning |
 //! | [`retention_gap_is_reported_not_silent`](rules::retention_gap_is_reported_not_silent) | SY-32 | a peer that compacts and answers a token below its floor, or the start, with a strict subset in silence, or refuses it as anything but `Reseed`; skipped unless the fixture declares [`COMPACTION`](SyncFixture::COMPACTION) |
 //!
 //! Each rule names a wrong implementation, and that implementation lives in
@@ -209,6 +210,7 @@
 //! | [`a_group_after_a_redelivery_is_named_by_its_first_landed_row`](write_group_rules::a_group_after_a_redelivery_is_named_by_its_first_landed_row) | SY-39, SY-11 | a store that names a group by the first position it allocated, not the first row it wrote |
 //! | [`a_read_never_cuts_a_group`](write_group_rules::a_read_never_cuts_a_group) | SY-39 | a page filled by event, a first group skipped for being too large, and a resume above a row position |
 //! | [`pages_chain_on_first_and_end_with_nothing`](write_group_rules::pages_chain_on_first_and_end_with_nothing) | SY-39, SY-37 | a page its budget cut that says nothing is waiting |
+//! | [`wire_condition_with_after_is_refused`](write_group_rules::wire_condition_with_after_is_refused) | SY-6, ES-29 | a store that evaluates a foreign guard's `after` and drops the fact, and one that keeps a position-relative guard as evidence |
 //!
 //! Each wrong store lives in `tests/wrong_write_group_stores.rs`, where a test
 //! runs the whole family against it and asserts the exact set it fails.

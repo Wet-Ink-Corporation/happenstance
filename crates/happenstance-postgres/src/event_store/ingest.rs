@@ -373,8 +373,9 @@ impl OwnedGroup {
             compensation: group.compensation.to_vec(),
             // Cloned out of the borrowed group for the reason the events are:
             // the work crosses onto the runtime and must be `'static`, and the
-            // store keeps it.
-            guard: group.guard.cloned(),
+            // store keeps it: only a position-free guard, since one carrying
+            // `after` is refused, not kept (SY-6).
+            guard: group.kept_guard().cloned(),
         })
     }
 }

@@ -169,6 +169,104 @@ pub mod write_group_rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-6 and ES-29: a guard carrying a position-relative boundary is
+    /// refused as ingest input, and refused means not kept (ADR-0114 (i)).
+    ///
+    /// The store appends two events of the guard's type, then ingests one
+    /// foreign group whose guard carries an `after` at the first of them. In
+    /// the receiver's numbering that guard *would* reject, because the second
+    /// local event matches it above the boundary. The rule asserts the branch
+    /// the owner took: the foreign event lands (SY-1), nothing is compensated,
+    /// and the group reads back with **no** guard. An `after` names a position
+    /// in the origin's log, and it means nothing here.
+    ///
+    /// # Rejects
+    ///
+    /// A store that evaluates the foreign `after` against its own log and so
+    /// drops the fact, and one that keeps the position-relative guard as
+    /// evidence, as every store did before ADR-0114, so a relay forwards a
+    /// boundary that is wrong in every store but the origin. Both are in
+    /// `tests/wrong_write_group_stores.rs`, and pass every other rule here.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-6 if the store refuses the append, the ingest or
+    /// a read, does not land the foreign event, compensates it, or reads its
+    /// group back with a guard.
+    pub async fn wire_condition_with_after_is_refused<F>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation>
+    where
+        F: IngestFixture,
+        F::Store: WriteGroupStore,
+    {
+        const SY_6: &str = "SY-6";
+        let refused = |what: &str, error: &dyn core::fmt::Display| {
+            Violation::new(SY_6, format!("the store refused {what}: {error}"))
+        };
+        let fixture = open().await;
+        let store = fixture.connect().await;
+        ensure_foreign(&store).await?;
+
+        let local = [
+            opaque(SHIPPED, "refused-local-1")?,
+            opaque(SHIPPED, "refused-local-2")?,
+        ];
+        EventStore::append(&store, &local, None)
+            .await
+            .map_err(|error| refused("an append", &error))?;
+        let boundary = position_of(&store, "refused-local-1").await?;
+        // Every clause carries `after`, at a position this store holds a
+        // matching event above: evaluated here, it would reject.
+        let relative = guard()?.after_every_guard(boundary);
+        let foreign = [shipped(11, "refused-foreign")?];
+
+        let landed = IngestStore::ingest(
+            &store,
+            &[IngestGroup::new(&foreign, &[]).with_guard(Some(&relative))],
+        )
+        .await
+        .map_err(|error| refused("the ingest", &error))?;
+        ensure(
+            (landed.appended, landed.compensated) == (1, 0),
+            SY_6,
+            || {
+                format!(
+                    "the store ingested a group under a guard carrying `after` and appended {} \
+                     events, compensating {}: ingest never refuses a fact (SY-1), and the \
+                     origin's `after` is not this store's to evaluate (ES-29)",
+                    landed.appended, landed.compensated
+                )
+            },
+        )?;
+
+        let page = read(&store, None, WHOLE_LOG).await?;
+        let group = page
+            .groups
+            .iter()
+            .find(|group| {
+                group
+                    .events()
+                    .iter()
+                    .any(|event| event.event.data().as_ref() == b"refused-foreign")
+            })
+            .ok_or_else(|| {
+                Violation::new(
+                    SY_6,
+                    "the foreign event the store said it appended is in no group it reads back",
+                )
+            })?;
+        ensure(group.guard().is_none(), SY_6, || {
+            format!(
+                "the store kept the guard {:?}, which carries `after`: a position in the \
+                 origin's numbering, meaningless here, and refused at ingest by being not kept \
+                 (SY-6, ADR-0114 (i))",
+                group.guard()
+            )
+        })?;
+        Ok(RuleOutcome::Ran)
+    }
+
     /// SY-39, with SY-2: a compensation is one write group with the ingested
     /// group it answers, after it.
     ///
@@ -563,6 +661,9 @@ macro_rules! for_each_write_group_rule {
             // --- A page never cuts a group, and pages chain (SY-39) ---------
             a_read_never_cuts_a_group,
             pages_chain_on_first_and_end_with_nothing,
+
+            // --- A guard carrying `after` is refused, not kept (SY-6, ES-29) -
+            wire_condition_with_after_is_refused,
         }
     };
 }

@@ -169,6 +169,10 @@ pub mod rules {
     const DURABLE_ORIGIN: StoreId = StoreId::from_bytes([0x81; 16]);
     const DURABLE_TWIN: StoreId = StoreId::from_bytes([0x82; 16]);
 
+    /// SY-16's origin, whose log the rule writes in two halves around a
+    /// dropped handle.
+    const RESUME_ORIGIN: StoreId = StoreId::from_bytes([0xB6; 16]);
+
     /// SY-23's three origins, in `EventId` order: the derive sorts a
     /// [`StoreId`] by its bytes.
     const ORDER_LOW: StoreId = StoreId::from_bytes([0xA1; 16]);
@@ -1109,6 +1113,112 @@ pub mod rules {
         Ok(RuleOutcome::Ran)
     }
 
+    /// SY-16: resume state is an owned value the caller supplies, not a
+    /// handle the peer holds, so a resume token outlives the handle that
+    /// issued it.
+    ///
+    /// The rule pushes the first half of an origin's log through one handle,
+    /// pulls to the end and keeps the last token, and **drops the handle**.
+    /// Then it connects a new handle, pushes the second half through it, and
+    /// pulls
+    /// from the kept token to the end. What comes back must be exactly the
+    /// second half: no event of the first half again, and none of the second
+    /// missing. Events are compared whole, never decoded (SY-35).
+    ///
+    /// # Rejects
+    ///
+    /// A peer whose cursor lives in the handle: it answers a token by reading
+    /// on from where *this handle* last stopped, which is right for as long as
+    /// one handle lives, and on a new handle starts again from the beginning.
+    /// A runner that reconnects after a dropped connection is handed the whole
+    /// log again. `tests/wrong_peers.rs` carries it, and asserts that every
+    /// other rule passes it.
+    ///
+    /// # Does not reject
+    ///
+    /// A peer that re-delivers an event the token already passed, byte for
+    /// byte, on the *same* handle: redelivery is SY-11's, and the model family
+    /// judges it. Nor a token lost to a crash: the rule drops a handle, not
+    /// the medium, and a reopen is SY-31's rule to stage, so a fixture that
+    /// declares `REOPEN` and reopens nothing fails that rule and not this one.
+    ///
+    /// # Errors
+    ///
+    /// A [`Violation`] of SY-16 if the peer refuses a push or a pull, or if the
+    /// pull from the kept token on the new handle hands back an event of the
+    /// first half or misses one of the second.
+    pub async fn resume_survives_a_dropped_peer_handle<F: SyncFixture>(
+        open: impl AsyncFn() -> F,
+    ) -> Result<RuleOutcome, Violation> {
+        const CLAUSE: &str = "SY-16";
+        let fixture = open().await;
+        // Three single-event groups from `start`, every other origin position:
+        // gapped, as a conformant origin may leave them. These are positions
+        // the origin chose to send, never a claim about what the peer assigns.
+        let half = |start: u64| -> Result<PushBatch, Violation> {
+            let groups = (0..3)
+                .map(|step| start + 2 * step)
+                .map(|position| {
+                    let data = format!("sy16-{position}");
+                    durable_reading(RESUME_ORIGIN, position, data.as_bytes(), CLAUSE)
+                        .map(|event| EventGroup::new(None, vec![event]))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(PushBatch::new(groups))
+        };
+        let first = half(1)?;
+        let second = half(11)?;
+
+        let token = {
+            let peer = fixture.connect().await;
+            peer.push(&first).await.map_err(|error| {
+                Violation::new(
+                    CLAUSE,
+                    format!("the peer refused a batch well inside the minimum limits: {error}"),
+                )
+            })?;
+            let (_, token) = pull_from(&peer, None, CLAUSE).await?;
+            token.ok_or_else(|| {
+                Violation::new(
+                    CLAUSE,
+                    "the peer took a push and a pull from the start handed back nothing, so \
+                     there is no token to resume from",
+                )
+            })?
+            // The issuing handle is dropped here: the token must outlive it.
+        };
+
+        let peer = fixture.connect().await;
+        peer.push(&second).await.map_err(|error| {
+            Violation::new(
+                CLAUSE,
+                format!("the peer refused a batch well inside the minimum limits: {error}"),
+            )
+        })?;
+        let (resumed, _) = pull_from(&peer, Some(token), CLAUSE).await?;
+        let handed_back: Vec<ReplicatedEvent> =
+            resumed.into_iter().flat_map(|group| group.events).collect();
+        for event in first.events() {
+            ensure(!handed_back.contains(event), CLAUSE, || {
+                format!(
+                    "a new handle resumed from a token the dropped one issued after {} and handed \
+                     it back again: the peer kept its place in the handle, not in the token",
+                    event.id
+                )
+            })?;
+        }
+        for event in second.events() {
+            ensure(handed_back.contains(event), CLAUSE, || {
+                format!(
+                    "a new handle resumed from a token the dropped one issued, and did not hand \
+                     back {}, written after the token, byte for byte",
+                    event.id
+                )
+            })?;
+        }
+        Ok(RuleOutcome::Ran)
+    }
+
     /// SY-32: a peer that has forgotten history reports the floor, and
     /// refuses a resume token below it with class
     /// [`Reseed`](happenstance_sync::FailureClass::Reseed), so a peer that was
@@ -1449,6 +1559,31 @@ pub mod rules {
         clause: &'static str,
     ) -> Result<Vec<EventGroup>, Violation> {
         pull_up_to(peer, MAX_PULLS, clause).await
+    }
+
+    /// Pulls from `from` until the peer hands back an empty batch, and answers
+    /// what came back with the last token a non-empty pull issued.
+    async fn pull_from<P: SyncPeer>(
+        peer: &P,
+        from: Option<P::Resume>,
+        clause: &'static str,
+    ) -> Result<(Vec<EventGroup>, Option<P::Resume>), Violation> {
+        let mut groups = Vec::new();
+        let mut resume = from;
+        for _ in 0..MAX_PULLS {
+            let pulled = peer.pull(resume.as_ref()).await.map_err(|error| {
+                Violation::new(clause, format!("the peer refused a pull: {error}"))
+            })?;
+            if pulled.batch.groups.is_empty() {
+                return Ok((groups, resume));
+            }
+            groups.extend(pulled.batch.groups);
+            resume = Some(pulled.resume);
+        }
+        Err(Violation::new(
+            clause,
+            format!("the peer was still handing back groups after {MAX_PULLS} pulls"),
+        ))
     }
 
     /// [`pull_everything`], giving up after `max_pulls` pulls rather than
@@ -1907,6 +2042,9 @@ macro_rules! for_each_sync_peer_rule {
 
             // --- A round trip preserves the whole log (SY-27, SY-28) --------
             round_trip_preserves_the_whole_log,
+
+            // --- A resume token outlives its handle (SY-16) -----------------
+            resume_survives_a_dropped_peer_handle,
 
             // --- A retention gap is reported, not silent (SY-32) ------------
             retention_gap_is_reported_not_silent,
